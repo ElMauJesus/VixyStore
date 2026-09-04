@@ -5,6 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Prefija la ruta de un asset con el basePath de GitHub Pages.
+ * Usar SOLO en etiquetas <img> HTML normales o en CSS con url().
+ * El componente <Image> de Next.js ya aplica el basePath automáticamente.
+ */
+export function getAssetPath(path: string): string {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH || '';
+  // Asegura que no haya doble slash
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 export function formatPrice(price: number | string | null | undefined): string {
   const numericPrice = typeof price === 'string' ? parseFloat(price) : (price ?? 0);
   return new Intl.NumberFormat('es-VE', {
