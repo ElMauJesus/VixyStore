@@ -16,15 +16,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// Verificar que sea POST
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security.php';
+
+apply_security_headers();
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(["success" => false, "message" => "Método no permitido"]);
     exit;
 }
-
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/security.php';
 
 // Obtener conexión
 $pdo = getDbConnection();
@@ -34,12 +35,13 @@ if (!$pdo) {
     exit;
 }
 
-// Recibir y sanitizar datos
-$firstName = sanitize_input($_POST['first_name'] ?? '');
-$lastName = sanitize_input($_POST['last_name'] ?? '');
-$email = validate_email($_POST['email'] ?? '');
-$password = $_POST['password'] ?? '';
-$phone = sanitize_input($_POST['phone'] ?? '');
+// Recibir y sanitizar datos JSON o Form Data
+$reqData = get_request_data();
+$firstName = sanitize_input($reqData['first_name'] ?? '');
+$lastName = sanitize_input($reqData['last_name'] ?? '');
+$email = validate_email($reqData['email'] ?? '');
+$password = $reqData['password'] ?? '';
+$phone = sanitize_input($reqData['phone'] ?? '');
 
 // Validar campos requeridos
 if (empty($firstName) || empty($lastName) || empty($email) || empty($password)) {
@@ -78,12 +80,14 @@ if (!$role) {
     exit;
 }
 
-// Encriptar contraseña
+// Encriptar contraseña y generar token
 $passwordHash = password_hash($password, PASSWORD_BCRYPT);
+$token = generate_token(64);
+$expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
 
 // Insertar usuario
-$sql = "INSERT INTO users (role_id, first_name, last_name, email, password_hash, phone, status) 
-        VALUES (:role_id, :first_name, :last_name, :email, :password_hash, :phone, 'active')";
+$sql = "INSERT INTO users (role_id, first_name, last_name, email, password_hash, phone, auth_token, token_expires_at, status) 
+        VALUES (:role_id, :first_name, :last_name, :email, :password_hash, :phone, :token, :expires_at, 'active')";
 
 try {
     $stmt = $pdo->prepare($sql);
@@ -93,7 +97,9 @@ try {
         'last_name' => $lastName,
         'email' => $email,
         'password_hash' => $passwordHash,
-        'phone' => !empty($phone) ? $phone : null
+        'phone' => !empty($phone) ? $phone : null,
+        'token' => $token,
+        'expires_at' => $expiresAt
     ]);
     
     $userId = $pdo->lastInsertId();
@@ -107,11 +113,20 @@ try {
     echo json_encode([
         "success" => true,
         "message" => "Registro exitoso",
-        "user_id" => $userId
+        "token" => $token,
+        "expires_at" => $expiresAt,
+        "user" => [
+            "id" => (int)$userId,
+            "first_name" => $firstName,
+            "last_name" => $lastName,
+            "email" => $email,
+            "phone" => $phone,
+            "role" => "customer"
+        ]
     ]);
     
 } catch (PDOException $e) {
     http_response_code(500);
-    echo json_encode(["success" => false, "message" => "Error al registrar"]);
+    echo json_encode(["success" => false, "message" => "Error al registrar: " . $e->getMessage()]);
 }
 ?>

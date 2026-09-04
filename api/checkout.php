@@ -24,6 +24,8 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/auth.php';
 
+apply_security_headers();
+
 $pdo = getDbConnection();
 if (!$pdo) {
     http_response_code(500);
@@ -34,16 +36,26 @@ if (!$pdo) {
 // Verificar autenticación
 $user = require_login();
 
-// Recibir datos
-$shippingAddressId = isset($_POST['shipping_address_id']) ? (int)$_POST['shipping_address_id'] : 0;
-$paymentMethod = isset($_POST['payment_method']) ? sanitize_input($_POST['payment_method']) : '';
-$notes = isset($_POST['notes']) ? sanitize_input($_POST['notes']) : '';
+// Recibir datos JSON o POST
+$reqData = get_request_data();
+$shippingAddressId = isset($reqData['shipping_address_id']) ? (int)$reqData['shipping_address_id'] : 0;
+$paymentMethod = isset($reqData['payment_method']) ? sanitize_input($reqData['payment_method']) : '';
+$paymentReference = isset($reqData['payment_reference']) ? sanitize_input($reqData['payment_reference']) : null;
+$notes = isset($reqData['notes']) ? sanitize_input($reqData['notes']) : '';
 
 // Validar
 if ($shippingAddressId === 0) {
-    http_response_code(400);
-    echo json_encode(["success" => false, "message" => "Se requiere dirección de envío"]);
-    exit;
+    // Si no viene shipping_address_id, buscar la dirección por defecto del usuario
+    $stmtAddr = $pdo->prepare("SELECT id FROM user_addresses WHERE user_id = :user_id ORDER BY is_default DESC, id DESC LIMIT 1");
+    $stmtAddr->execute(['user_id' => $user['id']]);
+    $defaultAddr = $stmtAddr->fetch();
+    if ($defaultAddr) {
+        $shippingAddressId = (int)$defaultAddr['id'];
+    } else {
+        http_response_code(400);
+        echo json_encode(["success" => false, "message" => "Se requiere una dirección de envío. Registra una dirección primero."]);
+        exit;
+    }
 }
 
 if (empty($paymentMethod)) {
@@ -126,10 +138,10 @@ try {
     // Crear orden
     $sql = "INSERT INTO orders (
                 order_number, user_id, shipping_address_id, 
-                payment_method, subtotal, shipping_cost, total_amount, notes
+                payment_method, payment_reference, subtotal, shipping_cost, total_amount, notes
             ) VALUES (
                 :order_number, :user_id, :shipping_address_id,
-                :payment_method, :subtotal, :shipping_cost, :total_amount, :notes
+                :payment_method, :payment_reference, :subtotal, :shipping_cost, :total_amount, :notes
             )";
     
     $stmt = $pdo->prepare($sql);
@@ -138,6 +150,7 @@ try {
         'user_id' => $user['id'],
         'shipping_address_id' => $shippingAddressId,
         'payment_method' => $paymentMethod,
+        'payment_reference' => !empty($paymentReference) ? $paymentReference : null,
         'subtotal' => $subtotal,
         'shipping_cost' => $shippingCost,
         'total_amount' => $totalAmount,

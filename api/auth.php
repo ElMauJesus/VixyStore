@@ -37,7 +37,9 @@ function require_login() {
     $sql = "SELECT u.*, r.name as role_name 
             FROM users u 
             INNER JOIN roles r ON u.role_id = r.id 
-            WHERE u.auth_token = :token AND u.status = 'active'";
+            WHERE u.auth_token = :token 
+              AND u.status = 'active'
+              AND (u.token_expires_at IS NULL OR u.token_expires_at > NOW())";
     
     $stmt = $pdo->prepare($sql);
     $stmt->execute(['token' => $token]);
@@ -48,6 +50,9 @@ function require_login() {
         echo json_encode(["success" => false, "message" => "Sesión inválida o expirada"]);
         exit;
     }
+    
+    // Proteger hash de contraseña
+    unset($user['password_hash']);
     
     return $user;
 }

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7800 1060" width="100%" height="100%">
+  <!-- BBVA official path -->
+  <path fill="#004580" d="Livello_1" />
+  
+  <!-- "Provincial" text next to it in matching corporate style -->
+  <text x="3900" y="810" 
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+        font-size="820" 
+        font-weight="normal" 
+        letter-spacing="-15"
+        fill="#004580">Provincial</text>
+</svg>

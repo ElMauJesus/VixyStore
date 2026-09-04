@@ -4,19 +4,11 @@
  * Vixy Store Backend API
  */
 
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, PUT, DELETE, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../security.php';
 require_once __DIR__ . '/../auth.php';
+
+apply_security_headers();
 
 $pdo = getDbConnection();
 if (!$pdo) {
@@ -29,6 +21,9 @@ if (!$pdo) {
 $user = require_role(['administrator', 'secretary']);
 
 switch ($_SERVER['REQUEST_METHOD']) {
+    case 'GET':
+        listSuppliers($pdo);
+        break;
     case 'POST':
         createSupplier($pdo, $user);
         break;
@@ -43,12 +38,53 @@ switch ($_SERVER['REQUEST_METHOD']) {
         echo json_encode(["success" => false, "message" => "Método no permitido"]);
 }
 
+function listSuppliers($pdo) {
+    $search = isset($_GET['search']) ? sanitize_input($_GET['search']) : '';
+    $status = isset($_GET['status']) ? sanitize_input($_GET['status']) : '';
+    
+    $sql = "SELECT s.*, 
+                   COUNT(p.id) as total_products,
+                   COALESCE(SUM(p.stock_quantity), 0) as total_stock
+            FROM suppliers s
+            LEFT JOIN products p ON p.supplier_id = s.id
+            WHERE 1=1";
+    
+    $params = [];
+    if (!empty($search)) {
+        $sql .= " AND (s.name LIKE :search OR s.contact_person LIKE :search OR s.email LIKE :search)";
+        $params['search'] = "%$search%";
+    }
+    if (!empty($status)) {
+        $sql .= " AND s.status = :status";
+        $params['status'] = $status;
+    }
+    
+    $sql .= " GROUP BY s.id ORDER BY s.name ASC";
+    
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $suppliers = $stmt->fetchAll();
+        
+        echo json_encode([
+            "success" => true,
+            "message" => "Proveedores obtenidos",
+            "data" => $suppliers
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "message" => "Error al obtener proveedores"]);
+    }
+}
+
 function createSupplier($pdo, $user) {
-    $name = isset($_POST['name']) ? sanitize_input($_POST['name']) : '';
-    $contactPerson = isset($_POST['contact_person']) ? sanitize_input($_POST['contact_person']) : '';
-    $phone = isset($_POST['phone']) ? sanitize_input($_POST['phone']) : '';
-    $email = isset($_POST['email']) ? sanitize_input($_POST['email']) : '';
-    $notes = isset($_POST['notes']) ? sanitize_input($_POST['notes']) : '';
+    $data = get_request_data();
+    $name = isset($data['name']) ? sanitize_input($data['name']) : '';
+    $contactPerson = isset($data['contact_person']) ? sanitize_input($data['contact_person']) : '';
+    $phone = isset($data['phone']) ? sanitize_input($data['phone']) : '';
+    $email = isset($data['email']) ? sanitize_input($data['email']) : '';
+    $notes = isset($data['notes']) ? sanitize_input($data['notes']) : '';
+    $status = isset($data['status']) && in_array($data['status'], ['active', 'under_review', 'blacklisted']) ? $data['status'] : 'active';
     
     if (empty($name)) {
         http_response_code(400);
@@ -56,8 +92,8 @@ function createSupplier($pdo, $user) {
         return;
     }
     
-    $sql = "INSERT INTO suppliers (name, contact_person, phone, email, notes) 
-            VALUES (:name, :contact_person, :phone, :email, :notes)";
+    $sql = "INSERT INTO suppliers (name, contact_person, phone, email, status, notes) 
+            VALUES (:name, :contact_person, :phone, :email, :status, :notes)";
     
     try {
         $stmt = $pdo->prepare($sql);
@@ -66,6 +102,7 @@ function createSupplier($pdo, $user) {
             'contact_person' => !empty($contactPerson) ? $contactPerson : null,
             'phone' => !empty($phone) ? $phone : null,
             'email' => !empty($email) ? $email : null,
+            'status' => $status,
             'notes' => !empty($notes) ? $notes : null
         ]);
         
@@ -76,20 +113,19 @@ function createSupplier($pdo, $user) {
         http_response_code(201);
         echo json_encode([
             "success" => true,
-            "message" => "Proveedor creado",
-            "supplier_id" => $supplierId
+            "message" => "Proveedor creado con éxito",
+            "supplier_id" => (int)$supplierId
         ]);
         
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(["success" => false, "message" => "Error al crear proveedor"]);
+        echo json_encode(["success" => false, "message" => "Error al crear proveedor: " . $e->getMessage()]);
     }
 }
 
 function updateSupplier($pdo, $user) {
-    parse_str(file_get_contents("php://input"), $putData);
-    
-    $supplierId = isset($putData['id']) ? (int)$putData['id'] : 0;
+    $putData = get_request_data();
+    $supplierId = isset($putData['id']) ? (int)$putData['id'] : (isset($_GET['id']) ? (int)$_GET['id'] : 0);
     
     if ($supplierId === 0) {
         http_response_code(400);
@@ -99,8 +135,7 @@ function updateSupplier($pdo, $user) {
     
     $fields = [];
     $params = ['id' => $supplierId];
-    
-    $allowedFields = ['name', 'contact_person', 'phone', 'email', 'notes'];
+    $allowedFields = ['name', 'contact_person', 'phone', 'email', 'status', 'notes'];
     
     foreach ($allowedFields as $field) {
         if (isset($putData[$field])) {
@@ -123,7 +158,7 @@ function updateSupplier($pdo, $user) {
         
         log_audit($user['id'], 'UPDATE_SUPPLIER', 'suppliers', $supplierId, $putData);
         
-        echo json_encode(["success" => true, "message" => "Proveedor actualizado"]);
+        echo json_encode(["success" => true, "message" => "Proveedor actualizado con éxito"]);
         
     } catch (PDOException $e) {
         http_response_code(500);
@@ -132,12 +167,13 @@ function updateSupplier($pdo, $user) {
 }
 
 function updateSupplierStatus($pdo, $user) {
-    $supplierId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-    $status = isset($_GET['status']) ? sanitize_input($_GET['status']) : '';
+    $data = get_request_data();
+    $supplierId = isset($_GET['id']) ? (int)$_GET['id'] : (isset($data['id']) ? (int)$data['id'] : 0);
+    $status = isset($_GET['status']) ? sanitize_input($_GET['status']) : (isset($data['status']) ? sanitize_input($data['status']) : 'blacklisted');
     
-    if ($supplierId === 0 || empty($status)) {
+    if ($supplierId === 0) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Se requiere id y status"]);
+        echo json_encode(["success" => false, "message" => "Se requiere id"]);
         return;
     }
     
@@ -156,7 +192,7 @@ function updateSupplierStatus($pdo, $user) {
         
         log_audit($user['id'], 'UPDATE_SUPPLIER_STATUS', 'suppliers', $supplierId, ['status' => $status]);
         
-        echo json_encode(["success" => true, "message" => "Estado actualizado"]);
+        echo json_encode(["success" => true, "message" => "Estado de proveedor actualizado a $status"]);
         
     } catch (PDOException $e) {
         http_response_code(500);

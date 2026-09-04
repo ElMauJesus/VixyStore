@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 240" width="300" height="240">
+  <!-- BNC (Banco Nacional de Crédito) - SVG Geométrico Perfecto de Alta Fidelidad -->
+  
+  <defs>
+    <!-- Máscara circular para recortar los rayos perfectamente dentro de la esfera azul -->
+    <clipPath id="circleClip">
+      <circle cx="150" cy="90" r="75" />
+    </clipPath>
+  </defs>
+
+  <!-- Esfera principal azul oscuro -->
+  <circle cx="150" cy="90" r="75" fill="#0D1F45" />
+
+  <!-- Rayos blancos en abanico (Curvas Bezier fluidas recortadas por la máscara) -->
+  <g clip-path="url(#circleClip)">
+    <!-- Punto focal de convergencia inferior-izquierdo: aprox (95, 155) -->
+    <!-- Rayo 1 (Izquierda, más vertical) -->
+    <path d="M 95 155 Q 100 95 90 25" stroke="#FFFFFF" stroke-width="7" fill="none" stroke-linecap="round" />
+    
+    <!-- Rayo 2 -->
+    <path d="M 95 155 Q 120 100 120 20" stroke="#FFFFFF" stroke-width="7.5" fill="none" stroke-linecap="round" />
+    
+    <!-- Rayo 3 -->
+    <path d="M 95 155 Q 145 105 155 20" stroke="#FFFFFF" stroke-width="8" fill="none" stroke-linecap="round" />
+    
+    <!-- Rayo 4 -->
+    <path d="M 95 155 Q 170 115 190 30" stroke="#FFFFFF" stroke-width="7.5" fill="none" stroke-linecap="round" />
+    
+    <!-- Rayo 5 -->
+    <path d="M 95 155 Q 195 125 215 50" stroke="#FFFFFF" stroke-width="7" fill="none" stroke-linecap="round" />
+    
+    <!-- Rayo 6 (Derecha, más horizontal) -->
+    <path d="M 95 155 Q 210 140 230 80" stroke="#FFFFFF" stroke-width="6" fill="none" stroke-linecap="round" />
+  </g>
+
+  <!-- Letras BNC estilizadas en la parte inferior con tipografía e interlineado exacto -->
+  <g transform="translate(0, 0)">
+    <!-- B en naranja corporativo -->
+    <text x="65" y="215" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="62" 
+          font-weight="900" 
+          fill="#F26522" 
+          letter-spacing="-1">B</text>
+          
+    <!-- N en azul oscuro corporativo -->
+    <text x="118" y="215" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="62" 
+          font-weight="900" 
+          fill="#0D1F45" 
+          letter-spacing="-1">N</text>
+          
+    <!-- C en verde corporativo -->
+    <text x="180" y="215" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="62" 
+          font-weight="900" 
+          fill="#3FAE2A" 
+          letter-spacing="-1">C</text>
+  </g>
+</svg>

@@ -18,6 +18,8 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/auth.php';
 
+apply_security_headers();
+
 $pdo = getDbConnection();
 if (!$pdo) {
     http_response_code(500);
@@ -88,8 +90,9 @@ function getCart($pdo, $user) {
  * Agregar producto al carrito
  */
 function addToCart($pdo, $user) {
-    $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
-    $quantity = isset($_POST['quantity']) ? (int)$_POST['quantity'] : 1;
+    $data = get_request_data();
+    $productId = isset($data['product_id']) ? (int)$data['product_id'] : 0;
+    $quantity = isset($data['quantity']) ? (int)$data['quantity'] : 1;
     
     if ($productId === 0) {
         http_response_code(400);
@@ -163,8 +166,8 @@ function addToCart($pdo, $user) {
  * Actualizar cantidad de un item del carrito
  */
 function updateCartItem($pdo, $user) {
-    // Leer PUT data
-    parse_str(file_get_contents("php://input"), $putData);
+    // Leer PUT data con get_request_data()
+    $putData = get_request_data();
     
     $itemId = isset($putData['item_id']) ? (int)$putData['item_id'] : 0;
     $quantity = isset($putData['quantity']) ? (int)$putData['quantity'] : 0;
@@ -219,7 +222,8 @@ function updateCartItem($pdo, $user) {
  * Eliminar item del carrito
  */
 function removeFromCart($pdo, $user) {
-    $itemId = isset($_GET['item_id']) ? (int)$_GET['item_id'] : 0;
+    $data = get_request_data();
+    $itemId = isset($_GET['item_id']) ? (int)$_GET['item_id'] : (isset($data['item_id']) ? (int)$data['item_id'] : 0);
     
     if ($itemId === 0) {
         http_response_code(400);

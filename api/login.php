@@ -14,14 +14,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security.php';
+
+apply_security_headers();
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(["success" => false, "message" => "Método no permitido"]);
     exit;
 }
-
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/security.php';
 
 $pdo = getDbConnection();
 if (!$pdo) {
@@ -30,9 +32,10 @@ if (!$pdo) {
     exit;
 }
 
-// Recibir datos
-$email = validate_email($_POST['email'] ?? '');
-$password = $_POST['password'] ?? '';
+// Recibir datos desde JSON o POST
+$reqData = get_request_data();
+$email = validate_email($reqData['email'] ?? '');
+$password = $reqData['password'] ?? '';
 
 if (empty($email) || empty($password)) {
     http_response_code(400);
@@ -70,21 +73,27 @@ if ($user['status'] !== 'active') {
     exit;
 }
 
-// Generar token
+// Generar token y vigencia de 30 días
 $token = generate_token(64);
+$expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
 
 // Guardar token en la BD
-$sql = "UPDATE users SET auth_token = :token WHERE id = :id";
+$sql = "UPDATE users SET auth_token = :token, token_expires_at = :expires_at WHERE id = :id";
 $stmt = $pdo->prepare($sql);
-$stmt->execute(['token' => $token, 'id' => $user['id']]);
+$stmt->execute([
+    'token' => $token,
+    'expires_at' => $expiresAt,
+    'id' => $user['id']
+]);
 
 // Respuesta exitosa
 echo json_encode([
     "success" => true,
     "message" => "Inicio de sesión exitoso",
     "token" => $token,
+    "expires_at" => $expiresAt,
     "user" => [
-        "id" => $user['id'],
+        "id" => (int)$user['id'],
         "first_name" => $user['first_name'],
         "last_name" => $user['last_name'],
         "email" => $user['email'],
