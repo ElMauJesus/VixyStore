@@ -13,6 +13,10 @@ export interface User {
   occupation?: string | null;
   equipment_info?: string | null;
   notes?: string | null;
+  driver_uuid?: string | null;
+  rider_code?: string | null;
+  driver_category?: string | null;
+  vehicle_info?: string | null;
 }
 
 export interface CustomerProfile {

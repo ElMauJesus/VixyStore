@@ -39,6 +39,7 @@ switch ($_SERVER['REQUEST_METHOD']) {
 
 function getUserProfile($pdo, $user) {
     $sql = "SELECT u.id, u.first_name, u.last_name, u.email, u.phone, u.status, u.created_at,
+                   u.driver_uuid, u.rider_code, u.driver_category, u.vehicle_info,
                    r.name as role_name,
                    cp.occupation, cp.equipment_info, cp.notes
             FROM users u

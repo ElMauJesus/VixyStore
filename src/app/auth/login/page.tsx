@@ -54,11 +54,14 @@ function LoginForm() {
             priority
           />
         </Link>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200 mb-2">
+          Portal Exclusivo de Conductores & ERP
+        </span>
         <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
           Ingreso a Vixy Store
         </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Accede a tu cuenta de cliente o panel ERP administrativo
+        <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+          Inicia sesión con tus credenciales de conductor de <strong>VixyRider</strong> o cuenta administrativa
         </p>
       </div>
 

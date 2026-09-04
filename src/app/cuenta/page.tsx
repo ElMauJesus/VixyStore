@@ -186,8 +186,20 @@ export default function AccountPage() {
             Gestiona tus pedidos, direcciones de entrega y datos de tus vehículos.
           </p>
         </div>
-        <div className="text-xs bg-purple-50 text-purple-900 border border-purple-200 px-3 py-1.5 rounded-xl font-bold self-start sm:self-auto">
-          {user?.first_name} {user?.last_name}
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {user?.rider_code && (
+            <span className="text-[11px] bg-slate-900 text-purple-300 font-mono font-bold px-2.5 py-1 rounded-lg border border-purple-800 shadow-xs">
+              Rider: {user.rider_code}
+            </span>
+          )}
+          {user?.driver_category && (
+            <span className="text-[11px] bg-purple-100 text-purple-800 font-bold px-2.5 py-1 rounded-lg border border-purple-200 uppercase">
+              {user.driver_category}
+            </span>
+          )}
+          <div className="text-xs bg-purple-50 text-purple-900 border border-purple-200 px-3 py-1.5 rounded-xl font-bold">
+            {user?.first_name} {user?.last_name}
+          </div>
         </div>
       </div>
 

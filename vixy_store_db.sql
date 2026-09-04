@@ -23,6 +23,10 @@ CREATE TABLE roles (
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     role_id INT NOT NULL,
+    driver_uuid VARCHAR(40) NULL UNIQUE,         -- ID/UUID de la tabla drivers en vixyhgtk_vixy_driver_prereg
+    rider_code VARCHAR(50) NULL,                 -- Código de conductor (Ej: VIXY-042)
+    driver_category VARCHAR(50) NULL,            -- 'taxi', 'mototaxi', 'delivery'
+    vehicle_info VARCHAR(255) NULL,              -- Información sincronizada del vehículo (marca, modelo, año, placa)
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
@@ -230,6 +234,8 @@ CREATE TABLE warranty_performance_logs (
 -- -----------------------------------------------------------------------------
 
 CREATE INDEX idx_users_auth_token ON users(auth_token);
+CREATE INDEX idx_users_driver_uuid ON users(driver_uuid);
+CREATE INDEX idx_users_rider_code ON users(rider_code);
 CREATE INDEX idx_products_sku ON products(sku);
 CREATE INDEX idx_products_slug ON products(slug);
 CREATE INDEX idx_products_category ON products(category_id);
@@ -250,14 +256,16 @@ CREATE INDEX idx_wpl_user ON warranty_performance_logs(user_id);
 INSERT INTO roles (id, name, description) VALUES
 (1, 'administrator', 'Acceso total a la configuración del sistema, gestión de usuarios, inventario y reportes financieros.'),
 (2, 'secretary', 'Gestión de órdenes de compra, actualización de inventario, consulta de clientes y atención al cliente.'),
-(3, 'customer', 'Cliente registrado con acceso a catálogo, carrito de compras e historial personal de pedidos.')
+(3, 'customer', 'Conductor registrado en VixyRider con acceso exclusivo a catálogo de repuestos y compras.')
 ON DUPLICATE KEY UPDATE name=VALUES(name);
 
 -- Usuario Administrador por defecto (Contraseña: Admin12345*)
 INSERT INTO users (id, role_id, first_name, last_name, email, password_hash, phone, status) VALUES
-(1, 1, 'Administrador', 'Vixy', 'admin@vixystore.com', '$2y$10$vO8fG0s5uW5dGlnzG1Lg6OFZzQc3mCvywB.wXmN6.n5n2bA5rFw32', '+584121112233', 'active'),
-(2, 3, 'Cliente', 'Prueba', 'cliente@vixystore.com', '$2y$10$vO8fG0s5uW5dGlnzG1Lg6OFZzQc3mCvywB.wXmN6.n5n2bA5rFw32', '+584149998877', 'active')
+(1, 1, 'Administrador', 'Vixy', 'admin@vixystore.com', '$2y$10$vO8fG0s5uW5dGlnzG1Lg6OFZzQc3mCvywB.wXmN6.n5n2bA5rFw32', '+584121112233', 'active')
 ON DUPLICATE KEY UPDATE email=VALUES(email);
+
+-- NOTA: Los conductores no requieren inserción manual en esta base de datos.
+-- Se autentican y aprovisionan automáticamente contra la base de datos de VixyRider al iniciar sesión.
 
 -- Proveedores iniciales
 INSERT INTO suppliers (id, name, contact_person, phone, email, status, notes) VALUES
