@@ -1,8 +1,12 @@
 import { ApiResponse, Product, Category, Supplier, Order, Address, WarrantyLog, InventorySummary, InventoryLog, User } from '@/types/store';
 
-const API_BASE_URL = 
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
-  (typeof window !== 'undefined' && window.location.pathname.startsWith('/store') ? '/store/api' : '/api');
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
+
+function getApiBase(): string {
+  if (API_BASE_URL) return API_BASE_URL;
+  if (typeof window === 'undefined') return '/store/api';
+  return window.location.pathname.startsWith('/store') ? '/store/api' : '/api';
+}
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -39,10 +43,11 @@ async function request<T = any>(
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+    headers['X-Auth-Token'] = token;
   }
 
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${API_BASE_URL}${cleanEndpoint}`;
+  const url = `${getApiBase()}${cleanEndpoint}`;
 
   try {
     const res = await fetch(url, {

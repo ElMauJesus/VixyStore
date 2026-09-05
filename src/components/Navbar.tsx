@@ -16,13 +16,17 @@ export default function Navbar() {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
+  const isStore = typeof window !== 'undefined' && window.location.pathname.startsWith('/store');
+  const storeLink = (path: string) => (isStore ? `/store${path}` : path);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const base = isStore ? '/store' : '';
     if (searchQuery.trim()) {
-      router.push(`/?busqueda=${encodeURIComponent(searchQuery.trim())}`);
+      router.push(`${base}/?busqueda=${encodeURIComponent(searchQuery.trim())}`);
       setIsMobileSearchOpen(false);
     } else {
-      router.push('/');
+      router.push(base || '/');
     }
   };
 
@@ -31,7 +35,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-3 sm:gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+          <Link href={isStore ? '/store' : '/'} className="flex items-center gap-2 flex-shrink-0">
             <div className="relative h-9 w-28 sm:h-10 sm:w-32">
               <Image
                 src="/logo/vixylogo.png"
@@ -73,7 +77,7 @@ export default function Navbar() {
             {/* Admin Badge/Link if admin */}
             {isAdmin && (
               <Link
-                href="/admin"
+                href={storeLink('/admin')}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-purple-900 bg-purple-100 border border-purple-200 rounded-lg hover:bg-purple-200 transition-colors"
                 title="Panel de Administración ERP"
               >
@@ -111,7 +115,7 @@ export default function Navbar() {
                     </div>
 
                     <Link
-                      href="/cuenta"
+                      href={storeLink('/cuenta')}
                       onClick={() => setIsUserMenuOpen(false)}
                       className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-700 transition-colors"
                     >
@@ -121,7 +125,7 @@ export default function Navbar() {
 
                     {isAdmin && (
                       <Link
-                        href="/admin"
+                        href={storeLink('/admin')}
                         onClick={() => setIsUserMenuOpen(false)}
                         className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-purple-700 hover:bg-purple-50 transition-colors"
                       >
@@ -145,7 +149,7 @@ export default function Navbar() {
               </div>
             ) : (
               <Link
-                href="/auth/login"
+                href={storeLink('/auth/login')}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/80 rounded-xl transition-colors"
               >
                 <UserIcon className="w-4 h-4" />
@@ -155,7 +159,7 @@ export default function Navbar() {
 
             {/* Cart Icon */}
             <Link
-              href="/carrito"
+              href={storeLink('/carrito')}
               className="relative p-2 text-slate-700 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-colors"
               aria-label="Ver carrito"
             >

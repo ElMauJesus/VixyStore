@@ -163,12 +163,13 @@ function createProduct($pdo, $user) {
         // Registro en inventory_logs si tiene stock inicial
         if ($stockQuantity > 0) {
             $sqlLog = "INSERT INTO inventory_logs (product_id, user_id, type, quantity_changed, previous_stock, new_stock, reason) 
-                       VALUES (:product_id, :user_id, 'IN', :quantity, 0, :quantity, 'Stock inicial de alta')";
+                       VALUES (:product_id, :user_id, 'IN', :quantity_changed, 0, :new_stock, 'Stock inicial de alta')";
             $stmtLog = $pdo->prepare($sqlLog);
             $stmtLog->execute([
                 'product_id' => $productId,
                 'user_id' => $user['id'],
-                'quantity' => $stockQuantity
+                'quantity_changed' => $stockQuantity,
+                'new_stock' => $stockQuantity
             ]);
         }
         
@@ -264,19 +265,50 @@ function deleteProduct($pdo, $user) {
         return;
     }
     
-    // Soft delete cambiando is_active
-    $sql = "UPDATE products SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = :id";
-    
     try {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute(['id' => $productId]);
+        $pdo->beginTransaction();
         
-        log_audit($user['id'], 'TOGGLE_PRODUCT_STATUS', 'products', $productId, []);
+        // 1. Eliminar imágenes asociadas
+        $stmtImg = $pdo->prepare("DELETE FROM product_images WHERE product_id = :id");
+        $stmtImg->execute(['id' => $productId]);
+
+        // 2. Eliminar de items de carrito
+        $stmtCart = $pdo->prepare("DELETE FROM cart_items WHERE product_id = :id");
+        $stmtCart->execute(['id' => $productId]);
+
+        // 3. Eliminar logs de inventario asociados
+        $stmtInv = $pdo->prepare("DELETE FROM inventory_logs WHERE product_id = :id");
+        $stmtInv->execute(['id' => $productId]);
+
+        // 4. Eliminar fichas de garantía de prueba
+        $stmtWpl = $pdo->prepare("DELETE FROM warranty_performance_logs WHERE product_id = :id");
+        $stmtWpl->execute(['id' => $productId]);
+
+        // 5. Verificar si tiene órdenes facturadas asociadas
+        $stmtOrders = $pdo->prepare("SELECT COUNT(*) FROM order_items WHERE product_id = :id");
+        $stmtOrders->execute(['id' => $productId]);
+        $hasOrders = (int)$stmtOrders->fetchColumn();
+
+        if ($hasOrders > 0) {
+            // Si tiene ventas reales, desactivar para no quebrar facturación
+            $stmtUpd = $pdo->prepare("UPDATE products SET is_active = 0 WHERE id = :id");
+            $stmtUpd->execute(['id' => $productId]);
+            $msg = "Producto desactivado (posee pedidos históricos asociados)";
+        } else {
+            // Eliminación física total
+            $stmtDel = $pdo->prepare("DELETE FROM products WHERE id = :id");
+            $stmtDel->execute(['id' => $productId]);
+            $msg = "Producto eliminado definitivamente de la base de datos";
+        }
         
-        echo json_encode(["success" => true, "message" => "Estado del producto alternado con éxito"]);
+        log_audit($user['id'], 'DELETE_PRODUCT', 'products', $productId, []);
+        $pdo->commit();
+        
+        echo json_encode(["success" => true, "message" => $msg]);
     } catch (PDOException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         http_response_code(500);
-        echo json_encode(["success" => false, "message" => "Error al actualizar estado del producto"]);
+        echo json_encode(["success" => false, "message" => "Error al eliminar producto: " . $e->getMessage()]);
     }
 }
 ?>

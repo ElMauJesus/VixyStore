@@ -133,6 +133,15 @@ function get_bearer_token() {
         } elseif (isset($headers['authorization'])) {
             $authHeader = $headers['authorization'];
         }
+        
+        // Header de respaldo si Apache suprimio Authorization
+        if (!$authHeader) {
+            if (isset($headers['X-Auth-Token'])) {
+                return sanitize_input($headers['X-Auth-Token']);
+            } elseif (isset($headers['x-auth-token'])) {
+                return sanitize_input($headers['x-auth-token']);
+            }
+        }
     }
     
     if (!$authHeader && isset($_SERVER['HTTP_AUTHORIZATION'])) {
@@ -141,8 +150,13 @@ function get_bearer_token() {
         $authHeader = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
     }
     
-    if ($authHeader && preg_match('/Bearer\s(\S+)/i', $authHeader, $matches)) {
+    if ($authHeader && preg_match('/Bearer\s+(\S+)/i', $authHeader, $matches)) {
         return $matches[1];
+    }
+    
+    // Si viene en variable de entorno HTTP_X_AUTH_TOKEN
+    if (isset($_SERVER['HTTP_X_AUTH_TOKEN']) && !empty($_SERVER['HTTP_X_AUTH_TOKEN'])) {
+        return sanitize_input($_SERVER['HTTP_X_AUTH_TOKEN']);
     }
     
     // Soporte para token por query param como respaldo para descargas seguras
@@ -163,7 +177,7 @@ function apply_security_headers() {
     header("Referrer-Policy: strict-origin-when-cross-origin");
     header("Access-Control-Allow-Origin: *");
     header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-    header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+    header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Auth-Token");
     
     if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(200);

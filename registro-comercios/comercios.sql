@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS comercios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    codigo_comercio VARCHAR(20) DEFAULT NULL,
+    nombre_comercial VARCHAR(150) NOT NULL,
+    nombre_representante VARCHAR(150) NOT NULL,
+    rif_cedula_juridica VARCHAR(50) NOT NULL,
+    cedula_representante VARCHAR(50) NOT NULL,
+    email VARCHAR(150) NOT NULL,
+    telefono_comercio VARCHAR(30) NOT NULL,
+    telefono_adicional VARCHAR(30) DEFAULT NULL,
+    horarios_atencion VARCHAR(255) DEFAULT NULL,
+    ubicacion_gps VARCHAR(100) DEFAULT NULL,
+    punto_referencia VARCHAR(255) DEFAULT NULL,
+    cantidad_sucursales INT DEFAULT 1,
+    direccion_negocio VARCHAR(255) NOT NULL,
+    categoria_negocio VARCHAR(100) DEFAULT NULL,
+    descripcion_negocio TEXT DEFAULT NULL,
+    redes_sociales VARCHAR(255) DEFAULT NULL,
+    foto_comercio_url VARCHAR(500) DEFAULT NULL,
+    status ENUM('pendiente', 'aprobado', 'rechazado', 'bloqueado') DEFAULT 'pendiente',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -29,7 +29,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !isAdmin)) {
-      router.push('/auth/login?redirect=/admin');
+      const isStore = typeof window !== 'undefined' && window.location.pathname.startsWith('/store');
+      router.push(isStore ? '/store/auth/login?redirect=/store/admin' : '/auth/login?redirect=/admin');
     }
   }, [isLoading, isAuthenticated, isAdmin, router]);
 
@@ -40,6 +41,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
     );
   }
+
+  const isStore = typeof window !== 'undefined' && window.location.pathname.startsWith('/store');
+  const baseAdmin = isStore ? '/store/admin' : '/admin';
 
   if (!isAuthenticated || !isAdmin) {
     return (
@@ -52,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           Esta área es de uso exclusivo para administradores y secretaría de Vixy Store.
         </p>
         <Link
-          href="/"
+          href={isStore ? '/store' : '/'}
           className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-md"
         >
           Volver a la Tienda
@@ -62,13 +66,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const navItems = [
-    { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-    { label: 'Productos', href: '/admin/productos', icon: Package },
-    { label: 'Inventario', href: '/admin/inventario', icon: Boxes },
-    { label: 'Proveedores', href: '/admin/proveedores', icon: Truck },
-    { label: 'Pedidos', href: '/admin/pedidos', icon: ClipboardList },
-    { label: 'Garantías', href: '/admin/garantias', icon: ShieldCheck },
-    { label: 'Usuarios', href: '/admin/usuarios', icon: Users },
+    { label: 'Dashboard', href: baseAdmin, rawHref: '/admin', icon: LayoutDashboard },
+    { label: 'Productos', href: `${baseAdmin}/productos`, rawHref: '/admin/productos', icon: Package },
+    { label: 'Inventario', href: `${baseAdmin}/inventario`, rawHref: '/admin/inventario', icon: Boxes },
+    { label: 'Proveedores', href: `${baseAdmin}/proveedores`, rawHref: '/admin/proveedores', icon: Truck },
+    { label: 'Pedidos', href: `${baseAdmin}/pedidos`, rawHref: '/admin/pedidos', icon: ClipboardList },
+    { label: 'Garantías', href: `${baseAdmin}/garantias`, rawHref: '/admin/garantias', icon: ShieldCheck },
+    { label: 'Usuarios', href: `${baseAdmin}/usuarios`, rawHref: '/admin/usuarios', icon: Users },
   ];
 
   return (
@@ -133,7 +137,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <nav className="px-3 py-2 space-y-1 text-xs font-semibold">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || pathname === item.rawHref || pathname === `/store${item.rawHref}`;
 
               return (
                 <Link
@@ -157,7 +161,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Bottom Actions */}
         <div className="p-3 border-t border-purple-950 space-y-1">
           <Link
-            href="/"
+            href={isStore ? '/store' : '/'}
             className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-slate-400 hover:text-purple-300 hover:bg-purple-950/40 rounded-xl transition-colors"
           >
             <Store className="w-4 h-4" />

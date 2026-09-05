@@ -1,11 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { AuthProvider } from '@/contexts/AuthContext';
-import { CartProvider } from '@/contexts/CartContext';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
-import MobileBottomNav from '@/components/MobileBottomNav';
+import StoreLayoutWrapper from '@/components/StoreLayoutWrapper';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -25,6 +21,7 @@ export const metadata: Metadata = {
   },
 };
 
+
 export default function RootLayout({
   children,
 }: {
@@ -33,14 +30,9 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full">
       <body className={`${inter.className} min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-purple-600 selection:text-white`}>
-        <AuthProvider>
-          <CartProvider>
-            <Navbar />
-            <main className="flex-1 w-full pb-16 md:pb-0">{children}</main>
-            <Footer />
-            <MobileBottomNav />
-          </CartProvider>
-        </AuthProvider>
+        <StoreLayoutWrapper>
+          {children}
+        </StoreLayoutWrapper>
       </body>
     </html>
   );

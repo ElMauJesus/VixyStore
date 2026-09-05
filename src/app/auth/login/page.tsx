@@ -28,15 +28,21 @@ function LoginForm() {
     setLoading(false);
 
     if (res.success) {
+      const isStore = typeof window !== 'undefined' && window.location.pathname.startsWith('/store');
       try {
         const u = JSON.parse(localStorage.getItem('vixy_user') || '{}');
-        if (u.role === 'administrator' || u.role === 'secretary') {
-          router.push('/admin');
+        const role = u.role || u.role_name;
+        if (role === 'administrator' || role === 'secretary') {
+          router.push(isStore ? '/store/admin' : '/admin');
           return;
         }
       } catch {}
 
-      router.push(redirectUrl);
+      if (redirectUrl && redirectUrl !== '/') {
+        router.push(redirectUrl);
+      } else {
+        router.push(isStore ? '/store' : '/');
+      }
     } else {
       setError(res.message || 'Error al iniciar sesión. Verifica tus credenciales.');
     }

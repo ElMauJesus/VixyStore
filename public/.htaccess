@@ -1,0 +1,76 @@
+# ==============================================================================
+# VIXY ECOSYSTEM - MASTER .HTACCESS (CPANEL / APACHE / FEROZO / DONWEB)
+# ==============================================================================
+
+DirectoryIndex index.html index.php
+Options -Indexes
+
+# 1. ENRUTAMIENTO MOD_REWRITE
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Pasar Authorization a PHP para FastCGI / PHP-FPM
+    RewriteCond %{HTTP:Authorization} ^(.*)
+    RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+
+    # Permitir peticiones a APIs directamente
+    RewriteCond %{REQUEST_URI} ^/api/ [NC,OR]
+    RewriteCond %{REQUEST_URI} ^/store/api/ [NC,OR]
+    RewriteCond %{REQUEST_URI} ^/delivery/backend/ [NC,OR]
+    RewriteCond %{REQUEST_URI} ^/registro-comercios/api/ [NC]
+    RewriteRule ^ - [L]
+
+    # Compatibilidad: si /api/ no existe como archivo fisico, usar /store/api/
+    RewriteCond %{REQUEST_URI} ^/api/(.*)$ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^api/(.*)$ store/api/$1 [L,QSA]
+
+    # Si el archivo fisico existe, servirlo directamente
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+
+    # Si es un directorio fisico, agregar trailing slash si falta
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^(.*[^/])$ /$1/ [L,R=301]
+
+    # Si el directorio tiene index.html, servirlo directamente
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Rutas dinamicas de Delivery (/delivery/...)
+    RewriteCond %{REQUEST_URI} ^/delivery/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^delivery/(.*)$ /delivery/index.html [L]
+
+    # Rutas dinamicas de Store (/store/...)
+    RewriteCond %{REQUEST_URI} ^/store/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^store/(.*)$ /store/index.html [L]
+</IfModule>
+
+# 2. CABECERA AUTHORIZATION (MOD_SETENVIF)
+<IfModule mod_setenvif.c>
+    SetEnvIfNoCase Authorization "Bearer (.+)" HTTP_AUTHORIZATION=$1
+    SetEnvIfNoCase X-Auth-Token "(.+)" HTTP_X_AUTH_TOKEN=$1
+</IfModule>
+
+# 3. TIPOS MIME
+<IfModule mod_mime.c>
+    AddType text/css .css
+    AddType application/javascript .js .mjs
+    AddType image/webp .webp
+    AddType image/svg+xml .svg
+    AddType application/json .json
+    AddType font/woff2 .woff2
+</IfModule>
+
+# 4. CABECERAS CORS Y SEGURIDAD
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Auth-Token"
+</IfModule>

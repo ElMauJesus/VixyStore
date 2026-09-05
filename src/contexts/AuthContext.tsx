@@ -38,7 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTokenState(savedToken);
       if (savedUserStr) {
         try {
-          setUser(JSON.parse(savedUserStr));
+          const parsed = JSON.parse(savedUserStr);
+          if (parsed) {
+            parsed.role = parsed.role || parsed.role_name;
+            setUser(parsed);
+          }
         } catch (e) {
           // ignore error
         }
@@ -48,10 +52,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeApi.getProfile()
         .then((res) => {
           if (res.success && res.data) {
-            setUser(res.data);
-            localStorage.setItem('vixy_user', JSON.stringify(res.data));
-          } else if (res.message?.includes('token') || res.message?.includes('invalido') || res.message?.includes('expirado')) {
-            // Token expired
+            const normalizedUser: User = {
+              ...res.data,
+              role: (res.data.role || res.data.role_name || 'customer') as RoleType,
+            };
+            setUser(normalizedUser);
+            localStorage.setItem('vixy_user', JSON.stringify(normalizedUser));
+          } else if (
+            res.message?.includes('token') ||
+            res.message?.includes('invalido') ||
+            res.message?.includes('inválida') ||
+            res.message?.includes('expirado') ||
+            res.message?.includes('expirada') ||
+            res.message?.includes('No autenticado')
+          ) {
+            // Token definitivamente expirado o inválido
             removeToken();
             setUser(null);
             setTokenState(null);
@@ -71,10 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await storeApi.login(credentials);
       if (res.success && res.token && res.user) {
+        const normalizedUser: User = {
+          ...res.user,
+          role: (res.user.role || (res.user as any).role_name || 'customer') as RoleType,
+        };
         setToken(res.token);
         setTokenState(res.token);
-        setUser(res.user);
-        localStorage.setItem('vixy_user', JSON.stringify(res.user));
+        setUser(normalizedUser);
+        localStorage.setItem('vixy_user', JSON.stringify(normalizedUser));
         return { success: true };
       }
       return { success: false, message: res.message || 'Credenciales inválidas' };
@@ -96,10 +115,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await storeApi.register(data);
       if (res.success && res.token && res.user) {
+        const normalizedUser: User = {
+          ...res.user,
+          role: (res.user.role || (res.user as any).role_name || 'customer') as RoleType,
+        };
         setToken(res.token);
         setTokenState(res.token);
-        setUser(res.user);
-        localStorage.setItem('vixy_user', JSON.stringify(res.user));
+        setUser(normalizedUser);
+        localStorage.setItem('vixy_user', JSON.stringify(normalizedUser));
         return { success: true };
       }
       return { success: false, message: res.message || 'Error al registrarse' };
@@ -127,15 +150,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await storeApi.getProfile();
       if (res.success && res.data) {
-        setUser(res.data);
-        localStorage.setItem('vixy_user', JSON.stringify(res.data));
+        const normalizedUser: User = {
+          ...res.data,
+          role: (res.data.role || res.data.role_name || 'customer') as RoleType,
+        };
+        setUser(normalizedUser);
+        localStorage.setItem('vixy_user', JSON.stringify(normalizedUser));
       }
     } catch {
       // ignore
     }
   };
 
-  const role = user?.role as RoleType | undefined;
+  const role = (user?.role || (user as any)?.role_name) as RoleType | undefined;
   const isAdmin = role === 'administrator' || role === 'secretary';
   const isAuthenticated = !!token && !!user;
 

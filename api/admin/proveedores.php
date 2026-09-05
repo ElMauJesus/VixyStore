@@ -31,7 +31,7 @@ switch ($_SERVER['REQUEST_METHOD']) {
         updateSupplier($pdo, $user);
         break;
     case 'DELETE':
-        updateSupplierStatus($pdo, $user);
+        deleteSupplier($pdo, $user);
         break;
     default:
         http_response_code(405);
@@ -197,6 +197,42 @@ function updateSupplierStatus($pdo, $user) {
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["success" => false, "message" => "Error al actualizar"]);
+    }
+}
+
+function deleteSupplier($pdo, $user) {
+    $data = get_request_data();
+    $supplierId = isset($_GET['id']) ? (int)$_GET['id'] : (isset($data['id']) ? (int)$data['id'] : 0);
+    
+    if ($supplierId === 0) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "message" => "Se requiere id del proveedor"]);
+        return;
+    }
+    
+    try {
+        $pdo->beginTransaction();
+        
+        // 1. Desvincular productos asociados (poner supplier_id = NULL)
+        $stmtProd = $pdo->prepare("UPDATE products SET supplier_id = NULL WHERE supplier_id = :id");
+        $stmtProd->execute(['id' => $supplierId]);
+        
+        // 2. Desvincular fichas de garantía asociadas
+        $stmtWpl = $pdo->prepare("UPDATE warranty_performance_logs SET supplier_id = NULL WHERE supplier_id = :id");
+        $stmtWpl->execute(['id' => $supplierId]);
+        
+        // 3. Eliminar proveedor
+        $stmtDel = $pdo->prepare("DELETE FROM suppliers WHERE id = :id");
+        $stmtDel->execute(['id' => $supplierId]);
+        
+        log_audit($user['id'], 'DELETE_SUPPLIER', 'suppliers', $supplierId, []);
+        $pdo->commit();
+        
+        echo json_encode(["success" => true, "message" => "Proveedor eliminado definitivamente con éxito"]);
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(["success" => false, "message" => "Error al eliminar proveedor: " . $e->getMessage()]);
     }
 }
 ?>

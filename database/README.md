@@ -1,11 +1,12 @@
 # 🗄️ Bases de Datos del Ecosistema Vixy
 
-Este directorio contiene los esquemas SQL oficiales para las dos bases de datos del proyecto:
+Este directorio contiene los esquemas SQL oficiales para las tres bases de datos del proyecto:
 
 | Archivo | Base de datos | Plataforma |
 |---|---|---|
 | `schema_vixy_store_c2861522_vixy_st.sql` | `c2861522_vixy_st` | VixyStore (Tienda de repuestos para conductores) |
 | `schema_vixy_delivery_c2861522_vixy_dl.sql` | `c2861522_vixy_dl` | VixyDelivery (Sistema de entregas para comercios) |
+| `schema_vixy_registro_c2861522_regist.sql` | `c2861522_regist` | RegistroComercios (Afiliación oficial de comercios aliados) |
 
 ---
 

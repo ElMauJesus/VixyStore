@@ -51,6 +51,10 @@ function getUserProfile($pdo, $user) {
     $stmt->execute(['id' => $user['id']]);
     $profile = $stmt->fetch();
     
+    if ($profile) {
+        $profile['role'] = $profile['role_name'];
+    }
+    
     echo json_encode([
         "success" => true,
         "message" => "Perfil obtenido",

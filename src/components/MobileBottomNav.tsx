@@ -13,18 +13,21 @@ export default function MobileBottomNav() {
   const { totalItems } = useCart();
 
   // If in admin routes, don't show store bottom nav
-  if (pathname.startsWith('/admin')) {
+  if (pathname.startsWith('/admin') || pathname.startsWith('/store/admin')) {
     return null;
   }
 
+  const isStore = pathname.startsWith('/store');
+  const storeLink = (path: string) => (isStore ? `/store${path}` : path);
+
   const navs = [
-    { label: 'Inicio', href: '/', icon: Home, exact: true },
-    { label: 'Carrito', href: '/carrito', icon: ShoppingBag, badge: totalItems > 0 ? totalItems : null },
-    { label: 'Cuenta', href: isAuthenticated ? '/cuenta' : '/auth/login', icon: UserIcon },
+    { label: 'Inicio', href: isStore ? '/store' : '/', icon: Home, exact: true },
+    { label: 'Carrito', href: storeLink('/carrito'), icon: ShoppingBag, badge: totalItems > 0 ? totalItems : null },
+    { label: 'Cuenta', href: isAuthenticated ? storeLink('/cuenta') : storeLink('/auth/login'), icon: UserIcon },
   ];
 
   if (isAdmin) {
-    navs.push({ label: 'ERP', href: '/admin', icon: ShieldAlert, badge: null });
+    navs.push({ label: 'ERP', href: storeLink('/admin'), icon: ShieldAlert, badge: null });
   }
 
   return (

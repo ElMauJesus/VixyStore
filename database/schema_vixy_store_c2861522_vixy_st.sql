@@ -281,10 +281,11 @@ INSERT INTO `roles` (`id`, `name`, `description`) VALUES
 (3, 'customer', 'Conductor registrado en VixyRider con acceso exclusivo a catálogo de repuestos y compras.')
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
 
--- Usuario Administrador por defecto (Contraseña: Admin12345*)
+-- Usuario Administrador por defecto
+-- Email: admin@vixystore.com | Contraseña: Admin2024!
 INSERT INTO `users` (`id`, `role_id`, `first_name`, `last_name`, `email`, `password_hash`, `phone`, `status`) VALUES
-(1, 1, 'Administrador', 'Vixy', 'admin@vixystore.com', '$2y$10$vO8fG0s5uW5dGlnzG1Lg6OFZzQc3mCvywB.wXmN6.n5n2bA5rFw32', '+584121112233', 'active')
-ON DUPLICATE KEY UPDATE `email`=VALUES(`email`);
+(1, 1, 'Administrador', 'Vixy', 'admin@vixystore.com', '$2y$10$Y1lhCrrYcELI9fgKwz5gt..CMi/n548jfV/Tm.q7ZM3iDULA0Ssle', '+584121112233', 'active')
+ON DUPLICATE KEY UPDATE `email`=VALUES(`email`), `password_hash`=VALUES(`password_hash`), `status`=VALUES(`status`);
 
 -- Proveedores iniciales
 INSERT INTO `suppliers` (`id`, `name`, `contact_person`, `phone`, `email`, `status`, `notes`) VALUES
@@ -301,24 +302,7 @@ INSERT INTO `categories` (`id`, `parent_id`, `name`, `slug`, `description`, `is_
 (4, NULL, 'Herramientas y Accesorios', 'herramientas-accesorios', 'Kits de herramientas mecánicas, gatos hidráulicos, compresores y auxilio vial.', TRUE)
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
 
--- Catálogo de productos inicial
-INSERT INTO `products` (`id`, `category_id`, `supplier_id`, `sku`, `name`, `slug`, `description`, `price`, `cost_price`, `stock_quantity`, `min_stock_alert`, `is_active`) VALUES
-(1, 1, 1, 'REP-001', 'Pastillas de Freno Delanteras Cerámicas', 'pastillas-freno-delanteras-ceramicas', 'Pastillas de freno de compuesto cerámico de alta duración. Frenado progresivo, silencioso y con mínimo desprendimiento de polvo. Compatibles con sedanes y compactos.', 28.50, 16.00, 35, 8, TRUE),
-(2, 2, 2, 'LUB-001', 'Aceite de Motor Sintético 5W-30 (1 Galón)', 'aceite-motor-sintetico-5w30-galon', 'Lubricante 100% sintético con aditivos antidesgaste avanzados. Protección térmica superior en climas cálidos y prolongación de intervalos de cambio.', 34.00, 22.00, 48, 10, TRUE),
-(3, 3, 3, 'BAT-001', 'Batería Libre de Mantenimiento 800 AMP', 'bateria-libre-mantenimiento-800-amp', 'Batería de aleación calcio-plata con alta corriente de arranque en frío. 12 meses de garantía directa.', 85.00, 58.00, 14, 5, TRUE),
-(4, 1, 1, 'REP-002', 'Amortiguadores Traseros a Gas Reforzados (Par)', 'amortiguadores-traseros-gas-reforzados', 'Juego de dos amortiguadores presurizados a gas con pistón de cromo templado. Estabilidad insuperable sobre pavimento irregular.', 62.00, 40.00, 18, 6, TRUE),
-(5, 2, 2, 'LUB-002', 'Refrigerante / Coolant Orgánico 50/50 1 Galón', 'refrigerante-coolant-organico-50-50', 'Fórmula pre-diluida con tecnología OAT de larga duración. Evita corrosión y sobrecalentamiento del bloque motor.', 14.50, 8.50, 50, 12, TRUE),
-(6, 4, 3, 'HER-001', 'Kit de Herramientas Mecánicas 82 Piezas Cromo Vanadio', 'kit-herramientas-mecanicas-82-piezas', 'Estuche rígido profesional con llaves combinadas, rachet 1/2 y 1/4, extensiones y dados milimétricos resistentes al torque severo.', 75.00, 48.00, 12, 4, TRUE)
-ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
-
--- Imágenes de productos iniciales
-INSERT INTO `product_images` (`product_id`, `image_url`, `is_primary`, `display_order`) VALUES
-(1, '/store/banners/vixybanner1.png', TRUE, 1),
-(2, '/store/banners/vixybanner2.png', TRUE, 1),
-(3, '/store/banners/vixybanner1.png', TRUE, 1),
-(4, '/store/banners/vixybanner2.png', TRUE, 1),
-(5, '/store/banners/vixybanner1.png', TRUE, 1),
-(6, '/store/banners/vixybanner2.png', TRUE, 1)
-ON DUPLICATE KEY UPDATE `image_url`=VALUES(`image_url`);
+-- Catálogo de productos inicial (vacio por defecto)
+-- Los productos se cargan desde el panel administrativo ERP o via API
 
 SET FOREIGN_KEY_CHECKS = 1;
