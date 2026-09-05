@@ -35,3 +35,13 @@ Thumbs.db
 # Antigravity IDE
 .gemini/
 .agents/
+
+# Archivos de distribución/producción (no incluir en el repo)
+dist_donweb/
+donweb_public_html.zip
+package_donweb.js
+server_root/
+
+# Build output del Delivery Suite (Vite)
+vixy-delivery-&-management-suite/dist/
+vixy-delivery-&-management-suite/node_modules/

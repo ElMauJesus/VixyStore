@@ -15,13 +15,13 @@ if (basename($_SERVER['PHP_SELF']) === 'config.php') {
 date_default_timezone_set('America/Caracas');
 
 // -----------------------------------------------------------------------------
-// 1. Configuración de la base de datos principal de Vixy Store
+// 1. Configuración de la base de datos principal de Vixy Store (Donweb / Ferozo)
 // -----------------------------------------------------------------------------
-define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_PORT', getenv('DB_PORT') ?: '3306');
-define('DB_NAME', getenv('DB_NAME') ?: 'vixy_store');
-define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : '');
+define('DB_NAME', getenv('DB_NAME') ?: 'c2861522_vixy_st');
+define('DB_USER', getenv('DB_USER') ?: 'c2861522_VixySD');
+define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : 'LnsdEjc@st6f4fY');
 
 // -----------------------------------------------------------------------------
 // 2. Configuración de la base de datos de Conductores VixyRider (cPanel)
