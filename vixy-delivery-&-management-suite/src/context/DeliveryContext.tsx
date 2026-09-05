@@ -495,6 +495,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       historialTransacciones: [
         {
           id: 'tx-dr-sol-' + Date.now(),
+          conductorId: driver.id,
           tipo: 'recarga' as const,
           monto: montoUsd,
           saldoResultante: prev.saldoUsd,
@@ -2499,7 +2500,9 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       realGpsCoords,
       realGpsError,
       requestPushNotificationPermission,
-      playNotificationSound
+      playNotificationSound,
+      changeAdminPassword,
+      toggleStoreActive
     }}>
       {children}
     </DeliveryContext.Provider>

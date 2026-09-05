@@ -15,6 +15,7 @@ export interface VenezuelanLegalDocs {
   certificadoMedicoValido: boolean;
   rcvAseguradora: string; // Responsabilidad Civil Vehicular
   rcvPolizaNumero: string;
+  rcvPolizaNro?: string; // Alias compatible
   rcvVencimiento: string;
 }
 
@@ -30,7 +31,7 @@ export interface MotorbikeDetails {
 
 export interface TransaccionBilletera {
   id: string;
-  conductorId: string;
+  conductorId?: string; // Opcional para compatibilidad con recargas directas
   tipo: 'recarga' | 'comision_carrera' | 'ajuste' | 'bono';
   monto: number; // Positivo para recargas, negativo para comisiones
   saldoResultante: number;
@@ -93,6 +94,7 @@ export interface Producto {
   categoria: string;
   imagenUrl: string;
   imagenPath?: string; // Ruta individual en servidor: /uploads/comercios/{comercio_id}/articulos/{nombre_archivo}
+  imagenRuta?: string; // Alias compatible
   disponible: boolean;
 }
 
@@ -182,7 +184,7 @@ export interface ClienteBilletera {
 export interface TransaccionComercioBilletera {
   id: string;
   comercioId: string;
-  tipo: 'pago_pedido_cartera' | 'pago_pedido_directo' | 'retiro' | 'ajuste';
+  tipo: 'pago_pedido_cartera' | 'pago_pedido_directo' | 'retiro' | 'ajuste' | 'credito' | 'debito';
   montoUsd: number;
   montoBs: number;
   saldoResultanteUsd: number;
@@ -192,7 +194,9 @@ export interface TransaccionComercioBilletera {
   metodoPago?: MetodoPagoTipo;
   referencia?: string;
   comprobanteUrl?: string; // /uploads/comprobantes_pago/comp_{id}.jpg
+  comprobanteRuta?: string; // Alias compatible
   comprobanteArchivoId?: string;
+  concepto?: string; // Alias compatible
   fecha: string;
   estado: 'acreditado' | 'en_proceso';
 }
@@ -203,6 +207,7 @@ export interface ComercioBilletera {
   saldoBs: number;
   totalVentasUsd: number;
   totalRetiradoUsd: number;
+  totalAcreditadoUsd?: number; // Alias compatible
   historialTransacciones: TransaccionComercioBilletera[];
 }
 
@@ -238,6 +243,7 @@ export interface Comercio {
   horarios?: string; // Horario comercial (ej: "Lun - Sáb: 8:00 AM - 7:00 PM | Dom: 8:30 AM - 2:00 PM")
   diasApertura?: string;
   horaApertura?: string; // Ej: "08:00"
+  horarioApertura?: string; // Alias compatible
   horaCierre?: string; // Ej: "22:00"
   diasOperacion?: string[]; // ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
   activo?: boolean; // Estado activo/inactivo controlado por el sistema y el horario
@@ -335,8 +341,10 @@ export interface Pedido {
   tasaBcvBs: number;
   montoTotalBs: number;
   metodoPagoSeleccionado: MetodoPagoTipo;
+  metodoPago?: MetodoPagoTipo; // Alias compatible
   referenciaPago?: string;
   comprobantePagoUrl?: string;
+  conductorAsignado?: Conductor; // Alias compatible
   estado: EstadoPedido;
   creadoEn: string;
   actualizadoEn: string;
@@ -418,7 +426,10 @@ export interface ReclamoCliente {
   descripcion: string;
   imagenes: string[]; // Rutas en /uploads/clientes/{clienteId}/reclamos/
   carpetaAlmacenamiento: string;
-  estado: 'en_espera_de_respuesta' | 'atendido' | 'solucionado';
+  estado: 'en_espera_de_respuesta' | 'en_espera' | 'atendido' | 'solucionado';
+  pedidoCodigo?: string; // Alias compatible
+  atendidoPor?: string; // Alias compatible
+  fechaResolucion?: string; // Alias compatible
   fechaCreacion: string;
   respuestaComercio?: string;
   respuestaBackend?: string;

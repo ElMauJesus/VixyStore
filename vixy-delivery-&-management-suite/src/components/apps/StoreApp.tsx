@@ -423,8 +423,8 @@ export const StoreApp: React.FC = () => {
             <div className="w-14 h-14 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-amber-500/20">
               <Store className="w-7 h-7" />
             </div>
-            <h2 className="text-lg font-black text-neutral-900 dark:text-white">Vixy Store</h2>
-            <p className="text-xs text-neutral-500">Panel Comercial y Despacho de Pedidos</p>
+            <h2 className="text-xl font-black text-neutral-900 dark:text-white">Vixy Delivery</h2>
+            <p className="text-xs text-neutral-500 font-medium">Panel Comercial & Despacho de Pedidos</p>
           </div>
 
           {storeLoginError && (
@@ -562,8 +562,98 @@ export const StoreApp: React.FC = () => {
         </div>
       </div>
 
+      {/* Desktop Web Subnav Tabs */}
+      <div className="hidden md:flex px-4 py-2 bg-white dark:bg-neutral-850 border-b border-neutral-200 dark:border-neutral-800 items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setActiveTab('pedidos')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'pedidos'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <ChefHat className="w-3.5 h-3.5" />
+            <span>Pedidos & Comandas</span>
+            {pendingApprovalOrders.length > 0 && (
+              <span className="px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[10px] font-black">
+                {pendingApprovalOrders.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('articulos')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'articulos'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" />
+            <span>Menú & Artículos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('cartera')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'cartera'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Cartera Comercial</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('cuenta')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'cuenta'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Building className="w-3.5 h-3.5" />
+            <span>Datos del Local</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('reclamos')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'reclamos'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Reclamos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('historial')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'historial'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>Historial</span>
+          </button>
+        </div>
+
+        <button
+          onClick={() => setShowManualOrderModal(true)}
+          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Solicitar Despacho Manual</span>
+        </button>
+      </div>
+
       {/* Main Container */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Global Incoming Orders Alert Banner across all tabs */}
         {pendingApprovalOrders.length > 0 && (
           <div className="p-3 bg-gradient-to-r from-amber-500 via-purple-600 to-amber-600 text-white rounded-2xl shadow-md space-y-2 shrink-0 border border-white/20">
@@ -1057,7 +1147,7 @@ export const StoreApp: React.FC = () => {
                 <p>No se encontraron artículos con ese filtro de búsqueda.</p>
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredProducts.map(prod => (
                   <div
                     key={prod.id}
@@ -1579,7 +1669,7 @@ export const StoreApp: React.FC = () => {
 
                         <div className="flex items-center gap-1 shrink-0">
                           <button
-                            onClick={() => openCall(order.conductor?.nombre || 'Motorizado', order.conductor?.fotoUrl)}
+                            onClick={() => openCall(store.nombre, order.conductor?.nombre || 'Motorizado', order.conductor?.telefono || '0412-0000000', 'conductor')}
                             className="p-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition cursor-pointer"
                             title="Llamar conductor"
                           >

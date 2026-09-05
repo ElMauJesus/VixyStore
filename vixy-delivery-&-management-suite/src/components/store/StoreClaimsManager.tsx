@@ -16,7 +16,7 @@ export const StoreClaimsManager: React.FC = () => {
     e.preventDefault();
     if (!selectedClaim || !solutionNote.trim()) return;
 
-    updateClaimStatus(selectedClaim.id, actionStatus, solutionNote.trim());
+    updateClaimStatus(selectedClaim.id, actionStatus, solutionNote.trim(), 'comercio');
     setSelectedClaim(null);
     setSolutionNote('');
   };
