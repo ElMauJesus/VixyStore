@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vixy — Ecosistema Digital Corporativo</title>
+  <meta name="description" content="Plataforma tecnológica integral Vixy: Tienda de repuestos exclusiva para conductores y suite logística para comercios afiliados." />
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --primary: #8b5cf6;
+      --primary-dark: #6d28d9;
+      --primary-light: #c4b5fd;
+      --accent: #a855f7;
+      --bg: #090514;
+      --surface: #120b24;
+      --surface-border: rgba(139, 92, 246, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(139, 92, 246, 0.25), transparent),
+        radial-gradient(ellipse 60% 40% at 10% 80%, rgba(168, 85, 247, 0.15), transparent),
+        radial-gradient(ellipse 60% 40% at 90% 70%, rgba(124, 58, 237, 0.15), transparent);
+    }
+
+    .glass-nav {
+      background: rgba(18, 11, 36, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--surface-border);
+    }
+
+    .glass-card {
+      background: rgba(18, 11, 36, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--surface-border);
+      border-radius: 24px;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .glass-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(168, 85, 247, 0.45);
+      box-shadow: 0 20px 40px -15px rgba(139, 92, 246, 0.3);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+      color: #ffffff;
+      font-weight: 700;
+      padding: 12px 24px;
+      border-radius: 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #9d71f7, #7c3aed);
+      transform: scale(1.02);
+      box-shadow: 0 6px 22px rgba(139, 92, 246, 0.5);
+    }
+
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(139, 92, 246, 0.15);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--primary-light);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAVEGACIÓN SUPERIOR -->
+  <header class="glass-nav sticky top-0 z-50 w-full">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #4c1d95); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; color: white; box-shadow: 0 4px 12px rgba(139,92,246,0.4);">
+          V
+        </div>
+        <div>
+          <span style="font-size: 18px; font-weight: 900; letter-spacing: -0.5px; color: white;">VIXY</span>
+          <span style="font-size: 10px; font-weight: 700; color: #a78bfa; margin-left: 4px; background: rgba(139,92,246,0.2); padding: 2px 6px; border-radius: 6px;">ECOSISTEMA</span>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <a href="/store/" style="color: #cbd5e1; font-size: 13px; font-weight: 600; text-decoration: none; padding: 8px 14px; border-radius: 10px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#cbd5e1'">Tienda Conductores</a>
+        <a href="/delivery/" style="color: #cbd5e1; font-size: 13px; font-weight: 600; text-decoration: none; padding: 8px 14px; border-radius: 10px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#cbd5e1'">Delivery Comercios</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main style="flex: 1; max-width: 1200px; margin: 0 auto; padding: 48px 24px; width: 100%;">
+    
+    <!-- HERO CENTRAL -->
+    <div style="text-align: center; max-width: 780px; margin: 0 auto 56px auto;">
+      <div class="badge-pill" style="margin-bottom: 20px;">
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #34d399;"></span>
+        Plataforma Tecnológica Vixy
+      </div>
+      <h1 style="font-size: clamp(32px, 5vw, 54px); font-weight: 900; line-height: 1.1; letter-spacing: -1px; margin-bottom: 20px;">
+        Soluciones integradas para <br />
+        <span style="background: linear-gradient(to right, #c4b5fd, #8b5cf6, #e9d5ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+          Conductores & Comercios
+        </span>
+      </h1>
+      <p style="font-size: 16px; color: #94a3b8; line-height: 1.6;">
+        Accede a la división correspondiente según tu rol en la red Vixy. Cada módulo opera de forma autónoma con su base de datos y panel especializado.
+      </p>
+    </div>
+
+    <!-- TARJETAS DE PORTAL DIVIDIDAS (STORE & DELIVERY) -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 32px; margin-bottom: 56px;">
+      
+      <!-- TARJETA 1: VIXY STORE (CONDUCTORES) -->
+      <div class="glass-card" style="padding: 36px 32px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: -50px; right: -50px; width: 160px; height: 160px; background: rgba(139, 92, 246, 0.15); border-radius: 50%; filter: blur(40px);"></div>
+        
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+            <div style="width: 48px; height: 48px; border-radius: 14px; background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.4); display: flex; align-items: center; justify-content: center;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            </div>
+            <span style="font-size: 11px; font-weight: 800; color: #a78bfa; background: rgba(139,92,246,0.2); padding: 4px 10px; border-radius: 8px; text-transform: uppercase;">
+              Exclusivo Conductores
+            </span>
+          </div>
+
+          <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px; color: white;">Vixy Store</h2>
+          <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px;">
+            Tienda oficial de repuestos, lubricantes, baterías y accesorios para carros y motocicletas, con precios preferenciales para conductores activos de <strong>VixyRider</strong>.
+          </p>
+
+          <ul style="list-style: none; margin-bottom: 32px; display: flex; flex-direction: column; gap: 10px;">
+            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399;">✓</span> Autenticación directa con credenciales VixyRider
+            </li>
+            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399;">✓</span> Fichas de garantía y durabilidad en kilómetros
+            </li>
+            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399;">✓</span> Pagos locales en Bs. (Pago Móvil) y divisas (Zelle, Binance)
+            </li>
+          </ul>
+        </div>
+
+        <a href="/store/" class="btn-primary" style="width: 100%; text-align: center;">
+          <span>Ingresar a Vixy Store</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+      </div>
+
+      <!-- TARJETA 2: VIXY DELIVERY (COMERCIOS) -->
+      <div class="glass-card" style="padding: 36px 32px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: -50px; right: -50px; width: 160px; height: 160px; background: rgba(59, 130, 246, 0.15); border-radius: 50%; filter: blur(40px);"></div>
+        
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+            <div style="width: 48px; height: 48px; border-radius: 14px; background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4); display: flex; align-items: center; justify-content: center;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <span style="font-size: 11px; font-weight: 800; color: #93c5fd; background: rgba(59,130,246,0.2); padding: 4px 10px; border-radius: 8px; text-transform: uppercase;">
+              Comercios & Suite
+            </span>
+          </div>
+
+          <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px; color: white;">Vixy Delivery</h2>
+          <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px;">
+            Suite tecnológica para comercios aliados, despacho de órdenes, seguimiento en vivo de motorizados y panel de control administrativo.
+          </p>
+
+          <ul style="list-style: none; margin-bottom: 32px; display: flex; flex-direction: column; gap: 10px;">
+            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399;">✓</span> Gestión de pedidos de comercio en tiempo real
+            </li>
+            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399;">✓</span> Monitoreo en mapa satelital de la flota de reparto
+            </li>
+            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+              <span style="color: #34d399;">✓</span> Liquidación y billetera de saldo para comercios
+            </li>
+          </ul>
+        </div>
+
+        <a href="/delivery/" class="btn-primary" style="width: 100%; text-align: center; background: linear-gradient(135deg, #3b82f6, #1d4ed8);">
+          <span>Acceder a Vixy Delivery</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+      </div>
+
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- ZONA RESERVADA MODULAR: LANDING & REGISTRO DE COMERCIOS VIXY DELIVERY -->
+    <!-- ===================================================================== -->
+    <section id="zona-registro-comercios" class="glass-card" style="padding: 36px 32px; background: linear-gradient(135deg, rgba(30, 16, 60, 0.7), rgba(18, 11, 36, 0.8)); border: 1px dashed rgba(168, 85, 247, 0.45); text-align: center;">
+      <div style="max-width: 640px; margin: 0 auto;">
+        <span class="badge-pill" style="margin-bottom: 14px; background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.4); color: #fde047;">
+          Próxima Incorporación
+        </span>
+        <h3 style="font-size: 20px; font-weight: 800; color: white; margin-bottom: 8px;">
+          ¿Quieres afiliar tu comercio a la red Vixy Delivery?
+        </h3>
+        <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 20px;">
+          Restaurantes, farmacias, víveres y tiendas especializadas podrán registrarse en línea para comenzar a despachar con nuestra flota de motorizados. La landing de afiliación estará disponible muy pronto en esta zona.
+        </p>
+        <div style="display: inline-flex; gap: 12px; font-size: 12px; color: #a78bfa; font-weight: 600;">
+          <span>• Integración automática de menú</span>
+          <span>• Cobro con Pago Móvil directo</span>
+          <span>• Soporte en Caracas</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- PIE DE PÁGINA -->
+  <footer style="border-top: 1px solid var(--surface-border); padding: 24px; text-align: center; font-size: 12px; color: #64748b;">
+    <p>© 2026 Vixy Technologies. Todos los derechos reservados. Caracas, Venezuela.</p>
+  </footer>
+
+</body>
+</html>

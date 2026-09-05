@@ -36,12 +36,17 @@ Thumbs.db
 .gemini/
 .agents/
 
-# Archivos de distribución/producción (no incluir en el repo)
+# Archivos temporales y carpetas de build intermedias (no van al repo)
 dist_donweb/
 donweb_public_html.zip
 package_donweb.js
 server_root/
+out/
+.next/
 
-# Build output del Delivery Suite (Vite)
+# Build output del Delivery Suite (solo fuente en repo, compilado va a public_html/)
 vixy-delivery-&-management-suite/dist/
 vixy-delivery-&-management-suite/node_modules/
+
+# public_html/ SÍ va al repo - es la carpeta lista para subir al servidor
+# (No la excluimos)
