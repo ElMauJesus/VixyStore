@@ -1,6 +1,8 @@
 import { ApiResponse, Product, Category, Supplier, Order, Address, WarrantyLog, InventorySummary, InventoryLog, User } from '@/types/store';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '/api';
+const API_BASE_URL = 
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
+  (typeof window !== 'undefined' && window.location.pathname.startsWith('/store') ? '/store/api' : '/api');
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;

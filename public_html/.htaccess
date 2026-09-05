@@ -17,6 +17,10 @@
     RewriteCond %{REQUEST_URI} ^/delivery/backend/ [NC]
     RewriteRule ^ - [L]
 
+    # Compatibilidad: Reenviar peticiones directas a /api/ hacia el backend de VixyStore
+    RewriteCond %{REQUEST_URI} ^/api/(.*)$ [NC]
+    RewriteRule ^api/(.*)$ /store/api/$1 [L,QSA]
+
     # --- ENRUTAMIENTO VIXY STORE (/store/) ---
     # Si el archivo o directorio existe físicamente dentro de /store, servirlo directamente
     RewriteCond %{REQUEST_URI} ^/store/ [NC]
