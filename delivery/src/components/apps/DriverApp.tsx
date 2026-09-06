@@ -243,14 +243,21 @@ export const DriverApp: React.FC = () => {
             </button>
           </form>
 
-          <div className="pt-2 border-t border-neutral-200 dark:border-neutral-800 text-center">
+          <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
+            <a
+              href="/registro-delivery/"
+              className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 px-4 rounded-xl bg-purple-600/10 hover:bg-purple-600/20 text-purple-600 dark:text-purple-400 font-bold text-xs border border-purple-500/30 transition cursor-pointer"
+            >
+              <span>¿Quieres ser Repartidor? Regístrate aquí</span>
+            </a>
+
             <button
               type="button"
               onClick={() => {
                 loginDriver('V-24891023', 'chofer123');
                 setDriverAuthError('');
               }}
-              className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer"
+              className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer block mx-auto"
             >
               Acceso Rápido como Conductor Demo (Carlos Ramírez)
             </button>

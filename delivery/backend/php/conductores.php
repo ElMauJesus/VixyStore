@@ -163,4 +163,154 @@ if ($method === 'PUT' && $action === 'disponibilidad') {
     ]);
 }
 
+// -----------------------------------------------------------------------------
+// POST: PRE-REGISTRO DE NUEVO REPARTIDOR (FORMULARIO WEB)
+// -----------------------------------------------------------------------------
+if ($method === 'POST' && $action === 'pre_registro') {
+    $nombre = trim($_POST['nombre'] ?? '');
+    $apellido = trim($_POST['apellido'] ?? '');
+    $cedula = trim($_POST['cedula'] ?? '');
+    $fechaNacimiento = trim($_POST['fecha_nacimiento'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $telefonoAdicional = trim($_POST['telefono_adicional'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $direccion = trim($_POST['direccion'] ?? '');
+    $puntoReferencia = trim($_POST['punto_referencia'] ?? '');
+    $ubicacionGps = trim($_POST['ubicacion_gps'] ?? '');
+    $tipoVehiculo = trim($_POST['tipo_vehiculo'] ?? 'moto');
+    $placaVehiculo = trim($_POST['placa_vehiculo'] ?? '');
+    $modeloVehiculo = trim($_POST['modelo_vehiculo'] ?? '');
+
+    // Validar obligatorios
+    if (empty($nombre) || empty($apellido) || empty($cedula) || empty($fechaNacimiento) || 
+        empty($telefono) || empty($email) || empty($direccion)) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'Faltan campos obligatorios'], 400);
+    }
+
+    // Validar email
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'Email inválido'], 400);
+    }
+
+    // Validar foto
+    if (!isset($_FILES['foto_perfil']) || $_FILES['foto_perfil']['error'] === UPLOAD_ERR_NO_FILE) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'La foto de perfil es obligatoria'], 400);
+    }
+
+    $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    $extension = strtolower(pathinfo($_FILES['foto_perfil']['name'], PATHINFO_EXTENSION));
+
+    if (!in_array($extension, $allowedExtensions)) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'Formato de imagen no permitido'], 400);
+    }
+
+    if ($_FILES['foto_perfil']['size'] > 5 * 1024 * 1024) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'La foto supera los 5MB'], 400);
+    }
+
+    // Verificar duplicados
+    $stmtCheck = $pdo->prepare("SELECT id FROM conductores WHERE cedula = :cedula OR email = :email");
+    $stmtCheck->execute(['cedula' => $cedula, 'email' => $email]);
+
+    if ($stmtCheck->rowCount() > 0) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'La cédula o email ya están registrados'], 409);
+    }
+
+    // Generar código e ID
+    $codigo = 'REP-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+    $id = 'rep-' . uniqid();
+
+    // Guardar foto
+    $uploadDir = __DIR__ . '/../uploads/repartidores/';
+    if (!file_exists($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $filename = $codigo . '.' . $extension;
+    $destination = $uploadDir . $filename;
+
+    if (!move_uploaded_file($_FILES['foto_perfil']['tmp_name'], $destination)) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'Error al guardar la foto'], 500);
+    }
+
+    $fotoUrl = "/delivery/backend/uploads/repartidores/$filename";
+
+    // Parsear GPS
+    $lat = 10.49100000;
+    $lng = -66.86200000;
+    if (!empty($ubicacionGps)) {
+        $parts = explode(',', $ubicacionGps);
+        if (count($parts) >= 2) {
+            $lat = (float)trim($parts[0]);
+            $lng = (float)trim($parts[1]);
+        }
+    }
+
+    // Separar marca/modelo/año
+    $marca = '';
+    $modelo = '';
+    $ano = '';
+    if (!empty($modeloVehiculo)) {
+        $parts = explode(' ', $modeloVehiculo);
+        $marca = $parts[0] ?? '';
+        $modelo = $parts[1] ?? '';
+        $ano = $parts[2] ?? '';
+    }
+
+    // Insertar
+    $sql = "INSERT INTO conductores (
+                id, nombre, apellido, cedula, fecha_nacimiento,
+                telefono, telefono_adicional, email, password_hash,
+                foto_url, direccion, punto_referencia,
+                latitud_actual, longitud_actual,
+                tipo_vehiculo, placa_moto, marca_moto, modelo_moto, ano_moto,
+                disponible, en_carrera, saldo_billetera_usd, bloqueado_por_saldo
+            ) VALUES (
+                :id, :nombre, :apellido, :cedula, :fecha_nacimiento,
+                :telefono, :telefono_adicional, :email, '123456',
+                :foto, :direccion, :referencia,
+                :lat, :lng,
+                :tipo_vehiculo, :placa, :marca, :modelo, :ano,
+                0, 0, 0.00, 0
+            )";
+
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            'id' => $id,
+            'nombre' => $nombre,
+            'apellido' => $apellido,
+            'cedula' => $cedula,
+            'fecha_nacimiento' => $fechaNacimiento,
+            'telefono' => $telefono,
+            'telefono_adicional' => !empty($telefonoAdicional) ? $telefonoAdicional : null,
+            'email' => $email,
+            'foto' => $fotoUrl,
+            'direccion' => $direccion,
+            'referencia' => !empty($puntoReferencia) ? $puntoReferencia : null,
+            'lat' => $lat,
+            'lng' => $lng,
+            'tipo_vehiculo' => $tipoVehiculo,
+            'placa' => $placaVehiculo,
+            'marca' => $marca,
+            'modelo' => $modelo,
+            'ano' => $ano
+        ]);
+        
+        Database::jsonResponse([
+            'success' => true,
+            'mensaje' => 'Registro de repartidor exitoso',
+            'codigo_conductor' => $codigo,
+            'repartidor_id' => $id
+        ], 201);
+        
+    } catch (PDOException $e) {
+        if (file_exists($destination)) {
+            unlink($destination);
+        }
+        
+        Database::jsonResponse(['success' => false, 'mensaje' => 'Error al registrar: ' . $e->getMessage()], 500);
+    }
+}
+
 Database::jsonResponse(['error' => true, 'mensaje' => 'Acción o método no soportado'], 405);

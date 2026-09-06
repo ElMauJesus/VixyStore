@@ -17,6 +17,7 @@ $dirs = @(
     "out/delivery/backend",
     "out/registro-comercios",
     "out/registro-comercios/api",
+    "out/registro-delivery",
     "out/api",
     "out/banners",
     "out/logo",

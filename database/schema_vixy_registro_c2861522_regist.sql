@@ -15,9 +15,10 @@ SET time_zone = "-04:00"; -- Hora de Venezuela (GMT-4)
 CREATE TABLE IF NOT EXISTS `comercios` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `codigo_comercio` VARCHAR(30) NOT NULL UNIQUE,          -- Ej: COM-20260905-A7B2C1
+    `tipo_registro` ENUM('rif', 'independiente') DEFAULT 'rif',
     `nombre_comercial` VARCHAR(150) NOT NULL,
     `nombre_representante` VARCHAR(150) NOT NULL,
-    `rif_cedula_juridica` VARCHAR(50) NOT NULL,
+    `rif_cedula_juridica` VARCHAR(50) DEFAULT NULL,
     `cedula_representante` VARCHAR(50) NOT NULL,
     `email` VARCHAR(150) NOT NULL,
     `telefono_comercio` VARCHAR(30) NOT NULL,
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS `comercios` (
     `ip_registro` VARCHAR(45) DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_tipo` (`tipo_registro`),
     INDEX `idx_rif` (`rif_cedula_juridica`),
     INDEX `idx_email` (`email`),
     INDEX `idx_status` (`status`),

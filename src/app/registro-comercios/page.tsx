@@ -27,7 +27,10 @@ const CATEGORIAS = [
     'Otro comercio / rubro'
 ];
 
+type TipoRegistro = 'rif' | 'independiente';
+
 interface FormState {
+    tipoRegistro: TipoRegistro;
     nombreComercial: string;
     rifCedulaJuridica: string;
     nombreRepresentante: string;
@@ -61,6 +64,7 @@ export default function RegistroComercioLandingPage() {
     const formSectionRef = useRef<HTMLDivElement>(null);
 
     const [form, setForm] = useState<FormState>({
+        tipoRegistro: 'rif',
         nombreComercial: '',
         rifCedulaJuridica: '',
         nombreRepresentante: '',
@@ -129,9 +133,14 @@ export default function RegistroComercioLandingPage() {
         setErrorMessage(null);
 
         // Validaciones básicas de cliente
-        if (!form.nombreComercial || !form.nombreRepresentante || !form.rifCedulaJuridica || 
+        if (!form.nombreComercial || !form.nombreRepresentante ||
             !form.cedulaRepresentante || !form.email || !form.telefonoComercio || !form.direccionNegocio) {
             setErrorMessage('Por favor completa todos los campos obligatorios marcados con (*).');
+            return;
+        }
+
+        if (form.tipoRegistro === 'rif' && !form.rifCedulaJuridica) {
+            setErrorMessage('El RIF es obligatorio para comercios registrados.');
             return;
         }
 
@@ -149,8 +158,9 @@ export default function RegistroComercioLandingPage() {
         const redesFormatted = redesList.join(' | ');
 
         const fd = new FormData();
+        fd.append('tipo_registro', form.tipoRegistro);
         fd.append('nombre_comercial', form.nombreComercial);
-        fd.append('rif_cedula_juridica', form.rifCedulaJuridica);
+        fd.append('rif_cedula_juridica', form.tipoRegistro === 'rif' ? form.rifCedulaJuridica : '');
         fd.append('nombre_representante', form.nombreRepresentante);
         fd.append('cedula_representante', form.cedulaRepresentante);
         fd.append('email', form.email);
@@ -169,7 +179,6 @@ export default function RegistroComercioLandingPage() {
             fd.append('foto_comercio', form.fotoComercio);
         }
 
-        // Endpoint prioritario para producción bajo /registro-comercios/
         const apiEndpoint = typeof window !== 'undefined' && window.location.pathname.startsWith('/registro-comercios')
             ? '/registro-comercios/api/registro-comercio.php'
             : '/api/registro-comercio.php';
@@ -193,7 +202,6 @@ export default function RegistroComercioLandingPage() {
             }
         } catch (err: any) {
             console.warn('Fallback de conexión de registro:', err);
-            // Si el backend aún no está subido, mostramos confirmación visual de demo
             setComercioCreado({
                 codigo: 'COM-LOCAL-DEMO',
                 nombre: form.nombreComercial
@@ -237,6 +245,7 @@ export default function RegistroComercioLandingPage() {
                             onClick={() => {
                                 setSubmitted(false);
                                 setForm({
+                                    tipoRegistro: 'rif',
                                     nombreComercial: '',
                                     rifCedulaJuridica: '',
                                     nombreRepresentante: '',
@@ -321,7 +330,6 @@ export default function RegistroComercioLandingPage() {
                 1. HERO SECTION & LANDING (ESTILO EXACTO A LA IMAGEN)
             ══════════════════════════════════════════════════════════════ */}
             <section className="relative overflow-hidden bg-[#0e0720] border-b border-purple-950">
-                {/* Imagen de fondo del hero: banner comercial generado */}
                 <div className="absolute inset-0 z-0">
                     <img
                         src="/banners/banner_comercios.jpg"
@@ -332,14 +340,11 @@ export default function RegistroComercioLandingPage() {
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0c061d] via-transparent to-transparent z-10" />
                 </div>
 
-                {/* Contenido del Hero */}
                 <div className="relative z-20 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-24">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-                        
-                        {/* Columna Izquierda: Mensaje Comercial */}
+
                         <div className="lg:col-span-7 space-y-6 text-left">
-                            
-                            {/* Logo oficial de VixyRider Comercios */}
+
                             <div className="flex items-center gap-3">
                                 <img
                                     src="/logo/logovixycomercios.png"
@@ -348,13 +353,11 @@ export default function RegistroComercioLandingPage() {
                                 />
                             </div>
 
-                            {/* Badge Púrpura "COMERCIOS ALIADOS" */}
                             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#3b158f]/80 border border-purple-500/40 text-purple-200 text-xs sm:text-sm font-bold tracking-wider uppercase shadow-md shadow-purple-900/40 backdrop-blur-md">
                                 <Sparkles size={14} className="text-purple-300" />
                                 <span>COMERCIOS ALIADOS</span>
                             </div>
 
-                            {/* Título Principal de Alto Impacto */}
                             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.1]">
                                 Conecta tu negocio <br className="hidden sm:inline" />
                                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-300 to-purple-200">
@@ -362,12 +365,10 @@ export default function RegistroComercioLandingPage() {
                                 </span>
                             </h1>
 
-                            {/* Subtítulo Descriptivo */}
                             <p className="text-slate-300 text-base sm:text-lg leading-relaxed max-w-xl font-normal">
                                 En Vixy Rider ayudamos a comercios como el tuyo a crecer, ofreciendo entregas rápidas y seguras con el respaldo de miles de conductores en toda la ciudad.
                             </p>
 
-                            {/* Botón CTA y Beneficio Destacado */}
                             <div className="pt-2 space-y-4">
                                 <div>
                                     <button
@@ -389,7 +390,6 @@ export default function RegistroComercioLandingPage() {
                             </div>
                         </div>
 
-                        {/* Columna Derecha: Tarjeta Fotográfica de Tienda */}
                         <div className="lg:col-span-5 relative hidden lg:block">
                             <div className="relative rounded-3xl overflow-hidden shadow-2xl border-2 border-purple-500/30 p-1.5 bg-gradient-to-b from-purple-500/20 to-indigo-900/30 backdrop-blur-sm">
                                 <div className="rounded-2xl overflow-hidden relative">
@@ -421,8 +421,7 @@ export default function RegistroComercioLandingPage() {
             ══════════════════════════════════════════════════════════════ */}
             <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 relative z-30">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-                    
-                    {/* Tarjeta 1 */}
+
                     <div className="bg-white rounded-2xl p-5 shadow-lg shadow-purple-900/5 border border-purple-100 flex items-center gap-4 transition hover:-translate-y-1">
                         <div className="w-12 h-12 rounded-xl bg-[#331182] text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-900/20">
                             <Shield size={24} strokeWidth={2.2} />
@@ -433,7 +432,6 @@ export default function RegistroComercioLandingPage() {
                         </div>
                     </div>
 
-                    {/* Tarjeta 2 */}
                     <div className="bg-white rounded-2xl p-5 shadow-lg shadow-purple-900/5 border border-purple-100 flex items-center gap-4 transition hover:-translate-y-1">
                         <div className="w-12 h-12 rounded-xl bg-[#331182] text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-900/20">
                             <Store size={24} strokeWidth={2.2} />
@@ -444,7 +442,6 @@ export default function RegistroComercioLandingPage() {
                         </div>
                     </div>
 
-                    {/* Tarjeta 3 */}
                     <div className="bg-white rounded-2xl p-5 shadow-lg shadow-purple-900/5 border border-purple-100 flex items-center gap-4 transition hover:-translate-y-1">
                         <div className="w-12 h-12 rounded-xl bg-[#331182] text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-900/20">
                             <Rocket size={24} strokeWidth={2.2} />
@@ -462,8 +459,7 @@ export default function RegistroComercioLandingPage() {
                 3. FORMULARIO COMPLETO DE REGISTRO
             ══════════════════════════════════════════════════════════════ */}
             <section ref={formSectionRef} id="formulario-registro" className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
-                
-                {/* Encabezado del Formulario */}
+
                 <div className="text-center mb-10">
                     <span className="text-xs uppercase font-extrabold text-purple-700 tracking-wider bg-purple-50 px-3 py-1 rounded-full border border-purple-200">
                         Paso 1 de 1
@@ -476,7 +472,6 @@ export default function RegistroComercioLandingPage() {
                     </p>
                 </div>
 
-                {/* Banner de Error si ocurre */}
                 {errorMessage && (
                     <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-3 animate-shake">
                         <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -488,10 +483,7 @@ export default function RegistroComercioLandingPage() {
                 )}
 
                 <form onSubmit={handleSubmit} noValidate className="space-y-8">
-                    
-                    {/* ────────────────────────────────────────────────────────
-                        SECCIÓN 1: DATOS DEL COMERCIO
-                    ──────────────────────────────────────────────────────── */}
+
                     <div className="space-y-3">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-[#331182] text-white flex items-center justify-center text-sm font-bold shadow-md shadow-purple-900/20">
@@ -503,10 +495,38 @@ export default function RegistroComercioLandingPage() {
                         </div>
 
                         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-6">
-                            
-                            {/* Grid 2 Columnas de Inputs */}
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                                
+
+                                {/* Toggle: Tipo de Registro */}
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">
+                                        Tipo de Registro *
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setForm(prev => ({ ...prev, tipoRegistro: 'rif' }))}
+                                            className={`px-4 py-3 rounded-xl border text-sm font-bold transition ${form.tipoRegistro === 'rif'
+                                                ? 'bg-[#331182] text-white border-[#331182] shadow-md'
+                                                : 'bg-white text-slate-600 border-slate-300 hover:border-purple-400'
+                                                }`}
+                                        >
+                                            Comercio con RIF
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setForm(prev => ({ ...prev, tipoRegistro: 'independiente', rifCedulaJuridica: '' }))}
+                                            className={`px-4 py-3 rounded-xl border text-sm font-bold transition ${form.tipoRegistro === 'independiente'
+                                                ? 'bg-[#331182] text-white border-[#331182] shadow-md'
+                                                : 'bg-white text-slate-600 border-slate-300 hover:border-purple-400'
+                                                }`}
+                                        >
+                                            Independiente (Cédula)
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {/* Nombre Comercial */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
@@ -525,15 +545,19 @@ export default function RegistroComercioLandingPage() {
                                 {/* RIF / Cédula Jurídica */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-                                        RIF / Cédula Jurídica *
+                                        RIF / Cédula Jurídica {form.tipoRegistro === 'rif' ? '*' : '(Opcional)'}
                                     </label>
                                     <input
                                         type="text"
-                                        required
-                                        placeholder="Ej: J-12345678-9"
+                                        required={form.tipoRegistro === 'rif'}
+                                        disabled={form.tipoRegistro !== 'rif'}
+                                        placeholder={form.tipoRegistro === 'rif' ? 'Ej: J-12345678-9' : 'No aplica para independiente'}
                                         value={form.rifCedulaJuridica}
                                         onChange={setField('rifCedulaJuridica')}
-                                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-[#331182] focus:ring-2 focus:ring-purple-900/10 outline-none text-sm font-medium transition"
+                                        className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition outline-none ${form.tipoRegistro !== 'rif'
+                                            ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                            : 'border-slate-300 focus:border-[#331182] focus:ring-2 focus:ring-purple-900/10'
+                                            }`}
                                     />
                                 </div>
 
@@ -629,8 +653,7 @@ export default function RegistroComercioLandingPage() {
 
                             {/* Dirección Física y Ubicación */}
                             <div className="pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-12 gap-4">
-                                
-                                {/* Dirección completa */}
+
                                 <div className="sm:col-span-8">
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         Dirección Física del Negocio *
@@ -645,7 +668,6 @@ export default function RegistroComercioLandingPage() {
                                     />
                                 </div>
 
-                                {/* Cantidad de Sucursales */}
                                 <div className="sm:col-span-4">
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         Nº de Sucursales
@@ -660,7 +682,6 @@ export default function RegistroComercioLandingPage() {
                                     />
                                 </div>
 
-                                {/* Punto de Referencia */}
                                 <div className="sm:col-span-7">
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         Punto de Referencia Conocido
@@ -674,7 +695,6 @@ export default function RegistroComercioLandingPage() {
                                     />
                                 </div>
 
-                                {/* Coordenadas GPS */}
                                 <div className="sm:col-span-5">
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         Ubicación GPS (Lat, Lng)
@@ -706,7 +726,7 @@ export default function RegistroComercioLandingPage() {
                                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">
                                     Foto de la Fachada o Logotipo del Comercio
                                 </label>
-                                
+
                                 <input
                                     type="file"
                                     ref={fileInputRef}
@@ -766,9 +786,7 @@ export default function RegistroComercioLandingPage() {
                         </div>
                     </div>
 
-                    {/* ────────────────────────────────────────────────────────
-                        SECCIÓN 2: INFORMACIÓN ADICIONAL DEL NEGOCIO
-                    ──────────────────────────────────────────────────────── */}
+                    {/* SECCIÓN 2: CATEGORÍA Y REDES SOCIALES */}
                     <div className="space-y-3">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-[#331182] text-white flex items-center justify-center text-sm font-bold shadow-md shadow-purple-900/20">
@@ -780,10 +798,9 @@ export default function RegistroComercioLandingPage() {
                         </div>
 
                         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-6">
-                            
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                                
-                                {/* Categoría */}
+
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         Categoría o Rubro Comercial
@@ -800,7 +817,6 @@ export default function RegistroComercioLandingPage() {
                                     </select>
                                 </div>
 
-                                {/* Instagram */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         Instagram del Comercio
@@ -814,7 +830,6 @@ export default function RegistroComercioLandingPage() {
                                     />
                                 </div>
 
-                                {/* Facebook */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         Página de Facebook
@@ -828,7 +843,6 @@ export default function RegistroComercioLandingPage() {
                                     />
                                 </div>
 
-                                {/* TikTok */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                         TikTok
@@ -844,7 +858,6 @@ export default function RegistroComercioLandingPage() {
 
                             </div>
 
-                            {/* Breve descripción */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
                                     Breve descripción de los productos o servicios ofrecidos
@@ -861,9 +874,7 @@ export default function RegistroComercioLandingPage() {
                         </div>
                     </div>
 
-                    {/* ────────────────────────────────────────────────────────
-                        SECCIÓN 3: DECLARACIÓN Y AUTORIZACIÓN
-                    ──────────────────────────────────────────────────────── */}
+                    {/* SECCIÓN 3: DECLARACIÓN */}
                     <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80">
                         <label className="flex items-start gap-3.5 cursor-pointer">
                             <input
@@ -878,11 +889,11 @@ export default function RegistroComercioLandingPage() {
                         </label>
                     </div>
 
-                    {/* Barra de Envío y Seguridad */}
+                    {/* Barra de Envío */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
                         <div className="flex items-center gap-3 text-xs text-slate-500 bg-purple-50/80 px-4 py-3 rounded-2xl border border-purple-100">
                             <Shield className="w-5 h-5 text-purple-700 shrink-0" />
-                            <span>Tus datos se transmiten cifrados y son almacenados con máxima seguridad en c2861522_regist.</span>
+                            <span>Tus datos se transmiten cifrados y son almacenados con máxima seguridad.</span>
                         </div>
 
                         <button
@@ -908,7 +919,7 @@ export default function RegistroComercioLandingPage() {
 
             </section>
 
-            {/* Footer sencillo */}
+            {/* Footer */}
             <footer className="py-8 text-center text-xs text-slate-400 border-t border-slate-200">
                 <p>© {new Date().getFullYear()} Vixy Rider Ecosystem. Todos los derechos reservados.</p>
             </footer>

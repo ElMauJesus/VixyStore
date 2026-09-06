@@ -15,10 +15,11 @@ export default function StoreLayoutWrapper({
 }) {
   const pathname = usePathname();
   const isRegistroComercios = pathname?.startsWith('/registro-comercios');
+  const isRegistroDelivery = pathname?.startsWith('/registro-delivery');
   const isAdmin = pathname?.startsWith('/admin') || pathname?.startsWith('/store/admin');
 
-  // Si es la página de registro de comercios, no mostramos los componentes de la tienda
-  if (isRegistroComercios) {
+  // Si es la página de registro de comercios o delivery, no mostramos los componentes de la tienda
+  if (isRegistroComercios || isRegistroDelivery) {
     return <>{children}</>;
   }
 
