@@ -13,8 +13,8 @@ $dirs = @(
     "out/store/logo",
     "out/store/payment-icons",
     "out/store/qr",
-    "out/delivery",
-    "out/delivery/backend",
+    "out/shop",
+    "out/shop/backend",
     "out/registro-comercios",
     "out/registro-comercios/api",
     "out/registro-delivery",
@@ -30,6 +30,12 @@ foreach ($d in $dirs) {
     if (-not (Test-Path $d)) {
         New-Item -ItemType Directory -Path $d -Force | Out-Null
     }
+}
+
+# Limpiar rutas obsoletas de /delivery/ para mantener exclusivamente /shop/
+if (Test-Path "out/delivery") {
+    Remove-Item -Path "out/delivery" -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "[OK] Directorio obsoleto out/delivery eliminado (exclusividad /shop/)"
 }
 
 # Limpiar imagenes vixycard sueltas que hayan quedado en la raiz de out o en out/store
@@ -82,16 +88,16 @@ Copy-Item -Path "api/*" -Destination "out/store/api" -Recurse -Force
 Copy-Item -Path "api/*" -Destination "out/api" -Recurse -Force
 Write-Host "[OK] Backend PHP sincronizado en out/api y out/store/api"
 
-# 7. Copiar frontend y backend de Delivery
-if (Test-Path "out/delivery/assets") {
-    Remove-Item -Path "out/delivery/assets" -Recurse -Force
+# 7. Copiar frontend y backend de Shop (Vixy Shop)
+if (Test-Path "out/shop/assets") {
+    Remove-Item -Path "out/shop/assets" -Recurse -Force
 }
-Copy-Item -Path "delivery/dist/*" -Destination "out/delivery" -Recurse -Force
-Copy-Item -Path "delivery/backend/*" -Destination "out/delivery/backend" -Recurse -Force
-Copy-Item -Path "database/migracion_claves_y_conductores.sql" -Destination "out/delivery" -Force
+Copy-Item -Path "delivery/dist/*" -Destination "out/shop" -Recurse -Force
+Copy-Item -Path "delivery/backend/*" -Destination "out/shop/backend" -Recurse -Force
+Copy-Item -Path "database/migracion_claves_y_conductores.sql" -Destination "out/shop" -Force
 
-if (Test-Path "out/delivery/assets/aistudio") {
-    Remove-Item -Path "out/delivery/assets/aistudio" -Recurse -Force
+if (Test-Path "out/shop/assets/aistudio") {
+    Remove-Item -Path "out/shop/assets/aistudio" -Recurse -Force
 }
 
 # 8. Copiar backend de Registro de Comercios a out/registro-comercios/api

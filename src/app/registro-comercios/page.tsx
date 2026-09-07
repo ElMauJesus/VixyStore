@@ -245,10 +245,10 @@ export default function RegistroComercioLandingPage() {
                         Solicitud Enviada con Éxito
                     </span>
                     <h2 className="text-2xl sm:text-3xl font-black text-[#1B0B3B] mb-2">
-                        ¡Bienvenido a Vixy Delivery!
+                        ¡Bienvenido a Vixy Shop!
                     </h2>
                     <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mb-5">
-                        Hemos recibido el registro de <strong>{comercioCreado?.nombre || form.nombreComercial}</strong>. Guarda tus credenciales de acceso para iniciar sesión en la plataforma comercial de Vixy Delivery:
+                        Hemos recibido el registro de <strong>{comercioCreado?.nombre || form.nombreComercial}</strong>. Guarda tus credenciales de acceso para iniciar sesión en la plataforma comercial de Vixy Shop:
                     </p>
 
                     {/* Tarjeta de Credenciales Comerciales */}
@@ -314,7 +314,7 @@ export default function RegistroComercioLandingPage() {
                             <span>Importante: Datos para Iniciar Sesión</span>
                         </p>
                         <p className="text-slate-600 text-[10px] leading-tight">
-                            Usa tu RIF/Cédula, tu Código de Comercio y esta contraseña temporal para entrar en <strong>/delivery/</strong> (Panel de Comercios). Podrás cambiarla en cualquier momento desde la pestaña "Cuenta".
+                            Usa tu RIF/Cédula, tu Código de Comercio y esta contraseña temporal para entrar en <strong>/shop/</strong> (Panel de Comercios). Podrás cambiarla en cualquier momento desde la pestaña "Cuenta".
                         </p>
                     </div>
 
@@ -351,7 +351,7 @@ export default function RegistroComercioLandingPage() {
                             Registrar otro comercio
                         </button>
                         <a
-                            href="/delivery/"
+                            href="/shop/"
                             className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition text-sm flex items-center justify-center gap-2"
                         >
                             <span>Ir al Portal Web</span>

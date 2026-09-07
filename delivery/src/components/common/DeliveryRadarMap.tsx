@@ -78,8 +78,13 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
   const gpsLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
 
-  // CARTO API Key: uses prop customApiKey, then cartoApiKey from backend context, then VITE_CARTO_API_KEY from env, or empty string (standard free OSM/CARTO CDN)
-  const effectiveApiKey = customApiKey || cartoApiKey || (import.meta as any).env?.VITE_CARTO_API_KEY || '';
+  const CARTO_DEFAULT_KEY = 'cb1_2or2_1_cfdc8f91393881d023074657';
+
+  // CARTO API Key: uses prop customApiKey, then cartoApiKey from backend context, then VITE_CARTO_API_KEY from env, or CARTO_DEFAULT_KEY
+  const effectiveApiKey = (customApiKey && customApiKey.trim())
+    || (cartoApiKey && cartoApiKey.trim())
+    || (import.meta as any).env?.VITE_CARTO_API_KEY
+    || CARTO_DEFAULT_KEY;
 
   // Get tile URL for the chosen CARTO basemap style
   const getCartoTileUrl = (style: CartoMapStyle) => {
@@ -95,10 +100,9 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
       baseUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
     }
 
-    if (effectiveApiKey) {
-      return `${baseUrl}?api_key=${encodeURIComponent(effectiveApiKey)}`;
-    }
-    return baseUrl;
+    // CARTO Basemaps requires "key" parameter to remove the watermark
+    const activeKey = encodeURIComponent(effectiveApiKey || CARTO_DEFAULT_KEY);
+    return `${baseUrl}?key=${activeKey}&api_key=${activeKey}`;
   };
 
   // Coordenadas efectivas: prioridad al sensor GPS del dispositivo para el conductor activo

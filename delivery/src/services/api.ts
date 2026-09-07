@@ -3,10 +3,10 @@
  * Permite alternar fácilmente entre la API de cPanel y el modo cliente
  */
 
-// Detecta automáticamente si está montado bajo /delivery en Donweb o en raíz local
+// Detecta automáticamente si está montado bajo /shop en Donweb o en raíz local
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (typeof window !== 'undefined' && window.location.pathname.startsWith('/delivery') 
-    ? '/delivery/backend/php' 
+  (typeof window !== 'undefined' && window.location.pathname.startsWith('/shop') 
+    ? '/shop/backend/php' 
     : '/backend/php');
 
 class ApiService {

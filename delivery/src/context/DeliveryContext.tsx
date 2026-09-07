@@ -44,6 +44,7 @@ import {
   TASA_BCV_ACTUAL 
 } from '../data/initialData';
 import { api } from '../services/api';
+import { startKeepAliveHeartbeat, stopKeepAliveHeartbeat } from '../services/keepAliveService';
 
 interface DeliveryContextType {
   orders: Pedido[];
@@ -556,10 +557,13 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     refreshBackendData();
   }, []);
   const [cartoApiKey, setCartoApiKeyState] = useState<string>(() => {
+    const defaultKey = 'cb1_2or2_1_cfdc8f91393881d023074657';
     try {
-      return localStorage.getItem('vixy_carto_api_key') || (import.meta as any).env?.VITE_CARTO_API_KEY || '';
+      const stored = localStorage.getItem('vixy_carto_api_key');
+      if (stored && stored.trim().length > 0) return stored.trim();
+      return (import.meta as any).env?.VITE_CARTO_API_KEY || defaultKey;
     } catch {
-      return (import.meta as any).env?.VITE_CARTO_API_KEY || '';
+      return (import.meta as any).env?.VITE_CARTO_API_KEY || defaultKey;
     }
   });
 
@@ -1827,6 +1831,49 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Telemetría GPS en segundo plano y presencia en tiempo real
+  useEffect(() => {
+    let payload: any = null;
+    if (driverLoggedIn && driver) {
+      payload = {
+        usuarioId: String(driver.id || driver.codigoConductor || 'drv-1'),
+        tipoUsuario: 'conductor',
+        nombre: driver.nombre,
+        latitud: driver.lat,
+        longitud: driver.lng,
+        online: driver.disponible !== false
+      };
+    } else if (storeLoggedIn && store) {
+      payload = {
+        usuarioId: String(store.id || store.codigoComercio || 'store-1'),
+        tipoUsuario: 'comercio',
+        nombre: store.nombre || store.nombreComercial,
+        latitud: store.lat,
+        longitud: store.lng,
+        online: store.activo !== false
+      };
+    } else if (clientLoggedIn && client) {
+      payload = {
+        usuarioId: String(client.id || 'cli-1'),
+        tipoUsuario: 'cliente',
+        nombre: `${client.nombre} ${client.apellido}`,
+        latitud: client.lat,
+        longitud: client.lng,
+        online: true
+      };
+    }
+
+    if (payload) {
+      startKeepAliveHeartbeat(payload, 20);
+    } else {
+      stopKeepAliveHeartbeat();
+    }
+
+    return () => {
+      stopKeepAliveHeartbeat();
+    };
+  }, [driverLoggedIn, storeLoggedIn, clientLoggedIn, driver, store, client]);
 
   const addNotification = (destinatario: 'cliente' | 'comercio' | 'conductor' | 'web', titulo: string, cuerpo: string) => {
     const newNotif: NotificacionPush = {

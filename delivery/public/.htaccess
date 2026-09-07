@@ -4,16 +4,16 @@
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /delivery/
+  RewriteBase /shop/
 
   # No reescribir peticiones a la API PHP o archivos estáticos reales
-  RewriteCond %{REQUEST_URI} ^/delivery/backend/ [OR]
+  RewriteCond %{REQUEST_URI} ^/shop/backend/ [OR]
   RewriteCond %{REQUEST_URI} ^/backend/ [OR]
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # Redirigir todas las demás peticiones al index.html de la SPA Delivery
+  # Redirigir todas las demás peticiones al index.html de la SPA Shop
   RewriteRule ^ index.html [L]
 </IfModule>
 

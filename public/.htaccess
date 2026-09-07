@@ -17,7 +17,7 @@ Options -Indexes
     # Permitir peticiones a APIs directamente
     RewriteCond %{REQUEST_URI} ^/api/ [NC,OR]
     RewriteCond %{REQUEST_URI} ^/store/api/ [NC,OR]
-    RewriteCond %{REQUEST_URI} ^/delivery/backend/ [NC,OR]
+    RewriteCond %{REQUEST_URI} ^/shop/backend/ [NC,OR]
     RewriteCond %{REQUEST_URI} ^/registro-comercios/api/ [NC]
     RewriteRule ^ - [L]
 
@@ -38,11 +38,11 @@ Options -Indexes
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Rutas dinamicas de Delivery (/delivery/...)
-    RewriteCond %{REQUEST_URI} ^/delivery/ [NC]
+    # Rutas dinamicas de Shop (/shop/...)
+    RewriteCond %{REQUEST_URI} ^/shop/ [NC]
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^delivery/(.*)$ /delivery/index.html [L]
+    RewriteRule ^shop/(.*)$ /shop/index.html [L]
 
     # Rutas dinamicas de Store (/store/...)
     RewriteCond %{REQUEST_URI} ^/store/ [NC]

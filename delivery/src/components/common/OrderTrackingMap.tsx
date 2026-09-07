@@ -37,13 +37,17 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const [mapStyle, setMapStyle] = useState<'dark' | 'voyager'>('dark');
 
-  const effectiveApiKey = customApiKey || (import.meta as any).env?.VITE_CARTO_API_KEY || '';
+  const CARTO_DEFAULT_KEY = 'cb1_2or2_1_cfdc8f91393881d023074657';
+  const effectiveApiKey = (customApiKey && customApiKey.trim()) 
+    || (import.meta as any).env?.VITE_CARTO_API_KEY 
+    || CARTO_DEFAULT_KEY;
 
   const getTileUrl = (style: 'dark' | 'voyager') => {
     const base = style === 'dark'
       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
       : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-    return effectiveApiKey ? `${base}?api_key=${encodeURIComponent(effectiveApiKey)}` : base;
+    const activeKey = encodeURIComponent(effectiveApiKey || CARTO_DEFAULT_KEY);
+    return `${base}?key=${activeKey}&api_key=${activeKey}`;
   };
 
   useEffect(() => {

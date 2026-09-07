@@ -34,16 +34,21 @@ if __name__ == "__main__":
     print("EMPAQUETADOR OFICIAL VIXY STORE & DELIVERY")
     print("==================================================")
 
+    # Limpiar vixy_delivery.zip obsoleto si existe
+    if os.path.exists("vixy_delivery.zip"):
+        os.remove("vixy_delivery.zip")
+        print("[-] Eliminado ZIP obsoleto vixy_delivery.zip")
+
     # 1. vixy_servidor.zip: EL ARCHIVO COMPLETO DE TODO PUBLIC_HTML (como en la captura del cPanel)
-    print("-> Generando vixy_servidor.zip (COMPLETO: Tienda + Portal + Delivery + Registros)...")
+    print("-> Generando vixy_servidor.zip (COMPLETO: Tienda + Portal + Shop + Registros)...")
     create_zip("out", "vixy_servidor.zip")
 
-    # 2. vixy_delivery.zip: Solo lo que pertenece a /delivery/
-    print("-> Generando vixy_delivery.zip (Frontend + Backend + SQL para /delivery/)...")
-    create_zip("out/delivery", "vixy_delivery.zip")
+    # 2. vixy_shop.zip: Solo lo que pertenece a /shop/
+    print("-> Generando vixy_shop.zip (Frontend + Backend + SQL para /shop/)...")
+    create_zip("out/shop", "vixy_shop.zip")
 
-    # 3. vixy_comercio.zip: Portal raíz y tienda Vixy (excluyendo la carpeta /delivery/)
-    print("-> Generando vixy_comercio.zip (Tienda, Portal, Registros, APIs excluyendo /delivery/)...")
-    create_zip("out", "vixy_comercio.zip", exclude_dirs=["delivery"])
+    # 3. vixy_comercio.zip: Portal raíz y tienda Vixy (excluyendo la carpeta /shop/)
+    print("-> Generando vixy_comercio.zip (Tienda, Portal, Registros, APIs excluyendo /shop/)...")
+    create_zip("out", "vixy_comercio.zip", exclude_dirs=["shop"])
 
     print("Proceso finalizado con éxito.")
