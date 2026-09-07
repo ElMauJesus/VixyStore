@@ -1,0 +1,306 @@
+<?php
+/**
+ * Vixy Delivery Platform - API de Liquidaciones de Comercios y Conductores
+ * Registra comisiones de empresa, pagos netos, referencias bancarias y comprobantes.
+ */
+
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth_middleware.php';
+
+$pdo = Database::getConnection();
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'GET') {
+    $accion = $_GET['accion'] ?? '';
+    $periodo = $_GET['periodo'] ?? 'dia'; // 'dia', 'semana', 'mes', 'historico'
+
+    // =========================================================================
+    // REPORTE DE CUSTODIA Y GANANCIAS POR PERÍODO ($ USD Y BS)
+    // Sincronización continua de ~5 segundos para panel web y apps
+    // =========================================================================
+    if ($accion === 'reporte_custodia_periodo') {
+        try {
+            // Tasa y Comisiones
+            $stmtCfg = $pdo->query("SELECT clave, valor FROM configuracion_sistema WHERE clave IN ('tasa_bcv', 'porcentaje_comision_comercio', 'porcentaje_comision_delivery')");
+            $configs = $stmtCfg->fetchAll(PDO::FETCH_KEY_PAIR);
+            $tasaBcv = floatval($configs['tasa_bcv'] ?? 48.50);
+            $pctComercio = floatval($configs['porcentaje_comision_comercio'] ?? 0);
+            $pctDelivery = floatval($configs['porcentaje_comision_delivery'] ?? 15);
+
+            // Filtro Temporal
+            $whereFecha = "";
+            if ($periodo === 'dia') {
+                $whereFecha = "WHERE DATE(p.fecha_creacion) = CURRENT_DATE()";
+            } elseif ($periodo === 'semana') {
+                $whereFecha = "WHERE p.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+            } elseif ($periodo === 'mes') {
+                $whereFecha = "WHERE p.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+            } else {
+                $whereFecha = "WHERE 1=1"; // Histórico
+            }
+
+            // Consultar órdenes entregadas acreditadas en wallet
+            $sqlEntregados = "
+                SELECT 
+                    COUNT(p.id) as cant_deliverys,
+                    COALESCE(SUM(p.costo_envio), 0) as flete_bruto_usd,
+                    COALESCE(SUM(p.subtotal), 0) as ventas_comercios_usd
+                FROM pedidos p
+                $whereFecha AND p.estado = 'entregado'
+            ";
+            $stmtEntregados = $pdo->query($sqlEntregados);
+            $totales = $stmtEntregados->fetch();
+
+            $cantDeliverys = intval($totales['cant_deliverys']);
+            $fleteBrutoUsd = floatval($totales['flete_bruto_usd']);
+            $fleteBrutoBs = round($fleteBrutoUsd * $tasaBcv, 2);
+
+            // Descuentos y Dinero Enviado al Conductor
+            $descDelivUsd = round(($fleteBrutoUsd * $pctDelivery) / 100, 2);
+            $descDelivBs = round($descDelivUsd * $tasaBcv, 2);
+            $netoConductorUsd = $fleteBrutoUsd - $descDelivUsd;
+            $netoConductorBs = round($netoConductorUsd * $tasaBcv, 2);
+
+            // Descuentos y Dinero Enviado al Comercio
+            $ventasBrutoUsd = floatval($totales['ventas_comercios_usd']);
+            $ventasBrutoBs = round($ventasBrutoUsd * $tasaBcv, 2);
+            $descComUsd = round(($ventasBrutoUsd * $pctComercio) / 100, 2);
+            $descComBs = round($descComUsd * $tasaBcv, 2);
+            $netoComercioUsd = $ventasBrutoUsd - $descComUsd;
+            $netoComercioBs = round($netoComercioUsd * $tasaBcv, 2);
+
+            // Ganancias Empresa
+            $gananciaComUsd = $descComUsd;
+            $gananciaComBs = $descComBs;
+            $gananciaDelivUsd = $descDelivUsd;
+            $gananciaDelivBs = $descDelivBs;
+            $gananciaTotalUsd = $gananciaComUsd + $gananciaDelivUsd;
+            $gananciaTotalBs = round($gananciaTotalUsd * $tasaBcv, 2);
+
+            // Custodia Activa en Tránsito
+            $stmtCustodia = $pdo->query("SELECT COUNT(id) as count_custodia, COALESCE(SUM(total), 0) as saldo_custodia_usd FROM pedidos WHERE estado IN ('en_preparacion', 'asignado', 'en_camino')");
+            $custodiaRow = $stmtCustodia->fetch();
+            $custodiaUsd = floatval($custodiaRow['saldo_custodia_usd']);
+            $custodiaBs = round($custodiaUsd * $tasaBcv, 2);
+
+            // Últimos 50 pedidos entregados en el período
+            $sqlLista = "
+                SELECT 
+                    p.id, p.codigo_seguimiento, p.fecha_creacion, p.costo_envio, p.subtotal, p.total,
+                    c.nombre as comercio_nombre, c.rif as comercio_rif,
+                    cond.nombre as conductor_nombre, cond.telefono as conductor_telefono
+                FROM pedidos p
+                LEFT JOIN comercios c ON p.comercio_id = c.id
+                LEFT JOIN conductores cond ON p.conductor_id = cond.id
+                $whereFecha AND p.estado = 'entregado'
+                ORDER BY p.fecha_creacion DESC LIMIT 50
+            ";
+            $stmtLista = $pdo->query($sqlLista);
+            $pedidosList = $stmtLista->fetchAll();
+
+            Database::jsonResponse([
+                'success' => true,
+                'periodo' => $periodo,
+                'tasa_bcv' => $tasaBcv,
+                'comision_comercio_pct' => $pctComercio,
+                'comision_delivery_pct' => $pctDelivery,
+                'resumen' => [
+                    'cant_deliverys_realizados' => $cantDeliverys,
+                    'flete_deliverys_bruto_usd' => $fleteBrutoUsd,
+                    'flete_deliverys_bruto_bs' => $fleteBrutoBs,
+                    'descuento_delivery_usd' => $descDelivUsd,
+                    'descuento_delivery_bs' => $descDelivBs,
+                    'dinero_enviado_conductor_usd' => $netoConductorUsd,
+                    'dinero_enviado_conductor_bs' => $netoConductorBs,
+                    'ventas_comercios_bruto_usd' => $ventasBrutoUsd,
+                    'ventas_comercios_bruto_bs' => $ventasBrutoBs,
+                    'descuento_comercio_usd' => $descComUsd,
+                    'descuento_comercio_bs' => $descComBs,
+                    'dinero_enviado_comercio_usd' => $netoComercioUsd,
+                    'dinero_enviado_comercio_bs' => $netoComercioBs,
+                    'ganancia_comercio_usd' => $gananciaComUsd,
+                    'ganancia_comercio_bs' => $gananciaComBs,
+                    'ganancia_delivery_usd' => $gananciaDelivUsd,
+                    'ganancia_delivery_bs' => $gananciaDelivBs,
+                    'ganancia_total_empresa_usd' => $gananciaTotalUsd,
+                    'ganancia_total_empresa_bs' => $gananciaTotalBs,
+                    'custodia_activa_usd' => $custodiaUsd,
+                    'custodia_activa_bs' => $custodiaBs,
+                    'pedidos_en_custodia_count' => intval($custodiaRow['count_custodia'])
+                ],
+                'pedidos' => $pedidosList,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]);
+            exit;
+        } catch (Exception $e) {
+            Database::jsonResponse(['error' => true, 'mensaje' => $e->getMessage()], 500);
+            exit;
+        }
+    }
+
+    $tipo = isset($_GET['tipo']) ? $_GET['tipo'] : 'todos'; // 'comercio', 'conductor', o 'todos'
+    $entidadId = isset($_GET['id']) ? $_GET['id'] : null;
+
+    try {
+        $response = [];
+
+        if ($tipo === 'comercio' || $tipo === 'todos') {
+            $sql = "SELECT lc.*, c.nombre as comercio_nombre 
+                    FROM liquidaciones_comercios lc 
+                    LEFT JOIN comercios c ON lc.comercio_id = c.id";
+            if ($entidadId && $tipo === 'comercio') {
+                $sql .= " WHERE lc.comercio_id = :id";
+            }
+            $sql .= " ORDER BY lc.fecha_liquidacion DESC LIMIT 100";
+            
+            $stmt = $pdo->prepare($sql);
+            if ($entidadId && $tipo === 'comercio') {
+                $stmt->execute(['id' => $entidadId]);
+            } else {
+                $stmt->execute();
+            }
+            $response['liquidaciones_comercios'] = $stmt->fetchAll();
+        }
+
+        if ($tipo === 'conductor' || $tipo === 'todos') {
+            $sql = "SELECT ld.*, cond.nombre as conductor_nombre, cond.vehiculo 
+                    FROM liquidaciones_conductores ld 
+                    LEFT JOIN conductores cond ON ld.conductor_id = cond.id";
+            if ($entidadId && $tipo === 'conductor') {
+                $sql .= " WHERE ld.conductor_id = :id";
+            }
+            $sql .= " ORDER BY ld.fecha_liquidacion DESC LIMIT 100";
+
+            $stmt = $pdo->prepare($sql);
+            if ($entidadId && $tipo === 'conductor') {
+                $stmt->execute(['id' => $entidadId]);
+            } else {
+                $stmt->execute();
+            }
+            $response['liquidaciones_conductores'] = $stmt->fetchAll();
+        }
+
+        Database::jsonResponse([
+            'success' => true,
+            'data' => $response
+        ]);
+    } catch (Exception $e) {
+        Database::jsonResponse(['error' => true, 'mensaje' => $e->getMessage()], 500);
+    }
+} elseif ($method === 'POST') {
+    $authUser = AuthMiddleware::requireAuth(['super_admin', 'finanzas']);
+    $data = Database::getJsonInput();
+
+    $tipo = isset($data['tipo']) ? $data['tipo'] : ''; // 'comercio' o 'conductor'
+
+    if ($tipo === 'comercio') {
+        $comercioId = $data['comercioId'] ?? '';
+        $montoBruto = floatval($data['montoBrutoUsd'] ?? 0);
+        $porcentajeComision = floatval($data['porcentajeComision'] ?? 0);
+        $referencia = trim($data['referenciaBancaria'] ?? '');
+        $metodoPago = $data['metodoPago'] ?? 'pago_movil';
+        $comprobanteUrl = $data['comprobanteUrl'] ?? null;
+        $notas = $data['notas'] ?? '';
+
+        if (empty($comercioId) || $montoBruto <= 0 || empty($referencia)) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'Datos incompletos: comercio, monto y referencia son requeridos.'], 400);
+        }
+
+        // Cálculo exacto: comision de empresa y neto pagado al comercio
+        $comisionEmpresa = round(($montoBruto * $porcentajeComision) / 100, 2);
+        $montoNeto = round($montoBruto - $comisionEmpresa, 2);
+
+        $stmtTasa = $pdo->query("SELECT valor FROM configuracion_sistema WHERE clave = 'tasa_bcv'");
+        $tasaBcv = floatval($stmtTasa->fetchColumn() ?: 48.50);
+        $montoNetoBs = round($montoNeto * $tasaBcv, 2);
+
+        $liqId = 'LIQ-COM-' . strtoupper(substr(uniqid(), -6));
+
+        $stmt = $pdo->prepare("
+            INSERT INTO liquidaciones_comercios 
+            (id, comercio_id, monto_bruto_usd, porcentaje_comision, comision_empresa_usd, monto_neto_usd, monto_neto_bs, tasa_bcv_aplicada, metodo_pago, referencia_bancaria, comprobante_url, estado, notas)
+            VALUES 
+            (:id, :cid, :mbruto, :pct, :comision, :mneto, :mbs, :tasa, :metodo, :ref, :comp, 'pagado', :notas)
+        ");
+
+        $stmt->execute([
+            'id' => $liqId,
+            'cid' => $comercioId,
+            'mbruto' => $montoBruto,
+            'pct' => $porcentajeComision,
+            'comision' => $comisionEmpresa,
+            'mneto' => $montoNeto,
+            'mbs' => $montoNetoBs,
+            'tasa' => $tasaBcv,
+            'metodo' => $metodoPago,
+            'ref' => $referencia,
+            'comp' => $comprobanteUrl,
+            'notas' => $notas
+        ]);
+
+        Database::jsonResponse([
+            'success' => true,
+            'mensaje' => 'Liquidación de comercio registrada exitosamente',
+            'id' => $liqId,
+            'montoNetoUsd' => $montoNeto,
+            'comisionEmpresaUsd' => $comisionEmpresa
+        ]);
+
+    } elseif ($tipo === 'conductor') {
+        $conductorId = $data['conductorId'] ?? '';
+        $montoBruto = floatval($data['montoBrutoUsd'] ?? 0);
+        $porcentajeComision = floatval($data['porcentajeComision'] ?? 15);
+        $referencia = trim($data['referenciaBancaria'] ?? '');
+        $metodoPago = $data['metodoPago'] ?? 'pago_movil';
+        $comprobanteUrl = $data['comprobanteUrl'] ?? null;
+        $notas = $data['notas'] ?? '';
+
+        if (empty($conductorId) || $montoBruto <= 0 || empty($referencia)) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'Datos incompletos: conductor, monto y referencia son requeridos.'], 400);
+        }
+
+        // Deducción de comisión de empresa para entrega
+        $comisionEmpresa = round(($montoBruto * $porcentajeComision) / 100, 2);
+        $montoNeto = round($montoBruto - $comisionEmpresa, 2);
+
+        $stmtTasa = $pdo->query("SELECT valor FROM configuracion_sistema WHERE clave = 'tasa_bcv'");
+        $tasaBcv = floatval($stmtTasa->fetchColumn() ?: 48.50);
+        $montoNetoBs = round($montoNeto * $tasaBcv, 2);
+
+        $liqId = 'LIQ-DRV-' . strtoupper(substr(uniqid(), -6));
+
+        $stmt = $pdo->prepare("
+            INSERT INTO liquidaciones_conductores 
+            (id, conductor_id, monto_bruto_usd, porcentaje_comision, comision_empresa_usd, monto_neto_usd, monto_neto_bs, tasa_bcv_aplicada, metodo_pago, referencia_bancaria, comprobante_url, estado, notas)
+            VALUES 
+            (:id, :cid, :mbruto, :pct, :comision, :mneto, :mbs, :tasa, :metodo, :ref, :comp, 'pagado', :notas)
+        ");
+
+        $stmt->execute([
+            'id' => $liqId,
+            'cid' => $conductorId,
+            'mbruto' => $montoBruto,
+            'pct' => $porcentajeComision,
+            'comision' => $comisionEmpresa,
+            'mneto' => $montoNeto,
+            'mbs' => $montoNetoBs,
+            'tasa' => $tasaBcv,
+            'metodo' => $metodoPago,
+            'ref' => $referencia,
+            'comp' => $comprobanteUrl,
+            'notas' => $notas
+        ]);
+
+        Database::jsonResponse([
+            'success' => true,
+            'mensaje' => 'Liquidación de conductor registrada exitosamente',
+            'id' => $liqId,
+            'montoNetoUsd' => $montoNeto,
+            'comisionEmpresaUsd' => $comisionEmpresa
+        ]);
+    } else {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Tipo no válido: debe ser comercio o conductor'], 400);
+    }
+} else {
+    Database::jsonResponse(['error' => true, 'mensaje' => 'Método no permitido'], 405);
+}
