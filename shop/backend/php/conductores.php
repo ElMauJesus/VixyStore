@@ -333,7 +333,7 @@ if ($method === 'POST' && $action === 'pre_registro') {
         Database::jsonResponse(['success' => false, 'mensaje' => 'Error al guardar la foto'], 500);
     }
 
-    $fotoUrl = "/delivery/backend/uploads/repartidores/$filename";
+    $fotoUrl = "/shop/backend/uploads/repartidores/$filename";
 
     // Parsear GPS
     $lat = 10.49100000;

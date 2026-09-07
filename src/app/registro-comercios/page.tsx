@@ -387,10 +387,10 @@ export default function RegistroComercioLandingPage() {
                             Portal Ecosistema
                         </a>
                         <a
-                            href="/delivery/"
+                            href="/shop/"
                             className="text-xs sm:text-sm font-semibold text-purple-300 hover:text-white transition px-3 py-1.5 rounded-lg hover:bg-purple-950/50 border border-purple-800/50 flex items-center gap-1.5"
                         >
-                            <span>Ir a Vixy Delivery</span>
+                            <span>Ir a Vixy Shop</span>
                             <ExternalLink size={14} />
                         </a>
                         <button

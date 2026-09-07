@@ -224,7 +224,7 @@ export default function RegistroDeliveryPage() {
             fd.append('foto_perfil', form.fotoPerfil);
         }
 
-        const apiEndpoint = '/delivery/backend/php/conductores.php?action=pre_registro';
+        const apiEndpoint = '/shop/backend/php/conductores.php?action=pre_registro';
 
         try {
             const res = await fetch(apiEndpoint, {
@@ -365,13 +365,13 @@ export default function RegistroDeliveryPage() {
                             <span>Acceso a la App de Reparto</span>
                         </p>
                         <p className="text-slate-400 text-[10px] leading-tight">
-                            Tu cuenta queda en estado "pendiente" para verificación de tus documentos y placa. Ingresa a <strong>/delivery/</strong> usando tu Cédula, Código de Conductor y Contraseña temporal.
+                            Tu cuenta queda en estado "pendiente" para verificación de tus documentos y placa. Ingresa a <strong>/shop/</strong> usando tu Cédula, Código de Conductor y Contraseña temporal.
                         </p>
                     </div>
 
                     <div className="space-y-3 pt-2">
                         <Link
-                            href="/delivery/"
+                            href="/shop/"
                             className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-600/30 transition cursor-pointer"
                         >
                             <span>Ir a la App de Delivery</span>
@@ -410,7 +410,7 @@ export default function RegistroDeliveryPage() {
                     </div>
 
                     <Link
-                        href="/delivery/"
+                        href="/shop/"
                         className="text-xs text-purple-300 hover:text-white font-bold px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-800/50 hover:bg-purple-900/60 transition"
                     >
                         Acceso a la App
