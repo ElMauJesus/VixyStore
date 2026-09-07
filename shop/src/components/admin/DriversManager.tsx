@@ -46,16 +46,20 @@ export const DriversManager: React.FC = () => {
     tasaBcv, 
     openCall, 
     calculateDeliveryTripCost,
-    deliveryRates 
+    deliveryRates,
+    approveDriver,
+    rejectDriver
   } = useDelivery();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'todos' | 'disponible' | 'en_ruta'>('todos');
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'disponible' | 'en_ruta' | 'pendiente' | 'aprobado' | 'rechazado'>('todos');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [inspectingDoc, setInspectingDoc] = useState<{ title: string; url: string } | null>(null);
   const [viewMode, setViewMode] = useState<'lista' | 'cuadricula'>('lista');
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const [driverTimeframes, setDriverTimeframes] = useState<Record<string, TimeFrame>>({});
   const [selectedDriver, setSelectedDriver] = useState<Conductor | null>(null);
-  const [profileTab, setProfileTab] = useState<'viajes' | 'pagos' | 'legal' | 'vehiculo' | 'billetera'>('viajes');
+  const [profileTab, setProfileTab] = useState<'viajes' | 'pagos' | 'legal' | 'vehiculo' | 'billetera' | 'documentos'>('viajes');
   const [timeframe, setTimeframe] = useState<TimeFrame>('dia');
   const [inspectingReceipt, setInspectingReceipt] = useState<{ 
     url: string; 
@@ -81,9 +85,63 @@ export const DriversManager: React.FC = () => {
       if (!matchesSearch) return false;
       if (statusFilter === 'disponible') return Boolean(driver.disponible);
       if (statusFilter === 'en_ruta') return !driver.disponible;
+      if (statusFilter === 'pendiente') return (driver.status === 'pendiente' || driver.estadoVerificacion === 'pendiente' || (!driver.status && !driver.estadoVerificacion));
+      if (statusFilter === 'aprobado') return (driver.status === 'aprobado' || driver.estadoVerificacion === 'aprobado');
+      if (statusFilter === 'rechazado') return (driver.status === 'rechazado' || driver.estadoVerificacion === 'rechazado');
       return true;
     });
   }, [allDrivers, searchTerm, statusFilter]);
+
+  const handleApproveDriver = async (driverId: string) => {
+    setActionLoadingId(driverId);
+    try {
+      await approveDriver(driverId);
+      if (selectedDriver && (selectedDriver.id === driverId || selectedDriver.cedula === driverId)) {
+        setSelectedDriver(prev => prev ? { ...prev, status: 'aprobado' as any, estadoVerificacion: 'aprobado' as any, disponible: true } : null);
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRejectDriver = async (driverId: string) => {
+    if (!window.confirm('¿Seguro que deseas rechazar a este conductor? No podrá iniciar sesión en la app de delivery.')) return;
+    setActionLoadingId(driverId);
+    try {
+      await rejectDriver(driverId);
+      if (selectedDriver && (selectedDriver.id === driverId || selectedDriver.cedula === driverId)) {
+        setSelectedDriver(prev => prev ? { ...prev, status: 'rechazado' as any, estadoVerificacion: 'rechazado' as any, disponible: false } : null);
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const getDriverStatusBadge = (drv: Conductor) => {
+    const st = drv.status || drv.estadoVerificacion || 'pendiente';
+    if (st === 'aprobado') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/30">
+          <CheckCircle2 className="w-3 h-3" />
+          <span>Verificado</span>
+        </span>
+      );
+    }
+    if (st === 'rechazado') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 text-[10px] font-black border border-rose-500/30">
+          <XCircle className="w-3 h-3" />
+          <span>Rechazado</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-black border border-amber-500/30 animate-pulse">
+        <Clock className="w-3 h-3" />
+        <span>Pendiente</span>
+      </span>
+    );
+  };
 
   // Compute 30-day validity rule for payment receipts
   const checkReceiptValidity = (fechaStr: string) => {
@@ -251,14 +309,14 @@ export const DriversManager: React.FC = () => {
           </span>
           <div className="flex items-baseline gap-2">
             <span className="text-base font-display font-black text-neutral-900 dark:text-white font-mono">
-              ${deliveryRates.tarifaBaseMinimaUsd.toFixed(2)} USD
+              ${(deliveryRates?.tarifaBaseMinimaUsd ?? 2.00).toFixed(2)} USD
             </span>
             <span className="text-xs text-neutral-400">
-              (hasta {deliveryRates.distanciaBaseKm.toFixed(1)} km)
+              (hasta {(deliveryRates?.distanciaBaseKm ?? 3.0).toFixed(1)} km)
             </span>
           </div>
           <p className="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-            +${deliveryRates.costoPorFraccionUsd.toFixed(2)} USD / km adicional (&gt;3 km)
+            +${(deliveryRates?.costoPorFraccionUsd ?? 0.50).toFixed(2)} USD / km adicional (&gt;3 km)
           </p>
         </div>
       </div>
@@ -493,6 +551,7 @@ export const DriversManager: React.FC = () => {
                       <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold bg-amber-400 text-neutral-950 whitespace-nowrap shrink-0">
                         Ficha Vixy
                       </span>
+                      {getDriverStatusBadge(selectedDriver)}
                     </div>
 
                     <p className="text-xs text-neutral-300 font-mono truncate">
@@ -506,7 +565,7 @@ export const DriversManager: React.FC = () => {
                       <span className="text-neutral-400">•</span>
                       <span className="text-amber-400 font-bold flex items-center gap-1 shrink-0">
                         <Star className="w-3.5 h-3.5 fill-current" />
-                        {selectedDriver.rating.toFixed(1)}
+                        {(selectedDriver.rating ?? 5.0).toFixed(1)}
                       </span>
                       <span className="text-neutral-400">•</span>
                       <span className="text-neutral-300 truncate">{selectedDriver.totalEntregas} carreras</span>
@@ -514,7 +573,43 @@ export const DriversManager: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                  {/* Action: Aprobar Conductor */}
+                  {selectedDriver.status !== 'aprobado' && selectedDriver.estadoVerificacion !== 'aprobado' && (
+                    <button
+                      type="button"
+                      disabled={actionLoadingId === selectedDriver.id}
+                      onClick={() => handleApproveDriver(selectedDriver.id)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs rounded-xl transition cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
+                      title="Verificar y autorizar conductor para recibir encomiendas"
+                    >
+                      {actionLoadingId === selectedDriver.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      )}
+                      <span>Aprobar / Verificar</span>
+                    </button>
+                  )}
+
+                  {/* Action: Rechazar Conductor */}
+                  {selectedDriver.status !== 'rechazado' && selectedDriver.estadoVerificacion !== 'rechazado' && (
+                    <button
+                      type="button"
+                      disabled={actionLoadingId === selectedDriver.id}
+                      onClick={() => handleRejectDriver(selectedDriver.id)}
+                      className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 active:scale-95 text-rose-400 font-bold text-xs rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                      title="Rechazar expediente del conductor"
+                    >
+                      {actionLoadingId === selectedDriver.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <XCircle className="w-3.5 h-3.5" />
+                      )}
+                      <span>Rechazar</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => openCall(selectedDriver.telefono, `${selectedDriver.nombre} ${selectedDriver.apellido}`, 'conductor')}
@@ -583,6 +678,18 @@ export const DriversManager: React.FC = () => {
               >
                 <Bike className="w-3.5 h-3.5 shrink-0" />
                 <span>Datos del Vehículo</span>
+              </button>
+
+              <button
+                onClick={() => setProfileTab('documentos')}
+                className={`py-3 px-3.5 text-xs font-display font-bold border-b-2 whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                  profileTab === 'documentos'
+                    ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                    : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span>Expediente y Documentos</span>
               </button>
 
               <button
@@ -677,28 +784,28 @@ export const DriversManager: React.FC = () => {
                               {trips.length} carreras
                             </p>
                             <p className="text-[10px] text-neutral-500 font-mono">
-                              {totalKm.toFixed(1)} km recorridos totales
+                              {(totalKm ?? 0).toFixed(1)} km recorridos totales
                             </p>
                           </div>
 
                           <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 space-y-1">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-                              Ganancia Neta Conductor ({deliveryRates.comisionMotorizadoPorcentaje}%)
+                              Ganancia Neta Conductor ({deliveryRates?.comisionMotorizadoPorcentaje ?? 85}%)
                             </span>
                             <p className="text-xl font-display font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                              ${totalGanancia.toFixed(2)} USD
+                              ${(totalGanancia ?? 0).toFixed(2)} USD
                             </p>
                             <p className="text-[10px] text-neutral-500 font-mono">
-                              Bs. {(totalGanancia * tasaBcv).toFixed(2)}
+                              Bs. {((totalGanancia ?? 0) * (tasaBcv ?? 78.50)).toFixed(2)}
                             </p>
                           </div>
 
                           <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 space-y-1">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-                              Comisión Retenida ({deliveryRates.porcentajeComisionDelivery}%)
+                              Comisión Retenida ({deliveryRates?.porcentajeComisionDelivery ?? 15}%)
                             </span>
                             <p className="text-xl font-display font-black text-purple-600 dark:text-purple-400 font-mono">
-                              ${comisionPagada.toFixed(2)} USD
+                              ${(comisionPagada ?? 0).toFixed(2)} USD
                             </p>
                             <p className="text-[10px] text-neutral-500">
                               Flete plataforma Vixy
@@ -721,7 +828,7 @@ export const DriversManager: React.FC = () => {
                             {trips.map(trip => (
                               <div key={trip.id} className="p-3.5 hover:bg-neutral-50/70 dark:hover:bg-neutral-800/50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                                 <div className="space-y-1 min-w-0">
-                                  <div className="flex items-center gap-2">
+                                   <div className="flex items-center gap-2">
                                     <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
                                       #{trip.id}
                                     </span>
@@ -737,11 +844,11 @@ export const DriversManager: React.FC = () => {
 
                                   {/* Pricing Breakdown Pill */}
                                   <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-[10px] font-mono text-neutral-600 dark:text-neutral-300">
-                                    {trip.distanciaKm <= 3.0 ? (
+                                    {(trip.distanciaKm ?? 0) <= 3.0 ? (
                                       <span>Tarifa mínima: <strong>$2.00 USD</strong> (≤ 3.0 km)</span>
                                     ) : (
                                       <span>
-                                        Tarifa: $2.00 + (+{trip.distanciaExcedenteKm.toFixed(1)} km × $0.50) = <strong>${trip.costoTotalUsd.toFixed(2)} USD</strong>
+                                        Tarifa: $2.00 + (+{(trip.distanciaExcedenteKm ?? 0).toFixed(1)} km × $0.50) = <strong>${(trip.costoTotalUsd ?? 0).toFixed(2)} USD</strong>
                                       </span>
                                     )}
                                   </div>
@@ -749,10 +856,10 @@ export const DriversManager: React.FC = () => {
 
                                 <div className="text-left sm:text-right shrink-0 border-t sm:border-t-0 border-neutral-100 dark:border-neutral-800 pt-2 sm:pt-0">
                                   <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                                    +${trip.gananciaUsd.toFixed(2)} USD
+                                    +${(trip.gananciaUsd ?? 0).toFixed(2)} USD
                                   </span>
                                   <span className="block text-[10px] text-neutral-500 font-mono">
-                                    Bs. {(trip.gananciaUsd * tasaBcv).toFixed(2)}
+                                    Bs. {((trip.gananciaUsd ?? 0) * (tasaBcv ?? 78.50)).toFixed(2)}
                                   </span>
                                   <span className="block text-[10px] text-neutral-400 font-mono mt-0.5">
                                     {trip.distanciaKm} km • {trip.hora}
@@ -979,6 +1086,75 @@ export const DriversManager: React.FC = () => {
                 </div>
               )}
 
+              {/* TAB 6: EXPEDIENTE Y DOCUMENTOS OFICIALES (IMGS-C-D) */}
+              {profileTab === 'documentos' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-amber-400" />
+                        <span>Expediente Documental Registrado</span>
+                      </h4>
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        Documentos auditables almacenados en carpeta de verificación del repartidor (imgs-c-d/deliverys/{selectedDriver.id}).
+                      </p>
+                    </div>
+                    {getDriverStatusBadge(selectedDriver)}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      { key: 'cedula', title: 'Cédula de Identidad', file: 'cedula_identidad.svg' },
+                      { key: 'licencia', title: 'Licencia de Conducir', file: 'licencia_conducir.svg' },
+                      { key: 'carnet', title: 'Carnet de Circulación', file: 'carnet_circulacion.svg' },
+                      { key: 'medico', title: 'Certificado Médico', file: 'certificado_medico.svg' },
+                      { key: 'rcv', title: 'Póliza RCV Vigente', file: 'poliza_rcv.svg' },
+                      { key: 'foto', title: 'Fotografía de Perfil', file: 'foto_perfil.svg' },
+                    ].map(doc => {
+                      const docUrl = `/imgs-c-d/deliverys/${selectedDriver.id}/${doc.file}`;
+                      return (
+                        <div key={doc.key} className="p-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 flex flex-col justify-between space-y-2 hover:border-amber-500/50 transition">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-neutral-200">{doc.title}</span>
+                            <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              Adjunto
+                            </span>
+                          </div>
+                          
+                          <div 
+                            onClick={() => setInspectingDoc({ title: doc.title, url: docUrl })}
+                            className="h-32 bg-neutral-950 rounded-xl border border-neutral-800 flex items-center justify-center overflow-hidden cursor-pointer group relative"
+                          >
+                            <img 
+                              src={docUrl} 
+                              alt={doc.title} 
+                              className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform"
+                              onError={(e: any) => {
+                                e.target.onerror = null;
+                                e.target.src = selectedDriver.fotoUrl;
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-xs text-white font-bold">
+                              <Eye className="w-4 h-4" />
+                              <span>Ampliar</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setInspectingDoc({ title: doc.title, url: docUrl })}
+                            className="w-full py-1.5 text-center text-xs font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Inspeccionar Archivo</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* TAB 5: BILLETERA OPERATIVA */}
               {profileTab === 'billetera' && (
                 <div className="space-y-4">
@@ -986,19 +1162,19 @@ export const DriversManager: React.FC = () => {
                     <div className="p-4 bg-neutral-50 dark:bg-neutral-800/70 rounded-2xl border border-neutral-200 dark:border-neutral-700 space-y-1">
                       <span className="text-[10px] font-bold text-neutral-400 uppercase">Saldo Disponible</span>
                       <p className={`text-2xl font-black font-mono ${
-                        selectedDriver.billetera.saldoUsd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
+                        (selectedDriver.billetera?.saldoUsd ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
                       }`}>
-                        ${selectedDriver.billetera.saldoUsd.toFixed(2)} USD
+                        ${(selectedDriver.billetera?.saldoUsd ?? 0).toFixed(2)} USD
                       </p>
                       <p className="text-xs text-neutral-500 font-mono">
-                        Bs. {(selectedDriver.billetera.saldoUsd * tasaBcv).toFixed(2)}
+                        Bs. {((selectedDriver.billetera?.saldoUsd ?? 0) * (tasaBcv ?? 78.50)).toFixed(2)}
                       </p>
                     </div>
 
                     <div className="p-4 bg-neutral-50 dark:bg-neutral-800/70 rounded-2xl border border-neutral-200 dark:border-neutral-700 space-y-1">
                       <span className="text-[10px] font-bold text-neutral-400 uppercase">Límite de Saldo Negativo</span>
                       <p className="text-2xl font-black font-mono text-neutral-800 dark:text-neutral-200">
-                        ${selectedDriver.billetera.limiteSaldoNegativo.toFixed(2)} USD
+                        ${(selectedDriver.billetera?.limiteSaldoNegativo ?? -0.50).toFixed(2)} USD
                       </p>
                       <p className="text-xs text-neutral-500">
                         Límite de crédito operativo para continuar tomando pedidos

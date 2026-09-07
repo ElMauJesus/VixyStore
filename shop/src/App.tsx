@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Store, 
+  Bike,
   LayoutDashboard, 
   Compass, 
   RefreshCw,
@@ -12,16 +13,17 @@ import {
 } from 'lucide-react';
 import { DeliveryProvider, useDelivery } from './context/DeliveryContext';
 import { StoreApp } from './components/apps/StoreApp';
+import { DriverApp } from './components/apps/DriverApp';
 import { AdminPanel } from './components/apps/AdminPanel';
 import { LiveFleetMapView } from './components/common/LiveFleetMapView';
 import { CallModal } from './components/common/CallModal';
 import { PushNotificationToast } from './components/common/PushNotificationToast';
 
-type WebTabMode = 'comercio' | 'mapa' | 'admin';
+type WebTabMode = 'comercio' | 'delivery' | 'mapa' | 'admin';
 
 const MainAppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<WebTabMode>('comercio');
-  const { tasaBcv, resetDemo, store, storeLoggedIn } = useDelivery();
+  const { tasaBcv, resetDemo, store, storeLoggedIn, driverLoggedIn } = useDelivery();
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -30,6 +32,7 @@ const MainAppContent: React.FC = () => {
       if (tabParam === 'admin') setActiveTab('admin');
       else if (tabParam === 'mapa' || tabParam === 'map') setActiveTab('mapa');
       else if (tabParam === 'comercio' || tabParam === 'store') setActiveTab('comercio');
+      else if (tabParam === 'delivery' || tabParam === 'driver' || tabParam === 'conductor') setActiveTab('delivery');
     }
   }, []);
 
@@ -104,7 +107,7 @@ const MainAppContent: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-slate-400 uppercase text-[10px] tracking-wider font-semibold">Tasa BCV:</span>
             <span className="font-mono font-bold text-purple-300">
-              Bs. {tasaBcv.toFixed(2)}
+              Bs. {(tasaBcv ?? 78.50).toFixed(2)}
             </span>
           </div>
 
@@ -130,6 +133,13 @@ const MainAppContent: React.FC = () => {
 
       {/* Contenedor Web Principal (Pantalla Completa Responsiva, sin marcos de teléfono) */}
       <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col bg-slate-950">
+        {/* PESTAÑA: PANEL DE CONDUCTOR / REPARTIDOR */}
+        {activeTab === 'delivery' && (
+          <div className="flex-1 overflow-y-auto w-full">
+            <DriverApp />
+          </div>
+        )}
+
         {/* PESTAÑA 1: PANEL WEB DE COMERCIO (STORE APP) */}
         {activeTab === 'comercio' && (
           <div className="flex-1 overflow-y-auto w-full">

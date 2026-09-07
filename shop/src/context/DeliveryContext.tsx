@@ -65,12 +65,15 @@ interface DeliveryContextType {
   switchActiveDriver: (driverId: string) => void;
   loginDriver: (cedulaOrPhone: string, password?: string, codigo?: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
   logoutDriver: () => void;
+  approveDriver: (driverId: string) => Promise<void>;
+  rejectDriver: (driverId: string) => Promise<void>;
   store: Comercio;
   stores: Comercio[];
   switchStore: (storeId: string) => void;
   updateStoreSchedule: (storeId: string, scheduleData: string | { horaApertura?: string; horaCierre?: string; diasOperacion?: string[]; horarios?: string; activo?: boolean; abierto?: boolean }, abiertoParam?: boolean) => void;
   toggleStoreActive: (storeId: string) => void;
   approveStore: (storeId: string) => Promise<void>;
+  rejectStore: (storeId: string) => Promise<void>;
   refreshBackendData: () => Promise<void>;
   resetDemo: () => void;
   rateStore: (storeId: string, calificacion: number, comentario: string, clienteNombre: string) => void;
@@ -1189,6 +1192,45 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       addNotification('web', '✅ Comercio Aprobado', 'Comercio aprobado y activo en la plataforma.');
     } catch (e) {
       console.warn('Error aprobando comercio:', e);
+    }
+  };
+
+  const rejectStore = async (storeId: string) => {
+    try {
+      await api.rejectComercio(storeId);
+      setStores(prev => prev.map(s => s.id === storeId ? { ...s, status: 'rechazado', activo: false, abierto: false } : s));
+      if (store.id === storeId) {
+        setStore(prev => ({ ...prev, status: 'rechazado', activo: false, abierto: false }));
+      }
+      addNotification('web', '❌ Comercio Rechazado', 'La afiliación del comercio ha sido rechazada.');
+    } catch (e) {
+      console.warn('Error rechazando comercio:', e);
+    }
+  };
+
+  const approveDriver = async (driverId: string) => {
+    try {
+      await api.approveConductor(driverId);
+      setAllDrivers(prev => prev.map(d => (d.id === driverId || d.cedula === driverId) ? { ...d, disponible: true, status: 'aprobado' as any, estadoVerificacion: 'aprobado' as any } : d));
+      if (driver.id === driverId || driver.cedula === driverId) {
+        setDriver(prev => ({ ...prev, disponible: true, status: 'aprobado' as any, estadoVerificacion: 'aprobado' as any }));
+      }
+      addNotification('web', '✅ Delivery Verificado', 'Repartidor verificado y activado para recibir pedidos.');
+    } catch (e) {
+      console.warn('Error aprobando repartidor:', e);
+    }
+  };
+
+  const rejectDriver = async (driverId: string) => {
+    try {
+      await api.rejectConductor(driverId);
+      setAllDrivers(prev => prev.map(d => (d.id === driverId || d.cedula === driverId) ? { ...d, disponible: false, status: 'rechazado' as any, estadoVerificacion: 'rechazado' as any } : d));
+      if (driver.id === driverId || driver.cedula === driverId) {
+        setDriver(prev => ({ ...prev, disponible: false, status: 'rechazado' as any, estadoVerificacion: 'rechazado' as any }));
+      }
+      addNotification('web', '❌ Delivery Rechazado', 'Cuenta de repartidor rechazada.');
+    } catch (e) {
+      console.warn('Error rechazando repartidor:', e);
     }
   };
 
@@ -2973,12 +3015,15 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       switchActiveDriver,
       loginDriver,
       logoutDriver,
+      approveDriver,
+      rejectDriver,
       store,
       stores,
       switchStore,
       updateStoreSchedule,
       toggleStoreActive,
       approveStore,
+      rejectStore,
       refreshBackendData,
       resetDemo: refreshBackendData,
       rateStore,

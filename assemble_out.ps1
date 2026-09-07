@@ -94,6 +94,9 @@ if (Test-Path "out/shop/assets") {
 }
 Copy-Item -Path "shop/dist/*" -Destination "out/shop" -Recurse -Force
 Copy-Item -Path "shop/backend/*" -Destination "out/shop/backend" -Recurse -Force
+Copy-Item -Path "shop/imgs-c-d" -Destination "out/shop/imgs-c-d" -Recurse -Force
+Copy-Item -Path "shop/imgs-c-d" -Destination "out/imgs-c-d" -Recurse -Force
+Copy-Item -Path "database/actualizar_verificacion_cuentas.sql" -Destination "out/shop" -Force
 Copy-Item -Path "database/migracion_claves_y_conductores.sql" -Destination "out/shop" -Force
 
 if (Test-Path "out/shop/assets/aistudio") {

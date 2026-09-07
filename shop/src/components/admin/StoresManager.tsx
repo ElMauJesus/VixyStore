@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Store, 
+  Store,
+  FileText,
+  Eye, 
   MapPin, 
   Phone, 
   Mail, 
@@ -41,8 +43,24 @@ const RUBROS_CATALOGO: RubroOption[] = [
 ];
 
 export const StoresManager: React.FC = () => {
-  const { stores, updateStoreSchedule, toggleStoreActive, approveStore, refreshBackendData, tasaBcv, orders } = useDelivery();
+  const { stores, updateStoreSchedule, toggleStoreActive, approveStore, rejectStore, refreshBackendData, tasaBcv, orders } = useDelivery();
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [inspectingStoreDocs, setInspectingStoreDocs] = useState<Comercio | null>(null);
+  const [inspectingDocImage, setInspectingDocImage] = useState<{ title: string; url: string } | null>(null);
+
+  const handleRejectStore = async (storeId: string) => {
+    if (!window.confirm('¿Seguro que deseas rechazar el registro de este comercio?')) return;
+    setRejectingId(storeId);
+    try {
+      await rejectStore(storeId);
+      if (inspectingStoreDocs && inspectingStoreDocs.id === storeId) {
+        setInspectingStoreDocs(prev => prev ? { ...prev, status: 'rechazado' as any, activo: false } : null);
+      }
+    } finally {
+      setRejectingId(null);
+    }
+  };
 
   const handleApproveStore = async (storeId: string) => {
     setApprovingId(storeId);
@@ -341,21 +359,49 @@ export const StoresManager: React.FC = () => {
 
                 {/* Actions Block: Modify Schedule, Approve and Toggle */}
                 <div className="flex items-center gap-2 shrink-0 xl:w-3/12 xl:justify-end flex-wrap">
+                  {/* Botón Ver Documentos */}
+                  <button
+                    type="button"
+                    onClick={() => setInspectingStoreDocs(item)}
+                    className="px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    title="Ver expediente y documentos del comercio (imgs-c-d)"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Expediente</span>
+                  </button>
+
                   {item.status === 'pendiente' && (
-                    <button
-                      type="button"
-                      onClick={() => handleApproveStore(item.id)}
-                      disabled={approvingId === item.id}
-                      className="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      title="Aprobar registro de comercio"
-                    >
-                      {approvingId === item.id ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <UserCheck className="w-3.5 h-3.5" />
-                      )}
-                      <span>Aprobar Registro</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleApproveStore(item.id)}
+                        disabled={approvingId === item.id}
+                        className="px-3 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        title="Aprobar y verificar registro de comercio"
+                      >
+                        {approvingId === item.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <UserCheck className="w-3.5 h-3.5" />
+                        )}
+                        <span>Aprobar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRejectStore(item.id)}
+                        disabled={rejectingId === item.id}
+                        className="px-3 py-2 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        title="Rechazar solicitud de comercio"
+                      >
+                        {rejectingId === item.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <XCircle className="w-3.5 h-3.5" />
+                        )}
+                        <span>Rechazar</span>
+                      </button>
+                    </>
                   )}
 
                   <button
@@ -505,6 +551,172 @@ export const StoresManager: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE EXPEDIENTE DOCUMENTAL DEL COMERCIO (IMGS-C-D) */}
+      {inspectingStoreDocs && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <img
+                  src={inspectingStoreDocs.logoUrl}
+                  alt={inspectingStoreDocs.nombre}
+                  className="w-10 h-10 rounded-xl object-cover border border-amber-500"
+                />
+                <div>
+                  <h3 className="font-extrabold text-neutral-900 dark:text-white text-base">
+                    {inspectingStoreDocs.nombre}
+                  </h3>
+                  <p className="text-xs text-neutral-400 font-mono">
+                    RIF: {inspectingStoreDocs.rif} • Código: {inspectingStoreDocs.id}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {inspectingStoreDocs.status === 'pendiente' && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={approvingId === inspectingStoreDocs.id}
+                      onClick={async () => {
+                        await handleApproveStore(inspectingStoreDocs.id);
+                        setInspectingStoreDocs(prev => prev ? { ...prev, status: 'aprobado' as any, activo: true } : null);
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Aprobar Comercio</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={rejectingId === inspectingStoreDocs.id}
+                      onClick={async () => {
+                        await handleRejectStore(inspectingStoreDocs.id);
+                      }}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span>Rechazar</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setInspectingStoreDocs(null)}
+                  className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-500 hover:text-white flex items-center justify-center cursor-pointer transition"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto space-y-4 pr-1 flex-1">
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-bold text-neutral-700 dark:text-neutral-300">Ruta de Documentos: </span>
+                  <span className="font-mono text-amber-500">shop/imgs-c-d/comercios/{inspectingStoreDocs.id}</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                  inspectingStoreDocs.status === 'aprobado' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                }`}>
+                  Estado: {inspectingStoreDocs.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { key: 'rif', title: 'RIF Fiscal Registrado', file: 'rif_fiscal.svg' },
+                  { key: 'permiso', title: 'Permiso Sanitario / Comercial', file: 'permiso_sanitario.svg' },
+                  { key: 'fachada', title: 'Foto de Fachada del Local', file: 'fachada_local.svg' },
+                  { key: 'logo', title: 'Logotipo Oficial', file: 'logo.svg' },
+                ].map(doc => {
+                  const docUrl = `/imgs-c-d/comercios/${inspectingStoreDocs.id}/${doc.file}`;
+                  return (
+                    <div key={doc.key} className="p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 flex flex-col justify-between space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">{doc.title}</span>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">
+                          Digital
+                        </span>
+                      </div>
+
+                      <div 
+                        onClick={() => setInspectingDocImage({ title: doc.title, url: docUrl })}
+                        className="h-36 bg-neutral-100 dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 flex items-center justify-center overflow-hidden cursor-pointer group relative"
+                      >
+                        <img 
+                          src={docUrl} 
+                          alt={doc.title} 
+                          className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform"
+                          onError={(e: any) => {
+                            e.target.onerror = null;
+                            e.target.src = inspectingStoreDocs.logoUrl;
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-xs text-white font-bold">
+                          <Eye className="w-4 h-4" />
+                          <span>Ver en Detalle</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setInspectingDocImage({ title: doc.title, url: docUrl })}
+                        className="w-full py-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Inspeccionar</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA VER DOCUMENTO EN TAMAÑO COMPLETO */}
+      {inspectingDocImage && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-60 animate-in fade-in">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl max-w-2xl w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-white text-base">{inspectingDocImage.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingDocImage(null)}
+                className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white flex items-center justify-center cursor-pointer transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-[65vh] overflow-auto flex items-center justify-center bg-neutral-950 rounded-2xl p-4 border border-neutral-800">
+              <img 
+                src={inspectingDocImage.url} 
+                alt={inspectingDocImage.title} 
+                className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-lg"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs text-neutral-400 font-mono">
+                Ruta: {inspectingDocImage.url}
+              </span>
+              <button
+                type="button"
+                onClick={() => setInspectingDocImage(null)}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Cerrar Visor
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -287,6 +287,19 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ], 401);
         }
 
+        // 4. Validar Estado de Aprobación y Verificación Administrativa
+        $storeStatus = strtolower(trim($store['status'] ?? ''));
+        if (empty($storeStatus)) {
+            $storeStatus = (isset($store['activo']) && (int)$store['activo'] === 1) ? 'aprobado' : 'pendiente';
+        }
+        if ($storeStatus !== 'aprobado') {
+            Database::jsonResponse([
+                'error' => true,
+                'no_verificado' => true,
+                'mensaje' => 'No te han verificado. Tu cuenta de comercio aún está en proceso de revisión por el administrador.'
+            ], 403);
+        }
+
         $storeId = !empty($store['codigo_comercio']) ? $store['codigo_comercio'] : (!empty($store['id']) ? (string)$store['id'] : 'store-' . uniqid());
         $storeNombre = $store['nombre_comercial'] ?? ($store['nombre'] ?? 'Comercio');
         $storeRif = $store['rif_cedula_juridica'] ?? ($store['rif'] ?? '');
@@ -418,7 +431,8 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (($drvRegist['status'] ?? 'pendiente') !== 'aprobado') {
                     Database::jsonResponse([
                         'error' => true,
-                        'mensaje' => 'Tu cuenta de conductor aún está en proceso de revisión por el equipo de Vixy. Te notificaremos una vez sea aprobada.'
+                        'no_verificado' => true,
+                        'mensaje' => 'No te han verificado. Tu cuenta de delivery aún está en proceso de revisión por el equipo de administración.'
                     ], 403);
                 }
 
@@ -459,7 +473,7 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // B. Fallback: buscar en c2861522_vixy_dl.conductores
-    $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, disponible, saldo_billetera_usd, bloqueado_por_saldo, password_hash FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
+    $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, disponible, saldo_billetera_usd, bloqueado_por_saldo, password_hash, status, estado_verificacion FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
     $stmtDriver->execute(['id1' => $identifier, 'id2' => $identifier, 'id3' => $identifier]);
     $driver = $stmtDriver->fetch();
 
@@ -467,6 +481,15 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $validDriverPass = (password_verify($password, $driver['password_hash'] ?? '') || ($driver['password_hash'] ?? '') === $password || $password === '123456');
 
         if ($validDriverPass) {
+            // Validar estado de verificación en tabla delivery
+            $drvStatus = strtolower(trim($driver['status'] ?? ($driver['estado_verificacion'] ?? '')));
+            if ($drvStatus !== '' && $drvStatus !== 'aprobado') {
+                Database::jsonResponse([
+                    'error' => true,
+                    'no_verificado' => true,
+                    'mensaje' => 'No te han verificado. Tu cuenta de delivery aún está en proceso de revisión por el equipo de administración.'
+                ], 403);
+            }
             $token = AuthMiddleware::generateToken([
                 'id' => $driver['id'],
                 'email' => $driver['email'],

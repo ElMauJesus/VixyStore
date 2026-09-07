@@ -114,7 +114,7 @@ export const DriverCarnetFicha: React.FC<DriverCarnetFichaProps> = ({
           {/* Rating */}
           <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
             <Star className="w-3.5 h-3.5 fill-current" />
-            <span className="text-xs font-bold font-mono">{conductor.rating.toFixed(1)}</span>
+            <span className="text-xs font-bold font-mono">{(conductor.rating ?? 5.0).toFixed(1)}</span>
           </div>
 
           {/* Saldo */}
@@ -123,11 +123,11 @@ export const DriverCarnetFicha: React.FC<DriverCarnetFichaProps> = ({
               Saldo
             </span>
             <span className={`text-xs sm:text-sm font-mono font-black block mt-0.5 ${
-              conductor.billetera.saldoUsd >= 0 
+              (conductor.billetera?.saldoUsd ?? 0) >= 0 
                 ? 'text-emerald-600 dark:text-emerald-400' 
                 : 'text-red-500'
             }`}>
-              ${conductor.billetera.saldoUsd.toFixed(2)}
+              ${(conductor.billetera?.saldoUsd ?? 0).toFixed(2)}
             </span>
           </div>
 
@@ -204,7 +204,7 @@ export const DriverCarnetFicha: React.FC<DriverCarnetFichaProps> = ({
               </span>
             </div>
             <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
-              Total: +${totalGanancia.toFixed(2)} USD
+              Total: +${(totalGanancia ?? 0).toFixed(2)} USD
             </span>
           </div>
 
@@ -220,14 +220,14 @@ export const DriverCarnetFicha: React.FC<DriverCarnetFichaProps> = ({
             <div className="p-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
               <span className="text-[9px] uppercase font-bold text-neutral-400 block">Recorrido</span>
               <span className="font-mono font-black text-neutral-900 dark:text-white mt-0.5 block">
-                {totalKm.toFixed(1)} km
+                {(totalKm ?? 0).toFixed(1)} km
               </span>
             </div>
 
             <div className="p-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
               <span className="text-[9px] uppercase font-bold text-neutral-400 block">Ganancia Neta</span>
               <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">
-                +${totalGanancia.toFixed(2)}
+                +${(totalGanancia ?? 0).toFixed(2)}
               </span>
             </div>
           </div>
@@ -259,10 +259,10 @@ export const DriverCarnetFicha: React.FC<DriverCarnetFichaProps> = ({
                     <p className="text-[10px] font-mono text-neutral-400 flex items-center gap-1.5 flex-wrap">
                       <span>{act.distanciaKm} km</span>
                       <span>•</span>
-                      {act.distanciaKm <= 3.0 ? (
+                      {(act.distanciaKm ?? 0) <= 3.0 ? (
                         <span>Tarifa mín: $2.00 USD</span>
                       ) : (
-                        <span>$2.00 + (+{act.distanciaExcedenteKm.toFixed(1)}km × $0.50) = ${act.costoTotalUsd.toFixed(2)}</span>
+                        <span>$2.00 + (+{(act.distanciaExcedenteKm ?? 0).toFixed(1)}km × $0.50) = ${(act.costoTotalUsd ?? 0).toFixed(2)}</span>
                       )}
                       <span>•</span>
                       <span className="text-emerald-600 dark:text-emerald-400 font-bold">{act.estado}</span>
@@ -271,10 +271,10 @@ export const DriverCarnetFicha: React.FC<DriverCarnetFichaProps> = ({
 
                   <div className="text-left sm:text-right shrink-0 border-t sm:border-t-0 border-neutral-100 dark:border-neutral-800 pt-1.5 sm:pt-0">
                     <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm block">
-                      +${act.gananciaUsd.toFixed(2)} USD
+                      +${(act.gananciaUsd ?? 0).toFixed(2)} USD
                     </span>
                     <span className="font-mono text-[10px] text-neutral-400 block">
-                      Bs. {(act.gananciaUsd * tasaBcv).toFixed(2)} • {act.hora}
+                      Bs. {((act.gananciaUsd ?? 0) * (tasaBcv ?? 78.50)).toFixed(2)} • {act.hora}
                     </span>
                   </div>
                 </div>

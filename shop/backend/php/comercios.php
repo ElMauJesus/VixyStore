@@ -213,7 +213,7 @@ if ($method === 'PUT' && $id) {
     }
 
     // 2. Acción: aprobar_comercio (Aprobación desde panel de administración)
-    if ($action === 'aprobar_comercio') {
+    if ($action === 'aprobar_comercio' || $action === 'aprobar') {
         if ($pdoRegist) {
             try {
                 $stR = $pdoRegist->prepare("UPDATE comercios SET status = 'aprobado' WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3");
@@ -221,11 +221,27 @@ if ($method === 'PUT' && $id) {
             } catch (Exception $e) {}
         }
         try {
-            $st = $pdo->prepare("UPDATE comercios SET activo = 1 WHERE id = :id OR rif = :id2");
+            $st = $pdo->prepare("UPDATE comercios SET activo = 1, abierto_manual = 1 WHERE id = :id OR rif = :id2");
             $st->execute(['id' => $id, 'id2' => $id]);
         } catch (Exception $e) {}
 
-        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio aprobado exitosamente']);
+        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio aprobado y verificado exitosamente']);
+    }
+
+    // 2.1 Acción: rechazar_comercio (Rechazo desde panel de administración)
+    if ($action === 'rechazar_comercio' || $action === 'rechazar') {
+        if ($pdoRegist) {
+            try {
+                $stR = $pdoRegist->prepare("UPDATE comercios SET status = 'rechazado' WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3");
+                $stR->execute(['id' => $id, 'id2' => $id, 'id3' => $id]);
+            } catch (Exception $e) {}
+        }
+        try {
+            $st = $pdo->prepare("UPDATE comercios SET activo = 0, abierto_manual = 0 WHERE id = :id OR rif = :id2");
+            $st->execute(['id' => $id, 'id2' => $id]);
+        } catch (Exception $e) {}
+
+        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio rechazado']);
     }
 
     // 3. Actualización de datos generales y horarios

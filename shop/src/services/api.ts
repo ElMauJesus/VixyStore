@@ -165,6 +165,43 @@ class ApiService {
     });
   }
 
+  public async rejectComercio(id: string) {
+    return this.updateComercio(id, {}, 'rechazar_comercio');
+  }
+
+  // --- CONDUCTORES / DELIVERYS ---
+  public async getConductores(params?: boolean | { disponibles?: boolean }) {
+    let soloDisponibles = false;
+    if (typeof params === 'boolean') {
+      soloDisponibles = params;
+    } else if (params && typeof params === 'object' && params.disponibles !== undefined) {
+      soloDisponibles = params.disponibles;
+    }
+    return this.request<{ success: boolean; conductores: any[] }>(
+      `/conductores.php?disponibles=${soloDisponibles ? 1 : 0}`
+    );
+  }
+
+  public async getConductor(id: string) {
+    return this.request<{ success: boolean; conductor: any }>(`/conductores.php?id=${encodeURIComponent(id)}`);
+  }
+
+  public async updateConductor(id: string, data: any, action?: string) {
+    const act = action ? `&action=${encodeURIComponent(action)}` : '';
+    return this.request<{ success: boolean; mensaje: string }>(`/conductores.php?id=${encodeURIComponent(id)}${act}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public async approveConductor(id: string) {
+    return this.updateConductor(id, {}, 'aprobar_conductor');
+  }
+
+  public async rejectConductor(id: string) {
+    return this.updateConductor(id, {}, 'rechazar_conductor');
+  }
+
   // --- RECLAMOS ---
   public async getReclamos(estado?: string) {
     const q = estado ? `?estado=${encodeURIComponent(estado)}` : '';
@@ -206,12 +243,6 @@ class ApiService {
     });
   }
 
-  // --- CONDUCTORES ---
-  public async getConductores(soloDisponibles = true) {
-    return this.request<{ success: boolean; conductores: any[] }>(
-      `/conductores.php?disponibles=${soloDisponibles ? 1 : 0}`
-    );
-  }
 
   public async updateGps(conductorId: string, lat: number, lng: number, pedidoId?: string) {
     return this.request<{ success: boolean }>('/conductores.php?action=gps', {

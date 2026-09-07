@@ -33,9 +33,9 @@ if ($method === 'GET') {
         Database::jsonResponse(['success' => true, 'conductor' => $driver]);
     }
 
-    // Listar conductores disponibles para mapa de administración o asignación
-    $soloDisponibles = isset($_GET['disponibles']) ? (bool)$_GET['disponibles'] : true;
-    $sql = "SELECT id, nombre, apellido, telefono, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, bloqueado_por_saldo, rating FROM conductores WHERE 1=1";
+    // Listar conductores para mapa de administración, verificación o asignación
+    $soloDisponibles = isset($_GET['disponibles']) && $_GET['disponibles'] !== 'false' && $_GET['disponibles'] !== '0';
+    $sql = "SELECT id, nombre, apellido, cedula, telefono, email, avatar_url, foto_url, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo, rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto, licencia_grado, status, estado_verificacion, carpeta_imagenes FROM conductores WHERE 1=1";
     
     if ($soloDisponibles) {
         $sql .= " AND disponible = 1 AND bloqueado_por_saldo = 0";
@@ -43,7 +43,86 @@ if ($method === 'GET') {
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute();
-    Database::jsonResponse(['success' => true, 'conductores' => $stmt->fetchAll()]);
+    $conductoresDl = $stmt->fetchAll();
+
+    // Mapear por cédula para unificar con regist
+    $conductoresMap = [];
+    foreach ($conductoresDl as $d) {
+        $ced = strtoupper(trim($d['cedula'] ?? ''));
+        $code = $d['id'];
+        $folderPath = "/shop/imgs-c-d/deliverys/{$code}";
+        $d['carpeta_imagenes'] = $d['carpeta_imagenes'] ?: $folderPath;
+        $d['documentos'] = [
+            'cedula' => "{$folderPath}/cedula_identidad.svg",
+            'licencia' => "{$folderPath}/licencia_conducir.svg",
+            'certificado_medico' => "{$folderPath}/certificado_medico.svg",
+            'carnet_circulacion' => "{$folderPath}/carnet_circulacion.svg",
+            'rcv' => "{$folderPath}/poliza_rcv.svg",
+            'foto_perfil' => "{$folderPath}/foto_perfil.svg"
+        ];
+        $conductoresMap[$ced ?: $code] = $d;
+    }
+
+    // Consultar también c2861522_regist.conductores
+    $pdoRegist = Database::getRegistConnection();
+    if ($pdoRegist) {
+        try {
+            $stmtR = $pdoRegist->prepare("SELECT * FROM conductores ORDER BY id DESC");
+            $stmtR->execute();
+            $conductoresRegist = $stmtR->fetchAll();
+
+            foreach ($conductoresRegist as $r) {
+                $ced = strtoupper(trim($r['cedula'] ?? ''));
+                $code = $r['codigo_conductor'] ?? ('DRV-' . $r['id']);
+                $folderPath = "/shop/imgs-c-d/deliverys/{$code}";
+
+                if (isset($conductoresMap[$ced])) {
+                    // Actualizar status desde regist si es más reciente
+                    $conductoresMap[$ced]['status'] = $r['status'] ?? $conductoresMap[$ced]['status'];
+                    $conductoresMap[$ced]['codigo_conductor'] = $code;
+                } else {
+                    $conductoresMap[$ced ?: $code] = [
+                        'id' => $code,
+                        'codigo_conductor' => $code,
+                        'nombre' => $r['nombre'] ?? 'Conductor',
+                        'apellido' => $r['apellido'] ?? '',
+                        'cedula' => $r['cedula'] ?? '',
+                        'telefono' => $r['telefono'] ?? '',
+                        'email' => $r['email'] ?? '',
+                        'avatar_url' => $r['foto_url'] ?: "{$folderPath}/foto_perfil.svg",
+                        'foto_url' => $r['foto_url'] ?: "{$folderPath}/foto_perfil.svg",
+                        'disponible' => false,
+                        'en_carrera' => false,
+                        'latitud_actual' => 10.49100000,
+                        'longitud_actual' => -66.86200000,
+                        'saldo_billetera_usd' => 0.00,
+                        'limite_saldo_negativo' => -0.50,
+                        'bloqueado_por_saldo' => 0,
+                        'rating' => 5.00,
+                        'total_carreras' => 0,
+                        'placa_moto' => $r['moto_placa'] ?? '',
+                        'marca_moto' => $r['moto_marca'] ?? 'Bera',
+                        'modelo_moto' => $r['moto_modelo'] ?? 'SBR 150',
+                        'ano_moto' => $r['moto_ano'] ?? '2024',
+                        'licencia_grado' => $r['licencia_conducir'] ?? '2da',
+                        'status' => $r['status'] ?? 'pendiente',
+                        'estado_verificacion' => $r['status'] ?? 'pendiente',
+                        'carpeta_imagenes' => $folderPath,
+                        'documentos' => [
+                            'cedula' => "{$folderPath}/cedula_identidad.svg",
+                            'licencia' => "{$folderPath}/licencia_conducir.svg",
+                            'certificado_medico' => "{$folderPath}/certificado_medico.svg",
+                            'carnet_circulacion' => "{$folderPath}/carnet_circulacion.svg",
+                            'rcv' => "{$folderPath}/poliza_rcv.svg",
+                            'foto_perfil' => "{$folderPath}/foto_perfil.svg"
+                        ]
+                    ];
+                }
+            }
+        } catch (Exception $e) {}
+    }
+
+    Database::jsonResponse(['success' => true, 'conductores' => array_values($conductoresMap)]);
 }
 
 // -----------------------------------------------------------------------------
@@ -260,6 +339,64 @@ if ($method === 'PUT' && $action === 'disponibilidad') {
         'disponible' => (bool)$disponible,
         'carreras_reasignadas' => $carrerasLiberadas,
         'mensaje' => $disponible ? 'Conductor en línea para recibir viajes' : 'Conductor desconectado. Pedidos reasignados a conductores cercanos disponibles.'
+    ]);
+}
+
+// -----------------------------------------------------------------------------
+// PUT: APROBAR / VERIFICAR CONDUCTOR DESDE EL ADMIN PANEL
+// -----------------------------------------------------------------------------
+if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aprobar')) {
+    AuthMiddleware::requireAuth(['super_admin', 'operador']);
+    $driverId = $_GET['id'] ?? null;
+    if (!$driverId) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'ID de conductor requerido'], 400);
+    }
+
+    $pdoRegist = Database::getRegistConnection();
+    if ($pdoRegist) {
+        try {
+            $stR = $pdoRegist->prepare("UPDATE conductores SET status = 'aprobado' WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3");
+            $stR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+        } catch (Exception $e) {}
+    }
+
+    try {
+        $st = $pdo->prepare("UPDATE conductores SET status = 'aprobado', estado_verificacion = 'aprobado', disponible = 1 WHERE id = :id OR cedula = :id2");
+        $st->execute(['id' => $driverId, 'id2' => $driverId]);
+    } catch (Exception $e) {}
+
+    Database::jsonResponse([
+        'success' => true,
+        'mensaje' => 'Conductor aprobado y verificado exitosamente. Ahora puede iniciar sesión y recibir viajes.'
+    ]);
+}
+
+// -----------------------------------------------------------------------------
+// PUT: RECHAZAR CONDUCTOR DESDE EL ADMIN PANEL
+// -----------------------------------------------------------------------------
+if ($method === 'PUT' && ($action === 'rechazar_conductor' || $action === 'rechazar')) {
+    AuthMiddleware::requireAuth(['super_admin', 'operador']);
+    $driverId = $_GET['id'] ?? null;
+    if (!$driverId) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'ID de conductor requerido'], 400);
+    }
+
+    $pdoRegist = Database::getRegistConnection();
+    if ($pdoRegist) {
+        try {
+            $stR = $pdoRegist->prepare("UPDATE conductores SET status = 'rechazado' WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3");
+            $stR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+        } catch (Exception $e) {}
+    }
+
+    try {
+        $st = $pdo->prepare("UPDATE conductores SET status = 'rechazado', estado_verificacion = 'rechazado', disponible = 0 WHERE id = :id OR cedula = :id2");
+        $st->execute(['id' => $driverId, 'id2' => $driverId]);
+    } catch (Exception $e) {}
+
+    Database::jsonResponse([
+        'success' => true,
+        'mensaje' => 'Conductor rechazado.'
     ]);
 }
 

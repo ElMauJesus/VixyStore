@@ -52,6 +52,7 @@ import { useDelivery } from '../../context/DeliveryContext';
 import { Producto, MetodoPagoTipo } from '../../types/delivery';
 import { RUBROS_COMERCIO_DISPONIBLES } from '../../data/initialData';
 import { StoreClaimsManager } from '../store/StoreClaimsManager';
+import { DriverApp } from './DriverApp';
 import { api } from '../../services/api';
 
 export const StoreApp: React.FC = () => {
@@ -63,6 +64,9 @@ export const StoreApp: React.FC = () => {
     storeWallet,
     storeLoggedIn,
     loginStore,
+    driverLoggedIn,
+    loginDriver,
+    logoutDriver,
     logoutStore,
     updateStoreRubro,
     updateStoreCategoriasCatalogo,
@@ -112,6 +116,13 @@ export const StoreApp: React.FC = () => {
       : []
   );
   const [newCategoryName, setNewCategoryName] = useState('');
+
+  // Dual Login Role Selector
+  const [loginRole, setLoginRole] = useState<'comercio' | 'delivery'>('comercio');
+  const [driverLoginId, setDriverLoginId] = useState('');
+  const [driverLoginCodigo, setDriverLoginCodigo] = useState('');
+  const [driverLoginPass, setDriverLoginPass] = useState('');
+  const [driverLoginError, setDriverLoginError] = useState('');
 
   // Store Login State when logged out
   const [storeLoginId, setStoreLoginId] = useState('');
@@ -253,6 +264,36 @@ export const StoreApp: React.FC = () => {
     const updated = customCatalogCategories.filter(c => c !== catToRemove);
     setCustomCatalogCategories(updated);
     updateStoreCategoriasCatalogo(updated);
+  };
+
+  const handleDriverLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!driverLoginId.trim()) {
+      setDriverLoginError('Por favor introduce tu Cédula o Teléfono.');
+      return;
+    }
+    if (!driverLoginCodigo.trim()) {
+      setDriverLoginError('Ingresa tu CÓDIGO DE REPARTIDOR (DRV-...).');
+      return;
+    }
+    if (!driverLoginPass.trim()) {
+      setDriverLoginError('Ingresa tu CONTRASEÑA.');
+      return;
+    }
+    setIsLoggingIn(true);
+    setDriverLoginError('');
+    try {
+      const res = await loginDriver(driverLoginId.trim(), driverLoginPass.trim(), driverLoginCodigo.trim());
+      if (!res?.success) {
+        setDriverLoginError(res?.error || 'Credenciales de delivery incorrectas o cuenta no registrada.');
+      } else {
+        setDriverLoginError('');
+      }
+    } catch (err: any) {
+      setDriverLoginError('Error de comunicación con la base de datos.');
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   const handleStoreLogin = async (e: React.FormEvent) => {
@@ -487,103 +528,247 @@ export const StoreApp: React.FC = () => {
       return 0;
     });
 
+  if (driverLoggedIn && !storeLoggedIn) {
+    return <DriverApp />;
+  }
+
   if (!storeLoggedIn) {
     return (
-      <div className="flex flex-col h-full bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 p-4 items-center justify-center">
-        <div className="w-full max-w-sm bg-white dark:bg-neutral-850 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4">
+      <div className="flex flex-col h-full bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 p-4 items-center justify-center overflow-y-auto">
+        <div className="w-full max-w-md bg-white dark:bg-neutral-850 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 my-auto">
+          {/* Header */}
           <div className="text-center space-y-1">
-            <div className="w-14 h-14 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-amber-500/20">
-              <Store className="w-7 h-7" />
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 border transition-all ${
+              loginRole === 'comercio' 
+                ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' 
+                : 'bg-purple-600/10 text-purple-400 border-purple-500/20'
+            }`}>
+              {loginRole === 'comercio' ? <Store className="w-7 h-7" /> : <Bike className="w-7 h-7" />}
             </div>
             <h2 className="text-xl font-black text-neutral-900 dark:text-white">Vixy Delivery</h2>
-            <p className="text-xs text-neutral-500 font-medium">Panel Comercial & Despacho de Pedidos</p>
+            <p className="text-xs text-neutral-500 font-medium">
+              {loginRole === 'comercio' ? 'Panel Comercial & Despacho de Pedidos' : 'Portal de Repartidores & Conductores'}
+            </p>
           </div>
 
-          {storeLoginError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{storeLoginError}</span>
+          {/* DUAL SELECTOR: COMERCIO VS DELIVERY */}
+          <div className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setLoginRole('comercio');
+                setStoreLoginError('');
+              }}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                loginRole === 'comercio'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white font-medium'
+              }`}
+            >
+              <Store className="w-4 h-4" />
+              <span>Soy Comercio</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginRole('delivery');
+                setDriverLoginError('');
+              }}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                loginRole === 'delivery'
+                  ? 'bg-purple-600 text-white shadow-md font-black'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white font-medium'
+              }`}
+            >
+              <Bike className="w-4 h-4" />
+              <span>Soy Delivery</span>
+            </button>
+          </div>
+
+          {/* TAB 1: FORMULARIO COMERCIO */}
+          {loginRole === 'comercio' && (
+            <div className="space-y-4">
+              {storeLoginError && (
+                <div className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-start gap-2.5 ${
+                  storeLoginError.toLowerCase().includes('no te han verificado')
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 dark:text-amber-400'
+                    : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                }`}>
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-black block uppercase text-[10px] tracking-wider">
+                      {storeLoginError.toLowerCase().includes('no te han verificado') ? 'Cuenta No Verificada' : 'Aviso de Ingreso'}
+                    </span>
+                    <span className="text-xs">{storeLoginError}</span>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleStoreLogin} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">RIF o Cédula:</label>
+                  <input
+                    type="text"
+                    required
+                    value={storeLoginId}
+                    onChange={(e) => setStoreLoginId(e.target.value)}
+                    placeholder="J-12345678-0 o V-12345678"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Código de Vixy:</label>
+                  <input
+                    type="text"
+                    required
+                    value={storeLoginCodigo}
+                    onChange={(e) => setStoreLoginCodigo(e.target.value.toUpperCase())}
+                    placeholder="COM-2026-XXXX"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold tracking-wider"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Contraseña:</label>
+                  <input
+                    type="password"
+                    required
+                    value={storeLoginPass}
+                    onChange={(e) => setStoreLoginPass(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 active:scale-98 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isLoggingIn ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Verificando en Base de Datos...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Ingresar a mi Comercio</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
+                <p className="text-[11px] text-neutral-500">¿Aún no has registrado tu comercio en Vixy?</p>
+                <a
+                  href="/registro-comercios/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 hover:underline font-bold"
+                >
+                  <span>Afiliar nuevo comercio aquí</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
             </div>
           )}
 
-          <form onSubmit={handleStoreLogin} className="space-y-3">
-            {/* Campo 1: RIF o CEDULA */}
-            <div className="space-y-1">
-              <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">RIF o CEDULA:</label>
-              <input
-                type="text"
-                required
-                value={storeLoginId}
-                onChange={(e) => setStoreLoginId(e.target.value)}
-                placeholder="XXXXXXX"
-                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
-              />
-            </div>
-
-            {/* Campo 2: CODIGO DE VIXY */}
-            <div className="space-y-1">
-              <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">CODIGO DE VIXY:</label>
-              <input
-                type="text"
-                required
-                value={storeLoginCodigo}
-                onChange={(e) => setStoreLoginCodigo(e.target.value.toUpperCase())}
-                placeholder="XXXXXXX"
-                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold tracking-wider"
-              />
-            </div>
-
-            {/* Campo 3: CONTRASEÑA */}
-            <div className="space-y-1">
-              <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">CONTRASEÑA:</label>
-              <input
-                type="password"
-                required
-                value={storeLoginPass}
-                onChange={(e) => setStoreLoginPass(e.target.value)}
-                placeholder="XXXXXXX"
-                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              {isLoggingIn ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Verificando en Base de Datos...</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Ingresar a mi Comercio</span>
-                </>
+          {/* TAB 2: FORMULARIO DELIVERY */}
+          {loginRole === 'delivery' && (
+            <div className="space-y-4">
+              {driverLoginError && (
+                <div className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-start gap-2.5 ${
+                  driverLoginError.toLowerCase().includes('no te han verificado')
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 dark:text-amber-400'
+                    : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                }`}>
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-black block uppercase text-[10px] tracking-wider">
+                      {driverLoginError.toLowerCase().includes('no te han verificado') ? 'Cuenta No Verificada' : 'Aviso de Ingreso'}
+                    </span>
+                    <span className="text-xs">{driverLoginError}</span>
+                  </div>
+                </div>
               )}
-            </button>
-          </form>
 
-          <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
-            <p className="text-[11px] text-neutral-500">¿Aún no has registrado tu comercio en Vixy?</p>
-            <a
-              href="/registro-comercios/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 hover:underline font-bold"
-            >
-              <span>Afiliar nuevo comercio aquí</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-            <p className="text-[10px] text-neutral-400 mt-1">
-              Al registrarte recibirás tu <strong>Código de Comercio</strong> y una <strong>contraseña temporal</strong> para iniciar sesión.
-            </p>
-          </div>
+              <form onSubmit={handleDriverLogin} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Cédula o Teléfono:</label>
+                  <input
+                    type="text"
+                    required
+                    value={driverLoginId}
+                    onChange={(e) => setDriverLoginId(e.target.value)}
+                    placeholder="V-12345678 o 04141234567"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Código de Repartidor:</label>
+                  <input
+                    type="text"
+                    required
+                    value={driverLoginCodigo}
+                    onChange={(e) => setDriverLoginCodigo(e.target.value.toUpperCase())}
+                    placeholder="DRV-2026-XXXX"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold tracking-wider"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Contraseña:</label>
+                  <input
+                    type="password"
+                    required
+                    value={driverLoginPass}
+                    onChange={(e) => setDriverLoginPass(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 active:scale-98 text-white font-black rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isLoggingIn ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Verificando en Base de Datos...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Ingresar como Repartidor / Delivery</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
+                <p className="text-[11px] text-neutral-500">¿Aún no te has registrado como repartidor en Vixy?</p>
+                <a
+                  href="/registro-conductores/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400 hover:underline font-bold"
+                >
+                  <span>Afiliarse como nuevo repartidor aquí</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
   }
+
 
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
@@ -612,7 +797,7 @@ export const StoreApp: React.FC = () => {
           <div className="text-right hidden sm:block">
             <span className="text-[9px] text-neutral-400 block font-mono leading-none">BCV</span>
             <span className="text-[10px] font-bold text-neutral-700 dark:text-neutral-300 font-mono">
-              Bs. {tasaBcv.toFixed(2)}
+              Bs. {(tasaBcv ?? 78.50).toFixed(2)}
             </span>
           </div>
 
@@ -774,7 +959,7 @@ export const StoreApp: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-[11px] font-bold truncate text-white">
-                    {pendingApprovalOrders[0].cliente.nombre} • {pendingApprovalOrders[0].items.length} items • ${(pendingApprovalOrders[0].montoTotalUsd).toFixed(2)} USD
+                    {pendingApprovalOrders[0]?.cliente?.nombre || 'Cliente'} • {pendingApprovalOrders[0]?.items?.length || 0} items • ${(pendingApprovalOrders[0]?.montoTotalUsd ?? 0).toFixed(2)} USD
                   </p>
                 </div>
               </div>
@@ -827,7 +1012,7 @@ export const StoreApp: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] text-neutral-500">
-                Registra o actualiza la información fiscal, rubro y categorías de tu negocio. Precios actualizados en Bs según la tasa oficial BCV de {tasaBcv.toFixed(2)} Bs/$.
+                Registra o actualiza la información fiscal, rubro y categorías de tu negocio. Precios actualizados en Bs según la tasa oficial BCV de {(tasaBcv ?? 78.50).toFixed(2)} Bs/$.
               </p>
             </div>
 
@@ -929,7 +1114,7 @@ export const StoreApp: React.FC = () => {
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase text-neutral-400">Equivalente en Bs (BCV Oficial)</label>
                     <div className="p-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 font-mono text-neutral-600 dark:text-neutral-300 font-bold">
-                      Bs. {(storeCostoEnvio * tasaBcv).toFixed(2)}
+                      Bs. {((storeCostoEnvio ?? 2) * (tasaBcv ?? 78.50)).toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -978,7 +1163,7 @@ export const StoreApp: React.FC = () => {
                 {/* Pago Móvil */}
                 <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-xl space-y-2">
                   <span className="font-bold text-emerald-600 dark:text-emerald-400 block text-xs">
-                    📱 Datos para Pago Móvil (a Tasa BCV Oficial: {tasaBcv.toFixed(2)} Bs/$)
+                    📱 Datos para Pago Móvil (a Tasa BCV Oficial: {(tasaBcv ?? 78.50).toFixed(2)} Bs/$)
                   </span>
                   <div className="grid grid-cols-3 gap-2">
                     <input
@@ -1360,10 +1545,10 @@ export const StoreApp: React.FC = () => {
                         {/* Price Display */}
                         <div className="mt-1 flex items-baseline gap-1.5">
                           <span className="text-xs font-black font-mono text-emerald-600 dark:text-emerald-400">
-                            ${prod.precioUsd.toFixed(2)}
+                            ${(prod.precioUsd ?? 0).toFixed(2)}
                           </span>
                           <span className="text-[10px] text-neutral-400 font-mono">
-                            (Bs. {(prod.precioUsd * tasaBcv).toFixed(2)})
+                            (Bs. {((prod.precioUsd ?? 0) * (tasaBcv ?? 78.50)).toFixed(2)})
                           </span>
                         </div>
                       </div>
@@ -1516,10 +1701,10 @@ export const StoreApp: React.FC = () => {
                         </div>
                         <div className="text-right">
                           <span className="text-sm font-black text-amber-600 dark:text-amber-400 font-mono block">
-                            ${order.montoTotalUsd.toFixed(2)} USD
+                            ${(order.montoTotalUsd ?? 0).toFixed(2)} USD
                           </span>
                           <span className="text-[10px] text-neutral-400 font-mono block">
-                            Bs. {(order.montoTotalBs ?? (order.montoTotalUsd * tasaBcv)).toFixed(2)}
+                            Bs. {(order.montoTotalBs ?? ((order.montoTotalUsd ?? 0) * (tasaBcv ?? 78.50))).toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -1748,7 +1933,7 @@ export const StoreApp: React.FC = () => {
 
                     <div className="p-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex justify-between items-center text-xs font-bold">
                       <span>Total Productos</span>
-                      <span className="text-amber-500 font-mono">${order.montoSubtotalUsd.toFixed(2)} USD</span>
+                      <span className="text-amber-500 font-mono">${(order.montoSubtotalUsd ?? 0).toFixed(2)} USD</span>
                     </div>
 
                     {/* Payment verification & Order Accept/Reject */}
@@ -1870,7 +2055,7 @@ export const StoreApp: React.FC = () => {
               <div>
                 <span className="text-[10px] uppercase font-bold text-neutral-400 block">Total Recaudado</span>
                 <h3 className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                  ${totalVentasUsd.toFixed(2)} USD
+                  ${(totalVentasUsd ?? 0).toFixed(2)} USD
                 </h3>
               </div>
               <div className="text-right">
@@ -1895,7 +2080,7 @@ export const StoreApp: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <span className="font-bold text-emerald-500 font-mono block">
-                      ${o.montoTotalUsd.toFixed(2)} USD
+                      ${(o.montoTotalUsd ?? 0).toFixed(2)} USD
                     </span>
                     <span className="text-[10px] text-neutral-400 capitalize">
                       {o.metodoPago.replace('_', ' ')}
@@ -1924,7 +2109,7 @@ export const StoreApp: React.FC = () => {
                 </div>
                 <div className="text-right bg-white/15 backdrop-blur-xs px-2.5 py-1 rounded-xl">
                   <span className="text-[9px] uppercase tracking-wider text-amber-100 block">Tasa BCV Oficial</span>
-                  <span className="text-xs font-bold font-mono">Bs. {tasaBcv.toFixed(2)}</span>
+                  <span className="text-xs font-bold font-mono">Bs. {(tasaBcv ?? 78.50).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -2008,10 +2193,10 @@ export const StoreApp: React.FC = () => {
                               : 'text-red-500'
                           }`}
                         >
-                          {tx.tipo === 'credito' ? '+' : '-'}${tx.montoUsd.toFixed(2)} USD
+                          {tx.tipo === 'credito' ? '+' : '-'}${(tx.montoUsd ?? 0).toFixed(2)} USD
                         </span>
                         <span className="text-[9px] text-neutral-400 font-mono block">
-                          Bs. {tx.montoBs ? tx.montoBs.toFixed(2) : (tx.montoUsd * tasaBcv).toFixed(2)}
+                          Bs. {tx.montoBs ? (Number(tx.montoBs) || 0).toFixed(2) : (((tx.montoUsd ?? 0) * (tasaBcv ?? 78.50))).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -2085,7 +2270,7 @@ export const StoreApp: React.FC = () => {
                     className="w-full p-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 font-mono font-bold"
                   />
                   <span className="text-[9px] text-neutral-400 font-mono block">
-                    = Bs. {(prodPrecioUsd * tasaBcv).toFixed(2)} (BCV)
+                    = Bs. {(((prodPrecioUsd ?? 0) * (tasaBcv ?? 78.50))).toFixed(2)} (BCV)
                   </span>
                 </div>
 
@@ -2238,7 +2423,7 @@ export const StoreApp: React.FC = () => {
                       {targetOrder.cliente.nombre} {targetOrder.cliente.apellido}
                     </span>
                     <span className="text-amber-600 dark:text-amber-400 font-mono">
-                      ${targetOrder.montoTotalUsd.toFixed(2)} USD
+                      ${(targetOrder.montoTotalUsd ?? 0).toFixed(2)} USD
                     </span>
                   </div>
                   <p className="text-[11px] text-neutral-500 truncate">
@@ -2248,7 +2433,7 @@ export const StoreApp: React.FC = () => {
                     <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-700 dark:text-emerald-300 text-[10px] font-bold flex items-start gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
                       <span>
-                        Reembolso Automático Garantizado: Los ${targetOrder.montoTotalUsd.toFixed(2)} USD serán acreditados de vuelta en la Cartera Vixy del cliente al instante.
+                        Reembolso Automático Garantizado: Los ${(targetOrder.montoTotalUsd ?? 0).toFixed(2)} USD serán acreditados de vuelta en la Cartera Vixy del cliente al instante.
                       </span>
                     </div>
                   )}
@@ -2464,13 +2649,13 @@ export const StoreApp: React.FC = () => {
                     <div>
                       <span className="text-neutral-500 block text-[10px]">Costo Delivery Vixy</span>
                       <strong className="text-amber-600 dark:text-amber-400 font-mono text-xs">
-                        ${manualTripCalculation.totalViajeUsd.toFixed(2)} USD
+                        ${(manualTripCalculation?.totalViajeUsd ?? 0).toFixed(2)} USD
                       </strong>
                     </div>
                     <div className="text-right">
                       <span className="text-neutral-500 block text-[10px]">Ganancia Repartidor</span>
                       <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-xs">
-                        ${manualTripCalculation.gananciaMotorizadoUsd.toFixed(2)} USD
+                        ${(manualTripCalculation?.gananciaMotorizadoUsd ?? 0).toFixed(2)} USD
                       </strong>
                     </div>
                   </div>
@@ -2484,7 +2669,7 @@ export const StoreApp: React.FC = () => {
                     3. Comanda de Artículos
                   </span>
                   <span className="font-mono font-bold text-xs text-amber-500">
-                    Subtotal: ${selectedItemsSubtotal.toFixed(2)} USD
+                    Subtotal: ${(selectedItemsSubtotal ?? 0).toFixed(2)} USD
                   </span>
                 </div>
 
@@ -2501,7 +2686,7 @@ export const StoreApp: React.FC = () => {
                             {prod.nombre}
                           </p>
                           <p className="text-[10px] font-mono text-neutral-400">
-                            ${prod.precioUsd.toFixed(2)} USD
+                            ${(prod.precioUsd ?? 0).toFixed(2)} USD
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -2619,11 +2804,11 @@ export const StoreApp: React.FC = () => {
               <div className="p-3 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/25 rounded-2xl space-y-2">
                 <div className="flex justify-between text-xs text-neutral-600 dark:text-neutral-300">
                   <span>Productos del Comercio:</span>
-                  <span className="font-mono font-semibold">${selectedItemsSubtotal.toFixed(2)} USD</span>
+                  <span className="font-mono font-semibold">${(selectedItemsSubtotal ?? 0).toFixed(2)} USD</span>
                 </div>
                 <div className="flex justify-between text-xs text-neutral-600 dark:text-neutral-300">
                   <span>Tarifa de Delivery ({manualDistanceKm} km):</span>
-                  <span className="font-mono font-semibold">${manualTripCalculation.totalViajeUsd.toFixed(2)} USD</span>
+                  <span className="font-mono font-semibold">${(manualTripCalculation?.totalViajeUsd ?? 0).toFixed(2)} USD</span>
                 </div>
                 <div className="border-t border-amber-500/20 pt-2 flex justify-between items-center">
                   <div>
@@ -2631,15 +2816,15 @@ export const StoreApp: React.FC = () => {
                       Total Pedido
                     </span>
                     <span className="text-[10px] text-neutral-500 font-mono">
-                      Tasa BCV: {tasaBcv.toFixed(2)} Bs/$
+                      Tasa BCV: {(tasaBcv ?? 78.50).toFixed(2)} Bs/$
                     </span>
                   </div>
                   <div className="text-right">
                     <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400 font-mono block">
-                      ${manualTotalOrderUsd.toFixed(2)} USD
+                      ${(manualTotalOrderUsd ?? 0).toFixed(2)} USD
                     </span>
                     <span className="text-[10px] text-neutral-500 font-mono">
-                      Bs. {manualTotalOrderBs.toFixed(2)}
+                      Bs. {(manualTotalOrderBs ?? 0).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -2694,17 +2879,17 @@ export const StoreApp: React.FC = () => {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-neutral-400 font-bold uppercase text-[10px]">Monto USD</span>
-                <span className="font-mono font-bold text-emerald-500">${selectedWalletTx.montoUsd.toFixed(2)} USD</span>
+                <span className="font-mono font-bold text-emerald-500">${(selectedWalletTx?.montoUsd ?? 0).toFixed(2)} USD</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-neutral-400 font-bold uppercase text-[10px]">Monto en Bs</span>
                 <span className="font-mono font-bold text-neutral-700 dark:text-neutral-300">
-                  Bs. {selectedWalletTx.montoBs ? selectedWalletTx.montoBs.toFixed(2) : (selectedWalletTx.montoUsd * tasaBcv).toFixed(2)}
+                  Bs. {selectedWalletTx.montoBs ? (Number(selectedWalletTx.montoBs) || 0).toFixed(2) : (((selectedWalletTx?.montoUsd ?? 0) * (tasaBcv ?? 78.50))).toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-neutral-400 font-bold uppercase text-[10px]">Tasa Oficial BCV</span>
-                <span className="font-mono">{tasaBcv.toFixed(2)} Bs/$</span>
+                <span className="font-mono">{(tasaBcv ?? 78.50).toFixed(2)} Bs/$</span>
               </div>
               {selectedWalletTx.referencia && (
                 <div className="flex justify-between items-center">
