@@ -2,18 +2,18 @@
 <html lang="es" class="scroll-smooth">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vixy — Ecosistema Digital Corporativo</title>
-  <meta name="description" content="Plataforma tecnológica integral Vixy: Tienda de repuestos exclusiva para conductores, suite logística para comercios y portal de afiliación." />
-  <link rel="icon" href="/logo/vixylogo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>Vixy — Ecosistema Digital: Conductores, Comercios y Entregas</title>
+  <meta name="description" content="Todo lo que necesitas para conectar. Plataforma tecnológica Vixy: Tienda de repuestos exclusiva, suite de delivery, convocatoria de repartidores y afiliación de comercios." />
+  <link rel="icon" href="/logo/vixylogo.png" type="image/png" />
   
-  <!-- Google Fonts -->
+  <!-- Preconnect & Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
   <script>
-    // Si entran a la raíz con parámetros de búsqueda o catálogo de repuestos, redirigir a /store/
+    // Redirección inteligente si vienen con parámetros de búsqueda de la tienda a /store/
     (function(){
       var s = window.location.search;
       if (s && (s.indexOf('busqueda=') !== -1 || s.indexOf('categoria=') !== -1 || s.indexOf('orden=') !== -1 || s.indexOf('pagina=') !== -1)) {
@@ -23,306 +23,899 @@
   </script>
 
   <style>
+    /* ==========================================================================
+       RESET & VARIABLES
+       ========================================================================== */
     :root {
-      --primary: #8b5cf6;
-      --primary-dark: #6d28d9;
-      --primary-light: #c4b5fd;
-      --accent: #a855f7;
-      --bg: #090514;
-      --surface: #120b24;
-      --surface-border: rgba(139, 92, 246, 0.2);
+      --bg-dark: #070314;
+      --bg-overlay: rgba(7, 3, 20, 0.88);
+      --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      
+      /* Purple Palette */
+      --purple-base: #8b5cf6;
+      --purple-neon: #a855f7;
+      --purple-glow: rgba(168, 85, 247, 0.4);
+      --purple-surface: rgba(24, 10, 52, 0.85);
+      --purple-border: rgba(168, 85, 247, 0.35);
+
+      /* Cyan/Blue Palette */
+      --cyan-base: #0ea5e9;
+      --cyan-neon: #38bdf8;
+      --cyan-glow: rgba(14, 165, 233, 0.4);
+      --cyan-surface: rgba(8, 26, 58, 0.85);
+      --cyan-border: rgba(14, 165, 233, 0.35);
     }
 
-    * {
+    *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
     }
 
-    body {
-      background-color: var(--bg);
-      color: #f1f5f9;
+    html, body {
+      background-color: var(--bg-dark);
+      color: #f8fafc;
       min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* ==========================================================================
+       ADAPTIVE HIGH-RES CYBERPUNK BACKGROUND
+       ========================================================================== */
+    .portal-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image: 
+        /* Glow orbs */
+        radial-gradient(circle 800px at 85% 15%, rgba(147, 51, 234, 0.35), transparent 70%),
+        radial-gradient(circle 600px at 10% 45%, rgba(14, 165, 233, 0.22), transparent 70%),
+        radial-gradient(circle 750px at 85% 85%, rgba(168, 85, 247, 0.28), transparent 70%),
+        /* City background photo */
+        linear-gradient(180deg, rgba(7, 3, 20, 0.65) 0%, rgba(7, 3, 20, 0.88) 45%, rgba(5, 2, 14, 0.98) 100%),
+        url('/banners/vixy_city_bg.jpg');
+      background-size: auto, auto, auto, auto, cover;
+      background-position: center, center, center, center, center top;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+    }
+
+    /* Subtle cyber grid lines for desktop depth */
+    .portal-bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.6) 0%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.6) 0%, transparent 80%);
+    }
+
+    /* Content Wrapper */
+    .portal-wrap {
+      position: relative;
+      z-index: 10;
       display: flex;
       flex-direction: column;
-      overflow-x: hidden;
-      background-image: 
-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(139, 92, 246, 0.25), transparent),
-        radial-gradient(ellipse 60% 40% at 10% 80%, rgba(168, 85, 247, 0.15), transparent),
-        radial-gradient(ellipse 60% 40% at 90% 70%, rgba(124, 58, 237, 0.15), transparent);
+      min-height: 100vh;
     }
 
-    .glass-nav {
-      background: rgba(18, 11, 36, 0.75);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--surface-border);
+    /* ==========================================================================
+       HEADER (BRAND LOGO ONLY - NO HAMBURGER)
+       ========================================================================== */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      width: 100%;
+      background: rgba(8, 3, 24, 0.72);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+      transition: all 0.3s ease;
     }
 
-    .glass-card {
-      background: rgba(18, 11, 36, 0.65);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--surface-border);
-      border-radius: 24px;
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
     }
 
-    .glass-card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(168, 85, 247, 0.45);
-      box-shadow: 0 20px 40px -15px rgba(139, 92, 246, 0.3);
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-      color: #ffffff;
-      font-weight: 700;
-      padding: 12px 24px;
-      border-radius: 14px;
-      text-decoration: none;
+    .brand-logo-wrap {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+      text-decoration: none;
+      transition: transform 0.25s ease, filter 0.25s ease;
     }
 
-    .btn-primary:hover {
-      background: linear-gradient(135deg, #9d71f7, #7c3aed);
-      transform: scale(1.02);
-      box-shadow: 0 6px 22px rgba(139, 92, 246, 0.5);
+    .brand-logo-wrap:hover {
+      transform: scale(1.04);
+      filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.6));
     }
 
-    .badge-pill {
+    .brand-logo-img {
+      height: 48px;
+      width: auto;
+      object-fit: contain;
+      display: block;
+    }
+
+    @media (min-width: 768px) {
+      .header-inner {
+        padding: 16px 32px;
+      }
+      .brand-logo-img {
+        height: 56px;
+      }
+    }
+
+    /* ==========================================================================
+       HERO SECTION
+       ========================================================================== */
+    .hero-section {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 20px 28px 20px;
+      width: 100%;
+    }
+
+    .ecosystem-badge {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       padding: 6px 14px;
-      background: rgba(139, 92, 246, 0.15);
-      border: 1px solid rgba(139, 92, 246, 0.3);
       border-radius: 999px;
+      background: rgba(139, 92, 246, 0.2);
+      border: 1px solid rgba(168, 85, 247, 0.5);
+      color: #e9d5ff;
       font-size: 11px;
-      font-weight: 700;
-      color: var(--primary-light);
+      font-weight: 800;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
+      margin-bottom: 14px;
+      box-shadow: 0 0 16px rgba(168, 85, 247, 0.25);
+    }
+
+    .hero-title {
+      font-size: clamp(32px, 8vw, 56px);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+
+    .hero-title .gradient-conectar {
+      background: linear-gradient(135deg, #c084fc 0%, #a855f7 50%, #9333ea 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 24px rgba(168, 85, 247, 0.6));
+      display: inline-block;
+    }
+
+    .hero-desc {
+      font-size: clamp(14px, 3.8vw, 17px);
+      color: #cbd5e1;
+      line-height: 1.5;
+      font-weight: 500;
+      max-width: 520px;
+    }
+
+    @media (min-width: 768px) {
+      .hero-section {
+        padding: 40px 32px 36px 32px;
+      }
+      .hero-title {
+        letter-spacing: -0.04em;
+      }
+    }
+
+    /* ==========================================================================
+       CARDS CONTAINER (MOBILE FIRST & DESKTOP GRID)
+       ========================================================================== */
+    .cards-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px 48px 20px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    @media (min-width: 1024px) {
+      .cards-container {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 24px;
+        padding: 0 32px 64px 32px;
+      }
+    }
+
+    /* ==========================================================================
+       VIXY CARD COMPONENT
+       ========================================================================== */
+    .vixy-card {
+      border-radius: 26px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 0.35s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* Inner card layout: flex-row to put content on left & 3D image on right */
+    .card-body {
+      padding: 22px 20px 20px 20px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .card-content-col {
+      flex: 1 1 60%;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .card-image-col {
+      flex: 0 0 40%;
+      max-width: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .card-image-col img {
+      width: 100%;
+      height: auto;
+      max-height: 180px;
+      object-fit: contain;
+      filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.5));
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Hover effect for desktop & touch devices */
+    .vixy-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .vixy-card:hover .card-image-col img {
+      transform: scale(1.06) rotate(-1deg);
+    }
+
+    /* Purple Cards Style (Card 1: Store & Card 3: Rider) */
+    .card-theme-purple {
+      background: linear-gradient(145deg, rgba(28, 12, 58, 0.85) 0%, rgba(13, 6, 30, 0.92) 100%);
+      border: 1.5px solid rgba(168, 85, 247, 0.38);
+      box-shadow: 0 14px 35px -10px rgba(147, 51, 234, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .card-theme-purple:hover {
+      border-color: rgba(192, 132, 252, 0.65);
+      box-shadow: 0 20px 45px -10px rgba(168, 85, 247, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    /* Cyan/Blue Cards Style (Card 2: Delivery & Card 4: Comercios) */
+    .card-theme-cyan {
+      background: linear-gradient(145deg, rgba(8, 28, 62, 0.85) 0%, rgba(5, 14, 34, 0.92) 100%);
+      border: 1.5px solid rgba(14, 165, 233, 0.38);
+      box-shadow: 0 14px 35px -10px rgba(14, 165, 233, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .card-theme-cyan:hover {
+      border-color: rgba(56, 189, 248, 0.65);
+      box-shadow: 0 20px 45px -10px rgba(14, 165, 233, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    /* Ambient background glow behind image */
+    .image-glow {
+      position: absolute;
+      inset: -10%;
+      border-radius: 50%;
+      filter: blur(35px);
+      opacity: 0.6;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .glow-purple {
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.5) 0%, transparent 70%);
+    }
+
+    .glow-cyan {
+      background: radial-gradient(circle, rgba(14, 165, 233, 0.45) 0%, transparent 70%);
+    }
+
+    /* ==========================================================================
+       CARD HEADER (ICON + CATEGORY BADGE)
+       ========================================================================== */
+    .card-top-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+
+    .card-icon-box {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .icon-box-purple {
+      background: rgba(139, 92, 246, 0.25);
+      border: 1px solid rgba(168, 85, 247, 0.45);
+      color: #e9d5ff;
+    }
+
+    .icon-box-cyan {
+      background: rgba(14, 165, 233, 0.22);
+      border: 1px solid rgba(14, 165, 233, 0.45);
+      color: #bae6fd;
+    }
+
+    .card-cat-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
       letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .badge-theme-purple {
+      background: rgba(139, 92, 246, 0.22);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #d8b4fe;
+    }
+
+    .badge-theme-cyan {
+      background: rgba(14, 165, 233, 0.2);
+      border: 1px solid rgba(14, 165, 233, 0.4);
+      color: #7dd3fc;
+    }
+
+    .card-title {
+      font-size: clamp(20px, 5vw, 26px);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      line-height: 1.15;
+    }
+
+    .card-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    /* ==========================================================================
+       FEATURE PILLS / BULLETS
+       ========================================================================== */
+    .card-features-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      margin: 6px 0 10px 0;
+    }
+
+    .feature-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .feature-item svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .feat-icon-purple {
+      color: #c084fc;
+    }
+
+    .feat-icon-cyan {
+      color: #38bdf8;
+    }
+
+    /* ==========================================================================
+       ACTION BUTTONS
+       ========================================================================== */
+    .card-action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #ffffff;
+      text-decoration: none;
+      cursor: pointer;
+      width: fit-content;
+      max-width: 100%;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      border: none;
+      outline: none;
+    }
+
+    .btn-theme-purple {
+      background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+      box-shadow: 0 4px 18px rgba(139, 92, 246, 0.45);
+    }
+
+    .btn-theme-purple:hover {
+      background: linear-gradient(135deg, #9d71f7 0%, #8b5cf6 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(168, 85, 247, 0.6);
+    }
+
+    .btn-theme-cyan {
+      background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
+      box-shadow: 0 4px 18px rgba(14, 165, 233, 0.45);
+    }
+
+    .btn-theme-cyan:hover {
+      background: linear-gradient(135deg, #0396e3 0%, #38bdf8 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(14, 165, 233, 0.6);
+    }
+
+    .card-action-btn svg {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.25s ease;
+    }
+
+    .card-action-btn:hover svg {
+      transform: translateX(4px);
+    }
+
+    /* ==========================================================================
+       RESPONSIVE ENHANCEMENTS FOR LARGER SCREENS (DESKTOP / TABLET)
+       ========================================================================== */
+    @media (min-width: 768px) {
+      .card-body {
+        padding: 28px 24px;
+        gap: 20px;
+      }
+      .card-image-col {
+        max-width: 220px;
+      }
+      .card-image-col img {
+        max-height: 220px;
+      }
+      .card-title {
+        font-size: 28px;
+      }
+      .card-desc {
+        font-size: 13px;
+      }
+      .card-action-btn {
+        padding: 12px 22px;
+        font-size: 14px;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .card-body {
+        padding: 32px 28px;
+      }
+      .card-image-col {
+        max-width: 240px;
+      }
+      .card-image-col img {
+        max-height: 240px;
+      }
+    }
+
+    /* Small phone adjustments (< 400px) */
+    @media (max-width: 400px) {
+      .card-body {
+        padding: 18px 14px;
+        gap: 8px;
+      }
+      .card-content-col {
+        flex: 1 1 65%;
+      }
+      .card-image-col {
+        flex: 0 0 35%;
+        max-width: 120px;
+      }
+      .card-image-col img {
+        max-height: 130px;
+      }
+      .card-cat-badge {
+        font-size: 8.5px;
+        padding: 3px 7px;
+      }
+      .card-icon-box {
+        width: 32px;
+        height: 32px;
+      }
+      .card-icon-box svg {
+        width: 16px;
+        height: 16px;
+      }
+      .card-title {
+        font-size: 19px;
+      }
+      .card-desc {
+        font-size: 11px;
+      }
+      .feature-item {
+        font-size: 10px;
+      }
+      .card-action-btn {
+        font-size: 11.5px;
+        padding: 8px 14px;
+      }
+    }
+
+    /* Footer */
+    .portal-footer {
+      border-top: 1px solid rgba(139, 92, 246, 0.15);
+      background: rgba(6, 2, 16, 0.85);
+      padding: 24px 20px;
+      text-align: center;
+      margin-top: auto;
+    }
+
+    .footer-text {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 500;
     }
   </style>
 </head>
 <body>
 
-  <!-- NAVEGACIÓN SUPERIOR -->
-  <header class="glass-nav sticky top-0 z-50 w-full">
-    <div style="max-width: 1200px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between;">
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #4c1d95); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; color: white; box-shadow: 0 4px 12px rgba(139,92,246,0.4);">
-          V
-        </div>
-        <div>
-          <span style="font-size: 18px; font-weight: 900; letter-spacing: -0.5px; color: white;">VIXY</span>
-          <span style="font-size: 10px; font-weight: 700; color: #a78bfa; margin-left: 4px; background: rgba(139,92,246,0.2); padding: 2px 6px; border-radius: 6px;">ECOSISTEMA</span>
-        </div>
-      </div>
+  <!-- BACKGROUND ATMOSPHERE -->
+  <div class="portal-bg" aria-hidden="true"></div>
 
-      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-        <a href="/store/" style="color: #cbd5e1; font-size: 13px; font-weight: 600; text-decoration: none; padding: 8px 12px; border-radius: 10px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#cbd5e1'">Tienda Conductores</a>
-        <a href="/delivery/" style="color: #cbd5e1; font-size: 13px; font-weight: 600; text-decoration: none; padding: 8px 12px; border-radius: 10px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#cbd5e1'">Delivery Comercios</a>
-        <a href="/registro-delivery/" style="color: #38bdf8; font-size: 13px; font-weight: 700; text-decoration: none; padding: 8px 14px; border-radius: 10px; background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.3); transition: all 0.2s;">Registrarme como Delivery</a>
-        <a href="/registro-comercios/" style="color: #a78bfa; font-size: 13px; font-weight: 700; text-decoration: none; padding: 8px 14px; border-radius: 10px; background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); transition: all 0.2s;">Afiliar Comercio</a>
-      </div>
-    </div>
-  </header>
-
-  <!-- CONTENIDO PRINCIPAL -->
-  <main style="flex: 1; max-width: 1200px; margin: 0 auto; padding: 48px 24px; width: 100%;">
+  <!-- MAIN WRAPPER -->
+  <div class="portal-wrap">
     
-    <!-- HERO CENTRAL -->
-    <div style="text-align: center; max-width: 780px; margin: 0 auto 56px auto;">
-      <div class="badge-pill" style="margin-bottom: 20px;">
-        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #34d399;"></span>
-        Plataforma Tecnológica Vixy
+    <!-- 1. HEADER (BRAND LOGO ONLY, NO HAMBURGER MENU) -->
+    <header class="site-header">
+      <div class="header-inner">
+        <a href="/" class="brand-logo-wrap" title="Vixy Rider — Inicio">
+          <img src="/logo/vixylogo.png" alt="Vixy Rider" class="brand-logo-img" />
+        </a>
       </div>
-      <h1 style="font-size: clamp(32px, 5vw, 54px); font-weight: 900; line-height: 1.1; letter-spacing: -1px; margin-bottom: 20px;">
-        Soluciones integradas para <br />
-        <span style="background: linear-gradient(to right, #c4b5fd, #8b5cf6, #e9d5ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-          Conductores & Comercios
-        </span>
+    </header>
+
+    <!-- 2. HERO SECTION -->
+    <section class="hero-section">
+      <div class="ecosystem-badge">
+        EL ECOSISTEMA VIXY
+      </div>
+      <h1 class="hero-title">
+        Todo lo que<br />
+        necesitas para<br />
+        <span class="gradient-conectar">conectar.</span>
       </h1>
-      <p style="font-size: 16px; color: #94a3b8; line-height: 1.6;">
-        Accede a la división correspondiente según tu rol en la red Vixy. Cada módulo opera de forma autónoma con su base de datos y panel especializado.
+      <p class="hero-desc">
+        Conductores, comercios y entregas en una sola red.
       </p>
-    </div>
+    </section>
 
-    <!-- TARJETAS DE PORTAL DIVIDIDAS (STORE & DELIVERY) -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 32px; margin-bottom: 56px;">
+    <!-- 3. CARDS CONTAINER -->
+    <main class="cards-container">
       
-      <!-- TARJETA 1: VIXY STORE (CONDUCTORES) -->
-      <div class="glass-card" style="padding: 36px 32px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
-        <div style="position: absolute; top: -50px; right: -50px; width: 160px; height: 160px; background: rgba(139, 92, 246, 0.15); border-radius: 50%; filter: blur(40px);"></div>
-        
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-            <div style="width: 48px; height: 48px; border-radius: 14px; background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.4); display: flex; align-items: center; justify-content: center;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      <!-- ====================================================================
+           CARTA 1: VIXY STORE (EXCLUSIVO CONDUCTORES)
+           ==================================================================== -->
+      <article class="vixy-card card-theme-purple">
+        <div class="card-body">
+          <div class="card-content-col">
+            <div class="card-top-row">
+              <div class="card-icon-box icon-box-purple">
+                <!-- Shopping Bag Icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
+                  <path d="M3 6h18"/>
+                  <path d="M16 10a4 4 0 0 1-8 0"/>
+                </svg>
+              </div>
+              <span class="card-cat-badge badge-theme-purple">EXCLUSIVO CONDUCTORES</span>
             </div>
-            <span style="font-size: 11px; font-weight: 800; color: #a78bfa; background: rgba(139,92,246,0.2); padding: 4px 10px; border-radius: 8px; text-transform: uppercase;">
-              Exclusivo Conductores
-            </span>
-          </div>
 
-          <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px; color: white;">Vixy Store</h2>
-          <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px;">
-            Tienda oficial de repuestos, lubricantes, baterías y accesorios para carros y motocicletas, con precios preferenciales para conductores activos de <strong>VixyRider</strong>.
-          </p>
+            <h2 class="card-title">Vixy Store</h2>
+            <p class="card-desc">Repuestos, lubricantes, baterías y accesorios para tu moto.</p>
 
-          <ul style="list-style: none; margin-bottom: 32px; display: flex; flex-direction: column; gap: 10px;">
-            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
-              <span style="color: #34d399;">✓</span> Autenticación directa con credenciales VixyRider
-            </li>
-            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
-              <span style="color: #34d399;">✓</span> Fichas de garantía y durabilidad en kilómetros
-            </li>
-            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
-              <span style="color: #34d399;">✓</span> Pagos locales en Bs. (Pago Móvil) y divisas (Zelle, Binance)
-            </li>
-          </ul>
-        </div>
-
-        <a href="/store/" class="btn-primary" style="width: 100%; text-align: center;">
-          <span>Ingresar a Vixy Store</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-        </a>
-      </div>
-
-      <!-- TARJETA 2: VIXY DELIVERY (COMERCIOS) -->
-      <div class="glass-card" style="padding: 36px 32px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
-        <div style="position: absolute; top: -50px; right: -50px; width: 160px; height: 160px; background: rgba(59, 130, 246, 0.15); border-radius: 50%; filter: blur(40px);"></div>
-        
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-            <div style="width: 48px; height: 48px; border-radius: 14px; background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4); display: flex; align-items: center; justify-content: center;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <div class="card-features-row">
+              <span class="feature-item">
+                <!-- Shield Check Icon -->
+                <svg class="feat-icon-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>
+                  <path d="m9 12 2 2 4-4"/>
+                </svg>
+                Productos de calidad
+              </span>
+              <span class="feature-item">
+                <!-- Tag / Discount Icon -->
+                <svg class="feat-icon-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/>
+                  <path d="M7 7h.01"/>
+                </svg>
+                Precios especiales
+              </span>
+              <span class="feature-item">
+                <!-- Truck / Shipping Icon -->
+                <svg class="feat-icon-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+                  <path d="M15 18H9"/>
+                  <path d="M19 18h2a1 1 0 0 0 1-1v-5l-3-4h-5v10Z"/>
+                  <circle cx="7" cy="18" r="2"/>
+                  <circle cx="17" cy="18" r="2"/>
+                </svg>
+                Envíos rápidos
+              </span>
             </div>
-            <span style="font-size: 11px; font-weight: 800; color: #93c5fd; background: rgba(59,130,246,0.2); padding: 4px 10px; border-radius: 8px; text-transform: uppercase;">
-              Comercios & Suite
-            </span>
+
+            <a href="/store" class="card-action-btn btn-theme-purple">
+              <span>Ingresar a Vixy Store</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"/>
+                <path d="m12 5 7 7-7 7"/>
+              </svg>
+            </a>
           </div>
 
-          <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px; color: white;">Vixy Delivery</h2>
-          <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px;">
-            Suite tecnológica para comercios aliados, despacho de órdenes, seguimiento en vivo de motorizados y panel de control administrativo.
-          </p>
-
-          <ul style="list-style: none; margin-bottom: 32px; display: flex; flex-direction: column; gap: 10px;">
-            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
-              <span style="color: #34d399;">✓</span> Gestión de pedidos de comercio en tiempo real
-            </li>
-            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
-              <span style="color: #34d399;">✓</span> Monitoreo en mapa satelital de la flota de reparto
-            </li>
-            <li style="font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
-              <span style="color: #34d399;">✓</span> Liquidación y billetera de saldo para comercios
-            </li>
-          </ul>
-        </div>
-
-        <a href="/delivery/" class="btn-primary" style="width: 100%; text-align: center; background: linear-gradient(135deg, #3b82f6, #1d4ed8);">
-          <span>Acceder a Vixy Delivery</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-        </a>
-      </div>
-
-    </div>
-
-    <!-- ===================================================================== -->
-    <!-- ZONA ACTIVA: REGISTRO DE REPARTIDORES & AFILIACIÓN DE COMERCIOS        -->
-    <!-- ===================================================================== -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 40px;">
-      
-      <!-- BANNER 1: REGISTRO DE REPARTIDORES DELIVERY -->
-      <section id="zona-registro-delivery" class="glass-card" style="padding: 36px 28px; background: linear-gradient(135deg, rgba(14, 30, 60, 0.85), rgba(10, 18, 38, 0.95)); border: 1px solid rgba(56, 189, 248, 0.4); text-align: center; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;">
-        <div style="position: absolute; top: 0; right: 0; width: 200px; height: 200px; background: radial-gradient(circle, rgba(56,189,248,0.2) 0%, transparent 70%); pointer-events: none;"></div>
-        
-        <div style="position: relative; z-index: 2;">
-          <span class="badge-pill" style="margin-bottom: 14px; background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4); color: #7dd3fc;">
-            🛵 Convocatoria Flota • Ingresos Extra
-          </span>
-          <h3 style="font-size: 22px; font-weight: 900; color: white; margin-bottom: 10px; letter-spacing: -0.5px;">
-            ¿Quieres repartir y ganar con Vixy?
-          </h3>
-          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5; margin-bottom: 20px;">
-            Únete a la flota oficial de repartidores motorizados. Recibe ofertas de 15s con navegación GPS, tarifas justas y control total de tu billetera.
-          </p>
-
-          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 24px; font-size: 12px; color: #7dd3fc; font-weight: 600;">
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Despacho 15s
-            </span>
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Ganancias directas
-            </span>
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Rutas con GPS
-            </span>
+          <div class="card-image-col">
+            <div class="image-glow glow-purple"></div>
+            <img src="/cards/vixycard1.webp" alt="Repuestos y accesorios Vixy Store" loading="eager" width="600" height="549" />
           </div>
         </div>
+      </article>
 
-        <a href="/registro-delivery/" class="btn-primary" style="background: linear-gradient(135deg, #0284c7, #4f46e5); font-size: 14px; padding: 12px 24px; box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4); justify-content: center;">
-          <span>Registrarme como Delivery</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-        </a>
-      </section>
+      <!-- ====================================================================
+           CARTA 2: VIXY DELIVERY (COMERCIOS & SUITE)
+           ==================================================================== -->
+      <article class="vixy-card card-theme-cyan">
+        <div class="card-body">
+          <div class="card-content-col">
+            <div class="card-top-row">
+              <div class="card-icon-box icon-box-cyan">
+                <!-- Storefront Icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                  <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
+                  <path d="M2 7h20"/>
+                  <path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/>
+                </svg>
+              </div>
+              <span class="card-cat-badge badge-theme-cyan">COMERCIOS & SUITE</span>
+            </div>
 
-      <!-- BANNER 2: REGISTRO DE COMERCIOS ALIADOS -->
-      <section id="zona-registro-comercios" class="glass-card" style="padding: 36px 28px; background: linear-gradient(135deg, rgba(30, 16, 60, 0.85), rgba(18, 11, 36, 0.95)); border: 1px solid rgba(168, 85, 247, 0.5); text-align: center; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;">
-        <div style="position: absolute; top: 0; right: 0; width: 200px; height: 200px; background: radial-gradient(circle, rgba(168,85,247,0.2) 0%, transparent 70%); pointer-events: none;"></div>
-        
-        <div style="position: relative; z-index: 2;">
-          <span class="badge-pill" style="margin-bottom: 14px; background: rgba(52, 211, 153, 0.15); border-color: rgba(52, 211, 153, 0.4); color: #6ee7b7;">
-            ● Registro Abierto — Afiliación Inmediata
-          </span>
-          <h3 style="font-size: 22px; font-weight: 900; color: white; margin-bottom: 10px; letter-spacing: -0.5px;">
-            ¿Tienes un negocio y quieres despachar?
-          </h3>
-          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5; margin-bottom: 20px;">
-            Restaurantes, farmacias, víveres y repuestos. <strong>0% de comisiones por tus ventas</strong> y acceso inmediato a nuestra flota de motorizados.
-          </p>
+            <h2 class="card-title">Vixy Delivery</h2>
+            <p class="card-desc">Gestión de pedidos, despacho, seguimiento de conductores y panel administrativo.</p>
 
-          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 24px; font-size: 12px; color: #d8b4fe; font-weight: 600;">
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              0% comisión en ventas
-            </span>
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Flota de reparto activa
-            </span>
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Soporte y seguimiento
-            </span>
+            <div class="card-features-row">
+              <span class="feature-item">
+                <!-- Bar Chart Icon -->
+                <svg class="feat-icon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 20V10"/>
+                  <path d="M18 20V4"/>
+                  <path d="M6 20v-4"/>
+                </svg>
+                Control total
+              </span>
+              <span class="feature-item">
+                <!-- Trending Up Icon -->
+                <svg class="feat-icon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+                  <polyline points="16 7 22 7 22 13"/>
+                </svg>
+                Más ventas
+              </span>
+              <span class="feature-item">
+                <!-- Headset Support Icon -->
+                <svg class="feat-icon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+                </svg>
+                Soporte 24/7
+              </span>
+            </div>
+
+            <a href="/delivery/" class="card-action-btn btn-theme-cyan">
+              <span>Acceder a Vixy Delivery</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"/>
+                <path d="m12 5 7 7-7 7"/>
+              </svg>
+            </a>
+          </div>
+
+          <div class="card-image-col">
+            <div class="image-glow glow-cyan"></div>
+            <img src="/cards/vixycard2.webp" alt="Plataforma Vixy Delivery" loading="eager" width="600" height="461" />
           </div>
         </div>
+      </article>
 
-        <a href="/registro-comercios/" class="btn-primary" style="background: linear-gradient(135deg, #9333ea, #4f46e5); font-size: 14px; padding: 12px 24px; box-shadow: 0 6px 20px rgba(147, 51, 234, 0.4); justify-content: center;">
-          <span>Registrar Mi Comercio</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-        </a>
-      </section>
-    </div>
+      <!-- ====================================================================
+           CARTA 3: VIXY RIDER (CONVOCATORIA DE FLOTA • INGRESOS EXTRA)
+           ==================================================================== -->
+      <article class="vixy-card card-theme-purple">
+        <div class="card-body">
+          <div class="card-content-col">
+            <div class="card-top-row">
+              <div class="card-icon-box icon-box-purple">
+                <!-- Motorcycle / Scooter Icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="18.5" cy="17.5" r="3.5"/>
+                  <circle cx="5.5" cy="17.5" r="3.5"/>
+                  <circle cx="15" cy="5" r="1"/>
+                  <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+                </svg>
+              </div>
+              <span class="card-cat-badge badge-theme-purple">CONVOCATORIA DE FLOTA • INGRESOS EXTRA</span>
+            </div>
 
-  </main>
+            <h2 class="card-title">Vixy Rider</h2>
+            <p class="card-desc">Únete a la flota de repartidores, recibe ofertas y realiza entregas con GPS.</p>
 
-  <!-- PIE DE PÁGINA -->
-  <footer style="border-top: 1px solid var(--surface-border); padding: 32px 24px; text-align: center; font-size: 12px; color: #64748b;">
-    <p>© 2026 Vixy Technologies. Todos los derechos reservados. Caracas, Venezuela.</p>
-  </footer>
+            <div class="card-features-row">
+              <span class="feature-item">
+                <!-- Zap / Fast Icon -->
+                <svg class="feat-icon-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+                Despacho 15s
+              </span>
+              <span class="feature-item">
+                <!-- Cash / Direct Profits Icon -->
+                <svg class="feat-icon-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/>
+                  <path d="M12 6v2m0 8v2"/>
+                </svg>
+                Ganancias directas
+              </span>
+              <span class="feature-item">
+                <!-- Map Pin Icon -->
+                <svg class="feat-icon-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+                Rutas con GPS
+              </span>
+            </div>
+
+            <a href="/registro-delivery/" class="card-action-btn btn-theme-purple">
+              <span>Registrarme como Delivery</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"/>
+                <path d="m12 5 7 7-7 7"/>
+              </svg>
+            </a>
+          </div>
+
+          <div class="card-image-col">
+            <div class="image-glow glow-purple"></div>
+            <img src="/cards/vixycard3.webp" alt="Conductor Vixy Rider en moto" loading="lazy" width="600" height="400" />
+          </div>
+        </div>
+      </article>
+
+      <!-- ====================================================================
+           CARTA 4: COMERCIOS (REGISTRO ABIERTO • AFILIACIÓN INMEDIATA)
+           ==================================================================== -->
+      <article class="vixy-card card-theme-cyan">
+        <div class="card-body">
+          <div class="card-content-col">
+            <div class="card-top-row">
+              <div class="card-icon-box icon-box-cyan">
+                <!-- Storefront Icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                  <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
+                  <path d="M2 7h20"/>
+                  <path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/>
+                </svg>
+              </div>
+              <span class="card-cat-badge badge-theme-cyan">REGISTRO ABIERTO • AFILIACIÓN INMEDIATA</span>
+            </div>
+
+            <h2 class="card-title">Comercios</h2>
+            <p class="card-desc">Conecta tu negocio con la red de conductores Vixy y despacha tus pedidos.</p>
+
+            <div class="card-features-row">
+              <span class="feature-item">
+                <!-- Percent Icon -->
+                <svg class="feat-icon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="5" x2="5" y2="19"/>
+                  <circle cx="6.5" cy="6.5" r="2.5"/>
+                  <circle cx="17.5" cy="17.5" r="2.5"/>
+                </svg>
+                0% comisión
+              </span>
+              <span class="feature-item">
+                <!-- Active Fleet Icon -->
+                <svg class="feat-icon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+                  <path d="M15 18H9"/>
+                  <path d="M19 18h2a1 1 0 0 0 1-1v-5l-3-4h-5v10Z"/>
+                  <circle cx="7" cy="18" r="2"/>
+                  <circle cx="17" cy="18" r="2"/>
+                </svg>
+                Flota activa
+              </span>
+              <span class="feature-item">
+                <!-- MapPin Icon -->
+                <svg class="feat-icon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+                Seguimiento
+              </span>
+            </div>
+
+            <a href="/registro-comercios/" class="card-action-btn btn-theme-cyan">
+              <span>Registrar mi comercio</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"/>
+                <path d="m12 5 7 7-7 7"/>
+              </svg>
+            </a>
+          </div>
+
+          <div class="card-image-col">
+            <div class="image-glow glow-cyan"></div>
+            <img src="/cards/vixycard4.webp" alt="Afiliación de comercios Vixy" loading="lazy" width="600" height="530" />
+          </div>
+        </div>
+      </article>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="portal-footer">
+      <p class="footer-text">© 2026 Vixy Technologies. Todos los derechos reservados. Caracas, Venezuela.</p>
+    </footer>
+
+  </div>
 
 </body>
 </html>

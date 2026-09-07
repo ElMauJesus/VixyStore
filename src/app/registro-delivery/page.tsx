@@ -25,7 +25,8 @@ import {
     Clock,
     Lock,
     Zap,
-    ChevronLeft
+    ChevronLeft,
+    Copy
 } from 'lucide-react';
 
 type TipoVehiculo = 'moto' | 'bicicleta' | 'auto';
@@ -74,7 +75,14 @@ export default function RegistroDeliveryPage() {
     const [form, setForm] = useState<FormState>(INITIAL_FORM);
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
-    const [repartidorCreado, setRepartidorCreado] = useState<{ codigo: string; nombre: string } | null>(null);
+    const [repartidorCreado, setRepartidorCreado] = useState<{
+        codigo: string;
+        nombre: string;
+        password?: string;
+        cedula?: string;
+    } | null>(null);
+    const [copiedCode, setCopiedCode] = useState(false);
+    const [copiedPass, setCopiedPass] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [gpsLoading, setGpsLoading] = useState(false);
 
@@ -228,8 +236,10 @@ export default function RegistroDeliveryPage() {
 
             if (res.ok && data?.success) {
                 setRepartidorCreado({
-                    codigo: data.codigo_conductor || 'REP-PENDIENTE',
-                    nombre: `${form.nombre} ${form.apellido}`
+                    codigo: data.codigo_conductor || 'DRV-PENDIENTE',
+                    nombre: `${form.nombre} ${form.apellido}`,
+                    password: data.password_temporal || '',
+                    cedula: data.cedula || cedulaCompleta
                 });
                 setSubmitted(true);
             } else if (data?.message) {
@@ -239,8 +249,10 @@ export default function RegistroDeliveryPage() {
                 const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
                 const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
                 setRepartidorCreado({
-                    codigo: `REP-${today}-${rand}`,
-                    nombre: `${form.nombre} ${form.apellido}`
+                    codigo: `DRV-${today}-${rand}`,
+                    nombre: `${form.nombre} ${form.apellido}`,
+                    password: 'Mx' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+                    cedula: cedulaCompleta
                 });
                 setSubmitted(true);
             }
@@ -248,8 +260,10 @@ export default function RegistroDeliveryPage() {
             const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
             setRepartidorCreado({
-                codigo: `REP-${today}-${rand}`,
-                nombre: `${form.nombre} ${form.apellido}`
+                codigo: `DRV-${today}-${rand}`,
+                nombre: `${form.nombre} ${form.apellido}`,
+                password: 'Mx' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+                cedula: cedulaCompleta
             });
             setSubmitted(true);
         } finally {
@@ -257,36 +271,103 @@ export default function RegistroDeliveryPage() {
         }
     };
 
+    const copyText = (text: string, type: 'code' | 'pass') => {
+        navigator.clipboard.writeText(text);
+        if (type === 'code') {
+            setCopiedCode(true);
+            setTimeout(() => setCopiedCode(false), 2000);
+        } else {
+            setCopiedPass(true);
+            setTimeout(() => setCopiedPass(false), 2000);
+        }
+    };
+
     if (submitted) {
         return (
             <div className="min-h-screen bg-[#0d091e] flex items-center justify-center p-4">
-                <div className="bg-[#16102e] rounded-3xl p-8 sm:p-12 max-w-lg w-full text-center shadow-2xl border border-purple-500/20 animate-in fade-in zoom-in duration-300">
-                    <div className="w-20 h-20 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-6 border border-emerald-500/30">
-                        <CheckCircle2 size={44} strokeWidth={2.5} />
+                <div className="bg-[#16102e] rounded-3xl p-6 sm:p-10 max-w-lg w-full text-center shadow-2xl border border-purple-500/20 animate-in fade-in zoom-in duration-300">
+                    <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-4 border border-emerald-500/30">
+                        <CheckCircle2 size={40} strokeWidth={2.5} />
                     </div>
 
-                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider mb-3 border border-emerald-500/30">
+                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider mb-2 border border-emerald-500/30">
                         Solicitud Recibida
                     </span>
 
-                    <h2 className="text-2xl sm:text-3xl font-black text-white mb-3 tracking-tight">
+                    <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight">
                         ¡Bienvenido al Equipo de Reparto!
                     </h2>
 
-                    <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                        Hemos recibido tu postulación, <strong>{repartidorCreado?.nombre}</strong>. Nuestro equipo de logística y control de calidad verificará tus datos para activar tu cuenta de repartidor.
+                    <p className="text-slate-300 text-xs sm:text-sm leading-relaxed mb-5">
+                        Hemos recibido tu postulación, <strong>{repartidorCreado?.nombre}</strong>. Guarda tus credenciales para iniciar tu turno en Vixy Conductor:
                     </p>
 
-                    {repartidorCreado?.codigo && (
-                        <div className="bg-purple-950/60 border border-purple-500/40 rounded-2xl p-4 mb-6 text-center">
-                            <span className="text-[11px] text-purple-300 font-bold uppercase tracking-wider block mb-1">
-                                Código de Postulante Asignado
+                    {/* Tarjeta de Credenciales Conductor */}
+                    <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-4 mb-5 text-left space-y-3">
+                        {/* 1. Cédula */}
+                        <div>
+                            <span className="text-[10px] text-purple-300 font-bold uppercase tracking-wider block mb-0.5">
+                                1. Cédula Registrada
                             </span>
-                            <span className="font-mono font-black text-2xl text-purple-200 tracking-wider">
-                                {repartidorCreado.codigo}
+                            <span className="font-mono font-bold text-sm text-white">
+                                {repartidorCreado?.cedula}
                             </span>
                         </div>
-                    )}
+
+                        {/* 2. Código de Conductor */}
+                        <div>
+                            <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mb-0.5">
+                                2. Código de Conductor
+                            </span>
+                            <div className="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-amber-500/30">
+                                <span className="font-mono font-black text-base text-amber-300 tracking-wider">
+                                    {repartidorCreado?.codigo}
+                                </span>
+                                {repartidorCreado?.codigo && (
+                                    <button
+                                        type="button"
+                                        onClick={() => copyText(repartidorCreado.codigo, 'code')}
+                                        className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs rounded-lg transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                        {copiedCode ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                        <span>{copiedCode ? 'Copiado' : 'Copiar'}</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 3. Contraseña Temporal */}
+                        {repartidorCreado?.password && (
+                            <div>
+                                <span className="text-[10px] text-blue-400 font-bold uppercase tracking-wider block mb-0.5">
+                                    3. Contraseña Temporal de Conductor
+                                </span>
+                                <div className="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-blue-500/30">
+                                    <span className="font-mono font-black text-base text-blue-300 tracking-wider">
+                                        {repartidorCreado.password}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => copyText(repartidorCreado.password!, 'pass')}
+                                        className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-bold text-xs rounded-lg transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                        {copiedPass ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                        <span>{copiedPass ? 'Copiada' : 'Copiar'}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-300 mb-6 text-left space-y-1">
+                        <p className="font-bold flex items-center gap-1">
+                            <Lock size={13} className="shrink-0" />
+                            <span>Acceso a la App de Reparto</span>
+                        </p>
+                        <p className="text-slate-400 text-[10px] leading-tight">
+                            Tu cuenta queda en estado "pendiente" para verificación de tus documentos y placa. Ingresa a <strong>/delivery/</strong> usando tu Cédula, Código de Conductor y Contraseña temporal.
+                        </p>
+                    </div>
 
                     <div className="space-y-3 pt-2">
                         <Link

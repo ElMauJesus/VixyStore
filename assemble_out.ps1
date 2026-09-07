@@ -22,7 +22,8 @@ $dirs = @(
     "out/banners",
     "out/logo",
     "out/payment-icons",
-    "out/qr"
+    "out/qr",
+    "out/cards"
 )
 
 foreach ($d in $dirs) {
@@ -30,6 +31,10 @@ foreach ($d in $dirs) {
         New-Item -ItemType Directory -Path $d -Force | Out-Null
     }
 }
+
+# Limpiar imagenes vixycard sueltas que hayan quedado en la raiz de out o en out/store
+Remove-Item -Path "out/vixycard*.png" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "out/store/vixycard*.png" -Force -ErrorAction SilentlyContinue
 
 # 2. Rutas que pertenecen a la tienda: replicar en out/store/ Y mantener en out/
 #    Esto garantiza que el usuario pueda acceder tanto por /auth/login como por /store/auth/login
@@ -83,6 +88,7 @@ if (Test-Path "out/delivery/assets") {
 }
 Copy-Item -Path "delivery/dist/*" -Destination "out/delivery" -Recurse -Force
 Copy-Item -Path "delivery/backend/*" -Destination "out/delivery/backend" -Recurse -Force
+Copy-Item -Path "database/migracion_claves_y_conductores.sql" -Destination "out/delivery" -Force
 
 if (Test-Path "out/delivery/assets/aistudio") {
     Remove-Item -Path "out/delivery/assets/aistudio" -Recurse -Force
@@ -90,6 +96,7 @@ if (Test-Path "out/delivery/assets/aistudio") {
 
 # 8. Copiar backend de Registro de Comercios a out/registro-comercios/api
 Copy-Item -Path "registro-comercios/api/*" -Destination "out/registro-comercios/api" -Recurse -Force
+Copy-Item -Path "database/actualizar_comercios_independientes.sql" -Destination "out/registro-comercios" -Force -ErrorAction SilentlyContinue
 
 # 9. Copiar assets multimedia compartidos a raíz Y a out/store/ para evitar 404
 Copy-Item -Path "public/banners/*" -Destination "out/banners" -Recurse -Force -ErrorAction SilentlyContinue
@@ -101,7 +108,10 @@ Copy-Item -Path "public/banners/*" -Destination "out/store/banners" -Recurse -Fo
 Copy-Item -Path "public/logo/*" -Destination "out/store/logo" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "public/payment-icons/*" -Destination "out/store/payment-icons" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "public/qr/*" -Destination "out/store/qr" -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "[OK] Assets multimedia instalados en raiz y /store/"
+
+# 9. Copiar carpeta de cards optimizadas (WebP + PNG) a out/cards/
+Copy-Item -Path "public/cards/*" -Destination "out/cards" -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "[OK] Carpeta /cards/ (WebP optimizadas) instalada en out/cards/"
 
 # 10. COPIAR .HTACCESS MAESTRO (LIMPIO SIN BOM PARA CPANEL/APACHE)
 if (Test-Path "public/.htaccess") {

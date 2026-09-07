@@ -62,7 +62,7 @@ interface DeliveryContextType {
   driverLoggedIn: boolean;
   allDrivers: Conductor[];
   switchActiveDriver: (driverId: string) => void;
-  loginDriver: (cedulaOrPhone: string, password?: string) => { success: boolean; error?: string };
+  loginDriver: (cedulaOrPhone: string, password?: string, codigo?: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
   logoutDriver: () => void;
   store: Comercio;
   stores: Comercio[];
@@ -75,7 +75,7 @@ interface DeliveryContextType {
   rateStore: (storeId: string, calificacion: number, comentario: string, clienteNombre: string) => void;
   storeWallet: ComercioBilletera;
   storeLoggedIn: boolean;
-  loginStore: (identifier: string, password?: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
+  loginStore: (identifier: string, password?: string, codigo?: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
   logoutStore: () => void;
   creditStoreWallet: (params: { montoUsd: number; pedidoId?: string; codigoSeguimiento?: string; tipo: 'pago_pedido_cartera' | 'pago_pedido_directo'; metodoPago?: MetodoPagoTipo; referencia?: string; comprobanteUrl?: string; descripcion: string }) => void;
   updateStoreRubro: (rubro: string, rubroPersonalizado?: string) => void;
@@ -1232,9 +1232,9 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addNotification('comercio', '🔒 Sesión Cerrada', 'Has cerrado la sesión de Vixy Store.');
   };
 
-  const loginStore = async (identifier: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const loginStore = async (identifier: string, password?: string, codigo?: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const res = await api.login(identifier.trim(), password || '');
+      const res = await api.login(identifier.trim(), password || '', codigo?.trim());
       if (res && res.success && res.usuario) {
         const u = res.usuario;
         const normalizedStore: Comercio = {
@@ -1381,10 +1381,41 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addNotification('conductor', '🔒 Sesión Cerrada', 'Has cerrado tu sesión en Vixy Delivery.');
   };
 
-  const loginDriver = (cedulaOrPhone: string, password?: string): { success: boolean; error?: string } => {
-    setDriverLoggedIn(true);
-    addNotification('conductor', '🏍️ Sesión Conductor Iniciada', `¡Bienvenido ${driver.nombre}! Listo para recibir carreras.`);
-    return { success: true };
+  const loginDriver = async (cedulaOrPhone: string, password?: string, codigo?: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await api.login(cedulaOrPhone.trim(), password || '', codigo?.trim());
+      if (res && res.success && res.usuario) {
+        const u = res.usuario;
+        setDriver(prev => ({
+          ...prev,
+          id: String(u.id || prev.id),
+          nombre: u.nombre || prev.nombre,
+          telefono: u.telefono || prev.telefono,
+          cedula: u.cedula || prev.cedula,
+          codigoConductor: u.codigoConductor || prev.codigoConductor,
+          saldoBilletera: typeof u.saldoBilletera === 'number' ? u.saldoBilletera : prev.saldoBilletera,
+          disponible: typeof u.disponible === 'boolean' ? u.disponible : true
+        }));
+        setDriverLoggedIn(true);
+        if (res.token) api.setToken(res.token);
+        try {
+          localStorage.setItem('vixy_driver_session', JSON.stringify({ ...driver, ...u }));
+        } catch (e) {}
+        addNotification('conductor', '🏍️ Sesión Conductor Iniciada', `¡Bienvenido ${u.nombre || driver.nombre}! Listo para recibir carreras.`);
+        return { success: true };
+      } else if (res && !res.success) {
+        return { success: false, error: res.mensaje || 'Credenciales de conductor incorrectas.' };
+      }
+    } catch (err: any) {
+      console.warn('[Driver Login] Backend no disponible o error:', err?.message);
+    }
+    // Fallback demo local en caso de que esté offline o use cuenta de prueba
+    if (cedulaOrPhone.trim() === 'V-24891023' || cedulaOrPhone.trim() === '0414-9988776' || password === 'chofer123') {
+      setDriverLoggedIn(true);
+      addNotification('conductor', '🏍️ Sesión Conductor Iniciada', `¡Bienvenido ${driver.nombre}! Modo Demo Activo.`);
+      return { success: true };
+    }
+    return { success: false, error: 'Credenciales no válidas. Revisa Cédula, Código de Conductor y Contraseña.' };
   };
 
   const addActivityLog = (logData: Omit<LogActividad, 'id' | 'fecha'>) => {

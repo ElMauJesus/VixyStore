@@ -7,7 +7,7 @@ import {
     Clock, MapPin, Locate, Camera, Upload, Trash2,
     Instagram, Facebook, Lock, ChevronDown, Building2,
     CreditCard, Mail, Phone, Share2, Check, ArrowRight,
-    Sparkles, AlertCircle, ShoppingBag, ExternalLink
+    Sparkles, AlertCircle, ShoppingBag, ExternalLink, Copy
 } from 'lucide-react';
 
 /* ─── Categorías de Comercios ─────────────────────────────────── */
@@ -56,7 +56,14 @@ interface FormState {
 export default function RegistroComercioLandingPage() {
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
-    const [comercioCreado, setComercioCreado] = useState<{ codigo: string; nombre: string } | null>(null);
+    const [comercioCreado, setComercioCreado] = useState<{
+        codigo: string;
+        nombre: string;
+        password?: string;
+        identificador?: string;
+    } | null>(null);
+    const [copiedCode, setCopiedCode] = useState(false);
+    const [copiedPass, setCopiedPass] = useState(false);
     const [gpsLoading, setGpsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -194,7 +201,9 @@ export default function RegistroComercioLandingPage() {
             if (res.ok && data?.success) {
                 setComercioCreado({
                     codigo: data.codigo_comercio || 'COM-PENDIENTE',
-                    nombre: data.nombre_comercial || form.nombreComercial
+                    nombre: data.nombre_comercial || form.nombreComercial,
+                    password: data.password_temporal || '',
+                    identificador: data.identificador || (form.tipoRegistro === 'rif' ? form.rifCedulaJuridica : form.cedulaRepresentante)
                 });
                 setSubmitted(true);
             } else {
@@ -204,7 +213,9 @@ export default function RegistroComercioLandingPage() {
             console.warn('Fallback de conexión de registro:', err);
             setComercioCreado({
                 codigo: 'COM-LOCAL-DEMO',
-                nombre: form.nombreComercial
+                nombre: form.nombreComercial,
+                password: 'Vx' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+                identificador: form.tipoRegistro === 'rif' ? form.rifCedulaJuridica : form.cedulaRepresentante
             });
             setSubmitted(true);
         } finally {
@@ -212,33 +223,100 @@ export default function RegistroComercioLandingPage() {
         }
     };
 
+    const copyText = (text: string, type: 'code' | 'pass') => {
+        navigator.clipboard.writeText(text);
+        if (type === 'code') {
+            setCopiedCode(true);
+            setTimeout(() => setCopiedCode(false), 2000);
+        } else {
+            setCopiedPass(true);
+            setTimeout(() => setCopiedPass(false), 2000);
+        }
+    };
+
     if (submitted) {
         return (
             <div className="min-h-screen bg-[#F8F9FD] flex items-center justify-center p-4">
-                <div className="bg-white rounded-3xl p-8 sm:p-12 max-w-lg w-full text-center shadow-2xl border border-purple-100 animate-in fade-in zoom-in duration-300">
-                    <div className="w-20 h-20 rounded-full bg-purple-50 text-[#331182] flex items-center justify-center mx-auto mb-6 shadow-inner">
-                        <CheckCircle2 size={48} className="text-[#4f21b9]" strokeWidth={2.5} />
+                <div className="bg-white rounded-3xl p-6 sm:p-10 max-w-lg w-full text-center shadow-2xl border border-purple-100 animate-in fade-in zoom-in duration-300">
+                    <div className="w-16 h-16 rounded-full bg-purple-50 text-[#331182] flex items-center justify-center mx-auto mb-4 shadow-inner">
+                        <CheckCircle2 size={40} className="text-[#4f21b9]" strokeWidth={2.5} />
                     </div>
-                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-3">
+                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-2">
                         Solicitud Enviada con Éxito
                     </span>
-                    <h2 className="text-2xl sm:text-3xl font-black text-[#1B0B3B] mb-3">
-                        ¡Bienvenido a Vixy Rider!
+                    <h2 className="text-2xl sm:text-3xl font-black text-[#1B0B3B] mb-2">
+                        ¡Bienvenido a Vixy Delivery!
                     </h2>
-                    <p className="text-slate-600 text-sm sm:text-base leading-relaxed mb-6">
-                        Hemos recibido el registro de <strong>{comercioCreado?.nombre || form.nombreComercial}</strong>. Tu solicitud ha quedado guardada en nuestra base de datos para verificación comercial.
+                    <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mb-5">
+                        Hemos recibido el registro de <strong>{comercioCreado?.nombre || form.nombreComercial}</strong>. Guarda tus credenciales de acceso para iniciar sesión en la plataforma comercial de Vixy Delivery:
                     </p>
 
-                    {comercioCreado?.codigo && (
-                        <div className="bg-purple-50/80 border border-purple-200/80 rounded-2xl p-4 mb-8">
-                            <span className="text-xs text-purple-700 font-semibold uppercase tracking-wider block mb-1">
-                                Código de Registro Asignado
+                    {/* Tarjeta de Credenciales Comerciales */}
+                    <div className="bg-slate-50 border border-purple-100 rounded-2xl p-4 mb-5 text-left space-y-3">
+                        {/* 1. Identificador */}
+                        <div>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">
+                                1. Identificador ({form.tipoRegistro === 'rif' ? 'RIF Jurídico' : 'Cédula Representante'})
                             </span>
-                            <span className="font-mono font-extrabold text-xl text-[#280C68]">
-                                {comercioCreado.codigo}
+                            <span className="font-mono font-bold text-sm text-slate-800">
+                                {comercioCreado?.identificador || (form.tipoRegistro === 'rif' ? form.rifCedulaJuridica : form.cedulaRepresentante)}
                             </span>
                         </div>
-                    )}
+
+                        {/* 2. Código de Comercio */}
+                        <div>
+                            <span className="text-[10px] text-purple-700 font-bold uppercase tracking-wider block mb-0.5">
+                                2. Código de Comercio Único
+                            </span>
+                            <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-purple-200">
+                                <span className="font-mono font-extrabold text-base text-[#280C68]">
+                                    {comercioCreado?.codigo}
+                                </span>
+                                {comercioCreado?.codigo && (
+                                    <button
+                                        type="button"
+                                        onClick={() => copyText(comercioCreado.codigo, 'code')}
+                                        className="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-[#331182] font-bold text-xs rounded-lg transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                        {copiedCode ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                        <span>{copiedCode ? 'Copiado' : 'Copiar'}</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 3. Contraseña Temporal */}
+                        {comercioCreado?.password && (
+                            <div>
+                                <span className="text-[10px] text-blue-700 font-bold uppercase tracking-wider block mb-0.5">
+                                    3. Contraseña Temporal de Acceso
+                                </span>
+                                <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-blue-200">
+                                    <span className="font-mono font-extrabold text-base text-blue-700 tracking-wider">
+                                        {comercioCreado.password}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => copyText(comercioCreado.password!, 'pass')}
+                                        className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold text-xs rounded-lg transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                        {copiedPass ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                        <span>{copiedPass ? 'Copiada' : 'Copiar'}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 mb-6 text-left space-y-1">
+                        <p className="font-bold flex items-center gap-1">
+                            <Lock size={13} className="shrink-0" />
+                            <span>Importante: Datos para Iniciar Sesión</span>
+                        </p>
+                        <p className="text-slate-600 text-[10px] leading-tight">
+                            Usa tu RIF/Cédula, tu Código de Comercio y esta contraseña temporal para entrar en <strong>/delivery/</strong> (Panel de Comercios). Podrás cambiarla en cualquier momento desde la pestaña "Cuenta".
+                        </p>
+                    </div>
 
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
                         <button

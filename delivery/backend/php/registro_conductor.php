@@ -1,0 +1,176 @@
+<?php
+/**
+ * Vixy Delivery Platform — Registro de Conductores (Repartidores)
+ * Endpoint: POST /backend/php/registro_conductor.php
+ *
+ * Respuesta exitosa:
+ *  {
+ *    "success": true,
+ *    "codigo_conductor": "DRV-20260906-A3F9BC",
+ *    "password_temporal": "Mx4nW7qR",
+ *    "cedula": "V-24891023"
+ *  }
+ */
+
+require_once __DIR__ . '/config/db.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+if ($method !== 'POST') {
+    Database::jsonResponse(['error' => true, 'mensaje' => 'Metodo no permitido'], 405);
+}
+
+$data = Database::getJsonInput();
+
+// ─── Campos Obligatorios ──────────────────────────────────────────────────────
+$nombre          = trim($data['nombre'] ?? '');
+$apellido        = trim($data['apellido'] ?? '');
+$cedula          = trim($data['cedula'] ?? '');
+$telefono        = trim($data['telefono'] ?? '');
+$email           = trim($data['email'] ?? '');
+$fechaNacimiento = trim($data['fecha_nacimiento'] ?? '');
+$direccion       = trim($data['direccion'] ?? '');
+
+// Datos de Moto
+$motoMarca  = trim($data['moto_marca'] ?? '');
+$motoModelo = trim($data['moto_modelo'] ?? '');
+$motoColor  = trim($data['moto_color'] ?? '');
+$motoPlaca  = trim($data['moto_placa'] ?? '');
+$motoAno    = trim($data['moto_ano'] ?? '');
+
+// Licencia
+$licencia = trim($data['licencia_conducir'] ?? '');
+$fotoUrl  = trim($data['foto_url'] ?? '');
+
+if (empty($nombre) || empty($apellido) || empty($cedula) || empty($telefono)) {
+    Database::jsonResponse([
+        'error'   => true,
+        'mensaje' => 'Los campos nombre, apellido, cedula y telefono son obligatorios.'
+    ], 400);
+}
+
+if (empty($motoPlaca)) {
+    Database::jsonResponse([
+        'error'   => true,
+        'mensaje' => 'La placa de la moto es obligatoria para el registro de conductores.'
+    ], 400);
+}
+
+// ─── Conexion a c2861522_regist ───────────────────────────────────────────────
+$pdoRegist = Database::getRegistConnection();
+if (!$pdoRegist) {
+    Database::jsonResponse(['error' => true, 'mensaje' => 'No se puede conectar a la base de datos de registro.'], 500);
+}
+
+// ─── Verificar duplicados (cedula, telefono, placa) ──────────────────────────
+$dupEmail = ($email !== '') ? $email : 'NO_EMAIL_' . uniqid();
+
+$dupCheck = $pdoRegist->prepare(
+    "SELECT id FROM conductores
+     WHERE cedula = :cedula
+        OR telefono = :tel
+        OR moto_placa = :placa
+        OR email = :email
+     LIMIT 1"
+);
+$dupCheck->execute([
+    'cedula' => $cedula,
+    'tel'    => $telefono,
+    'placa'  => $motoPlaca,
+    'email'  => $dupEmail
+]);
+if ($dupCheck->fetch()) {
+    Database::jsonResponse([
+        'error'   => true,
+        'mensaje' => 'Ya existe un conductor registrado con esa cedula, telefono, placa o correo electronico.'
+    ], 409);
+}
+
+// ─── Generar codigo unico de conductor ───────────────────────────────────────
+function generarCodigoConductor(PDO $pdo): string {
+    $intentos = 0;
+    do {
+        $codigo = 'DRV-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+        $st = $pdo->prepare("SELECT id FROM conductores WHERE codigo_conductor = :c LIMIT 1");
+        $st->execute(['c' => $codigo]);
+        $intentos++;
+    } while ($st->fetch() && $intentos < 10);
+    return $codigo;
+}
+
+$codigoConductor = generarCodigoConductor($pdoRegist);
+
+// ─── Generar contrasena temporal ──────────────────────────────────────────────
+function generarPasswordTemporal(int $longitud = 8): string {
+    $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    $pass = '';
+    for ($i = 0; $i < $longitud; $i++) {
+        $pass .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+    return $pass;
+}
+
+$passwordTemporal = generarPasswordTemporal(8);
+$passwordHash     = password_hash($passwordTemporal, PASSWORD_BCRYPT);
+
+// ─── Insertar en base de datos ────────────────────────────────────────────────
+try {
+    $sql = "
+        INSERT INTO conductores (
+            codigo_conductor, password_hash,
+            nombre, apellido, cedula, telefono, email,
+            fecha_nacimiento, direccion,
+            moto_marca, moto_modelo, moto_color, moto_placa, moto_ano,
+            licencia_conducir, foto_url,
+            status, created_at
+        ) VALUES (
+            :codigo, :phash,
+            :nombre, :apellido, :cedula, :tel, :email,
+            :fnac, :dir,
+            :mmarca, :mmodelo, :mcolor, :mplaca, :mano,
+            :licencia, :foto,
+            'pendiente', NOW()
+        )
+    ";
+    $stmt = $pdoRegist->prepare($sql);
+    $stmt->execute([
+        'codigo'   => $codigoConductor,
+        'phash'    => $passwordHash,
+        'nombre'   => $nombre,
+        'apellido' => $apellido,
+        'cedula'   => $cedula,
+        'tel'      => $telefono,
+        'email'    => $email,
+        'fnac'     => $fechaNacimiento ?: null,
+        'dir'      => $direccion,
+        'mmarca'   => $motoMarca,
+        'mmodelo'  => $motoModelo,
+        'mcolor'   => $motoColor,
+        'mplaca'   => strtoupper($motoPlaca),
+        'mano'     => $motoAno,
+        'licencia' => $licencia,
+        'foto'     => $fotoUrl,
+    ]);
+} catch (PDOException $e) {
+    error_log('Error registro conductor: ' . $e->getMessage());
+    Database::jsonResponse([
+        'error'   => true,
+        'mensaje' => 'Error al registrar el conductor. Por favor intente de nuevo.',
+        'detalle' => $e->getMessage()
+    ], 500);
+}
+
+// ─── Respuesta exitosa ────────────────────────────────────────────────────────
+Database::jsonResponse([
+    'success'           => true,
+    'mensaje'           => 'Solicitud de conductor enviada exitosamente. Un operador revisara tu documentacion y aprobara tu cuenta.',
+    'codigo_conductor'  => $codigoConductor,
+    'password_temporal' => $passwordTemporal,
+    'cedula'            => $cedula,
+    'instrucciones'     => 'Guarda estos datos. Una vez aprobado, usaras tu cedula (o telefono) + Codigo de Conductor + contrasena para iniciar sesion en la App Vixy Conductor. Podras cambiarla desde tu perfil.'
+], 201);

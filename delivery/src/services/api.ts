@@ -56,7 +56,7 @@ class ApiService {
   }
 
   // --- AUTENTICACIÓN (SUPERUSUARIO: vixydely / 123456) ---
-  public async login(identifier: string, password: string) {
+  public async login(identifier: string, password: string, codigo?: string) {
     return this.request<{
       success: boolean;
       token?: string;
@@ -66,7 +66,19 @@ class ApiService {
       error?: boolean;
     }>('/auth.php?action=login', {
       method: 'POST',
-      body: JSON.stringify({ identifier, password })
+      body: JSON.stringify({
+        identifier,
+        username: identifier,
+        login: identifier,
+        email: identifier,
+        rif: identifier,
+        cedula: identifier,
+        password,
+        codigo: codigo || '',
+        codigo_comercio: codigo || '',
+        codigo_conductor: codigo || '',
+        codigo_vixy: codigo || ''
+      })
     });
   }
 
@@ -82,10 +94,38 @@ class ApiService {
     });
   }
 
-  public async changePassword(newPassword: string) {
+  public async registerComercio(comercioData: any) {
+    return this.request<{
+      success: boolean;
+      codigo_comercio?: string;
+      password_temporal?: string;
+      identificador?: string;
+      mensaje?: string;
+      error?: boolean;
+    }>('/registro_comercio.php', {
+      method: 'POST',
+      body: JSON.stringify(comercioData)
+    });
+  }
+
+  public async registerConductor(conductorData: any) {
+    return this.request<{
+      success: boolean;
+      codigo_conductor?: string;
+      password_temporal?: string;
+      cedula?: string;
+      mensaje?: string;
+      error?: boolean;
+    }>('/registro_conductor.php', {
+      method: 'POST',
+      body: JSON.stringify(conductorData)
+    });
+  }
+
+  public async changePassword(newPassword: string, currentPassword?: string) {
     return this.request<{ success: boolean; mensaje: string }>('/auth.php?action=change_password', {
       method: 'POST',
-      body: JSON.stringify({ nueva_clave: newPassword })
+      body: JSON.stringify({ nueva_clave: newPassword, clave_actual: currentPassword })
     });
   }
 

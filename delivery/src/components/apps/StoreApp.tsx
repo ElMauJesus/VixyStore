@@ -45,12 +45,14 @@ import {
   BellRing,
   Inbox,
   Search,
-  FileCode
+  FileCode,
+  Key
 } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
 import { Producto, MetodoPagoTipo } from '../../types/delivery';
 import { RUBROS_COMERCIO_DISPONIBLES } from '../../data/initialData';
 import { StoreClaimsManager } from '../store/StoreClaimsManager';
+import { api } from '../../services/api';
 
 export const StoreApp: React.FC = () => {
   const { 
@@ -113,9 +115,19 @@ export const StoreApp: React.FC = () => {
 
   // Store Login State when logged out
   const [storeLoginId, setStoreLoginId] = useState('');
+  const [storeLoginCodigo, setStoreLoginCodigo] = useState('');
   const [storeLoginPass, setStoreLoginPass] = useState('');
   const [storeLoginError, setStoreLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Cambio de Contraseña del Comercio
+  const [showChangePassModal, setShowChangePassModal] = useState(false);
+  const [changePassCurrent, setChangePassCurrent] = useState('');
+  const [changePassNew, setChangePassNew] = useState('');
+  const [changePassConfirm, setChangePassConfirm] = useState('');
+  const [changePassError, setChangePassError] = useState('');
+  const [changePassSuccess, setChangePassSuccess] = useState(false);
+  const [changePassLoading, setChangePassLoading] = useState(false);
 
   // Wallet Receipt Inspection Modal
   const [selectedWalletTx, setSelectedWalletTx] = useState<any | null>(null);
@@ -246,13 +258,21 @@ export const StoreApp: React.FC = () => {
   const handleStoreLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeLoginId.trim()) {
-      setStoreLoginError('Por favor introduce tu RIF, código de comercio o correo registrado.');
+      setStoreLoginError('Por favor introduce tu RIF o CEDULA.');
+      return;
+    }
+    if (!storeLoginCodigo.trim()) {
+      setStoreLoginError('Ingresa tu CODIGO DE VIXY.');
+      return;
+    }
+    if (!storeLoginPass.trim()) {
+      setStoreLoginError('Ingresa tu CONTRASEÑA.');
       return;
     }
     setIsLoggingIn(true);
     setStoreLoginError('');
     try {
-      const res = await loginStore(storeLoginId.trim(), storeLoginPass.trim());
+      const res = await loginStore(storeLoginId.trim(), storeLoginPass.trim(), storeLoginCodigo.trim());
       if (!res?.success) {
         setStoreLoginError(res?.error || 'Credenciales comerciales incorrectas o comercio no registrado.');
       } else {
@@ -268,6 +288,43 @@ export const StoreApp: React.FC = () => {
   const handleStoreLogout = () => {
     if (window.confirm('¿Seguro que deseas cerrar la sesión del comercio en Vixy Store?')) {
       logoutStore();
+    }
+  };
+
+  const handleChangeStorePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePassError('');
+    setChangePassSuccess(false);
+
+    if (!changePassNew.trim()) {
+      setChangePassError('Ingresa la nueva contraseña.');
+      return;
+    }
+    if (changePassNew.length < 6) {
+      setChangePassError('La nueva contraseña debe tener mínimo 6 caracteres.');
+      return;
+    }
+    if (changePassNew !== changePassConfirm) {
+      setChangePassError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setChangePassLoading(true);
+    try {
+      const res = await api.changePassword(changePassNew.trim(), changePassCurrent.trim());
+      if (res && res.success) {
+        setChangePassSuccess(true);
+        setChangePassCurrent('');
+        setChangePassNew('');
+        setChangePassConfirm('');
+        setTimeout(() => setChangePassSuccess(false), 5000);
+      } else {
+        setChangePassError(res?.mensaje || 'Error al actualizar la contraseña.');
+      }
+    } catch (err: any) {
+      setChangePassError(err?.message || 'Error de conexión con el servidor.');
+    } finally {
+      setChangePassLoading(false);
     }
   };
 
@@ -450,30 +507,43 @@ export const StoreApp: React.FC = () => {
           )}
 
           <form onSubmit={handleStoreLogin} className="space-y-3">
+            {/* Campo 1: RIF o CEDULA */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-neutral-500">RIF, Código de Comercio o Correo</label>
+              <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">RIF o CEDULA:</label>
               <input
                 type="text"
                 required
                 value={storeLoginId}
                 onChange={(e) => setStoreLoginId(e.target.value)}
-                placeholder="Ej. J-12345678-9 o COM-2026..."
+                placeholder="XXXXXXX"
                 className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
               />
             </div>
 
+            {/* Campo 2: CODIGO DE VIXY */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-neutral-500">Contraseña o Cédula del Representante</label>
+              <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">CODIGO DE VIXY:</label>
+              <input
+                type="text"
+                required
+                value={storeLoginCodigo}
+                onChange={(e) => setStoreLoginCodigo(e.target.value.toUpperCase())}
+                placeholder="XXXXXXX"
+                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold tracking-wider"
+              />
+            </div>
+
+            {/* Campo 3: CONTRASEÑA */}
+            <div className="space-y-1">
+              <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">CONTRASEÑA:</label>
               <input
                 type="password"
+                required
                 value={storeLoginPass}
                 onChange={(e) => setStoreLoginPass(e.target.value)}
-                placeholder="Contraseña o Cédula (V-12345678)"
-                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                placeholder="XXXXXXX"
+                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
               />
-              <p className="text-[10px] text-neutral-400">
-                Si tu comercio fue registrado recientemente, puedes ingresar con tu cédula de representante o contraseña inicial.
-              </p>
             </div>
 
             <button
@@ -506,6 +576,9 @@ export const StoreApp: React.FC = () => {
               <span>Afiliar nuevo comercio aquí</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
+            <p className="text-[10px] text-neutral-400 mt-1">
+              Al registrarte recibirás tu <strong>Código de Comercio</strong> y una <strong>contraseña temporal</strong> para iniciar sesión.
+            </p>
           </div>
         </div>
       </div>
@@ -1067,6 +1140,69 @@ export const StoreApp: React.FC = () => {
                 <Save className="w-3.5 h-3.5" />
                 <span>Guardar Cambios del Comercio</span>
               </button>
+
+              {/* Sección: Cambiar Contraseña */}
+              <div className="p-3.5 bg-blue-500/5 rounded-2xl border border-blue-500/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                    <Key className="w-3.5 h-3.5" />
+                    Seguridad y Contraseña
+                  </h4>
+                  <span className="text-[10px] bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-full font-bold">
+                    Código: {store.codigoComercio || store.id}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-500">
+                  Si registraste tu comercio con una contraseña temporal, te recomendamos cambiarla por una personalizada y segura.
+                </p>
+
+                {changePassError && (
+                  <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 text-[11px] font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{changePassError}</span>
+                  </div>
+                )}
+
+                {changePassSuccess && (
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 text-[11px] font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>¡Contraseña actualizada exitosamente!</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-neutral-500">Nueva Contraseña</label>
+                    <input
+                      type="password"
+                      value={changePassNew}
+                      onChange={(e) => setChangePassNew(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-neutral-500">Confirmar Nueva Contraseña</label>
+                    <input
+                      type="password"
+                      value={changePassConfirm}
+                      onChange={(e) => setChangePassConfirm(e.target.value)}
+                      placeholder="Repite la nueva contraseña"
+                      className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={changePassLoading}
+                  onClick={handleChangeStorePassword}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer transition disabled:opacity-50"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{changePassLoading ? 'Actualizando contraseña...' : 'Actualizar Contraseña del Comercio'}</span>
+                </button>
+              </div>
 
               {/* Botón de Cerrar Sesión requerido en Vixy Store */}
               <div className="p-3.5 bg-red-500/5 rounded-2xl border border-red-500/20 space-y-2">

@@ -47,6 +47,106 @@ if ($method === 'GET') {
 }
 
 // -----------------------------------------------------------------------------
+// POST: PRE-REGISTRO / REGISTRO PÚBLICO DE CONDUCTOR (DESDE WEB O APP)
+// -----------------------------------------------------------------------------
+if ($method === 'POST' && ($action === 'pre_registro' || $action === 'registro')) {
+    $data = !empty($_POST) ? $_POST : Database::getJsonInput();
+
+    $nombre   = trim($data['nombre'] ?? '');
+    $apellido = trim($data['apellido'] ?? '');
+    $cedula   = trim($data['cedula'] ?? '');
+    $telefono = trim($data['telefono'] ?? '');
+    $email    = trim($data['email'] ?? '');
+    $fnac     = trim($data['fecha_nacimiento'] ?? '');
+    $dir      = trim($data['direccion'] ?? '');
+    $placa    = trim($data['placa_vehiculo'] ?? $data['moto_placa'] ?? '');
+    $modelo   = trim($data['modelo_vehiculo'] ?? $data['moto_modelo'] ?? '');
+    $marca    = trim($data['moto_marca'] ?? 'Bera');
+    $color    = trim($data['moto_color'] ?? 'Negro');
+    $ano      = trim($data['moto_ano'] ?? date('Y'));
+    $licencia = trim($data['licencia_conducir'] ?? '');
+
+    if (empty($nombre) || empty($apellido) || empty($cedula) || empty($telefono)) {
+        Database::jsonResponse(['error' => true, 'message' => 'Nombre, apellido, cédula y teléfono son obligatorios.'], 400);
+    }
+
+    $pdoRegist = Database::getRegistConnection();
+    if (!$pdoRegist) {
+        Database::jsonResponse(['error' => true, 'message' => 'No se puede conectar a la base de datos de registro.'], 500);
+    }
+
+    // Verificar duplicados
+    $dupCheck = $pdoRegist->prepare("SELECT id FROM conductores WHERE cedula = :c OR telefono = :t LIMIT 1");
+    $dupCheck->execute(['c' => $cedula, 't' => $telefono]);
+    if ($dupCheck->fetch()) {
+        Database::jsonResponse(['error' => true, 'message' => 'Ya existe un conductor registrado con esa cédula o teléfono.'], 409);
+    }
+
+    // Generar código y contraseña temporal
+    $codigoConductor = 'DRV-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+    $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    $passwordTemporal = '';
+    for ($i = 0; $i < 8; $i++) {
+        $passwordTemporal .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+    $passwordHash = password_hash($passwordTemporal, PASSWORD_BCRYPT);
+
+    // Guardar foto si vino en el formulario multipart
+    $fotoUrl = null;
+    if (isset($_FILES['foto_perfil']) && $_FILES['foto_perfil']['error'] === UPLOAD_ERR_OK) {
+        $upDir = __DIR__ . '/uploads/conductores/';
+        if (!file_exists($upDir)) @mkdir($upDir, 0777, true);
+        $ext = strtolower(pathinfo($_FILES['foto_perfil']['name'], PATHINFO_EXTENSION));
+        $fName = $codigoConductor . '.' . $ext;
+        if (move_uploaded_file($_FILES['foto_perfil']['tmp_name'], $upDir . $fName)) {
+            $fotoUrl = '/uploads/conductores/' . $fName;
+        }
+    }
+
+    try {
+        $stmtIns = $pdoRegist->prepare("
+            INSERT INTO conductores (
+                codigo_conductor, password_hash, nombre, apellido, cedula, telefono, email,
+                fecha_nacimiento, direccion, moto_marca, moto_modelo, moto_color, moto_placa, moto_ano,
+                licencia_conducir, foto_url, status, created_at
+            ) VALUES (
+                :codigo, :phash, :nombre, :apellido, :cedula, :telefono, :email,
+                :fnac, :dir, :marca, :modelo, :color, :placa, :ano,
+                :licencia, :foto, 'pendiente', NOW()
+            )
+        ");
+        $stmtIns->execute([
+            'codigo'   => $codigoConductor,
+            'phash'    => $passwordHash,
+            'nombre'   => $nombre,
+            'apellido' => $apellido,
+            'cedula'   => $cedula,
+            'telefono' => $telefono,
+            'email'    => $email ?: null,
+            'fnac'     => $fnac ?: null,
+            'dir'      => $dir ?: null,
+            'marca'    => $marca,
+            'modelo'   => $modelo,
+            'color'    => $color,
+            'placa'    => strtoupper($placa),
+            'ano'      => $ano,
+            'licencia' => $licencia ?: null,
+            'foto'     => $fotoUrl
+        ]);
+    } catch (Exception $e) {
+        Database::jsonResponse(['error' => true, 'message' => 'Error al guardar en base de datos: ' . $e->getMessage()], 500);
+    }
+
+    Database::jsonResponse([
+        'success'           => true,
+        'message'           => 'Postulación de conductor registrada exitosamente',
+        'codigo_conductor'  => $codigoConductor,
+        'password_temporal' => $passwordTemporal,
+        'cedula'            => $cedula
+    ], 201);
+}
+
+// -----------------------------------------------------------------------------
 // POST / PUT: ACTUALIZAR UBICACIÓN GPS EN TIEMPO REAL
 // -----------------------------------------------------------------------------
 if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {

@@ -28,13 +28,17 @@ import {
   DollarSign,
   Store,
   Smartphone,
-  Filter,
   LogOut,
-  Lock
+  Lock,
+  Copy,
+  Check,
+  Key,
+  CheckCircle
 } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
 import { MetodoPagoTipo } from '../../types/delivery';
 import { DeliveryRadarMap } from '../common/DeliveryRadarMap';
+import { api } from '../../services/api';
 
 export const DriverApp: React.FC = () => {
   const { 
@@ -64,9 +68,45 @@ export const DriverApp: React.FC = () => {
     playNotificationSound
   } = useDelivery();
 
+  // Autenticación de Conductor
   const [driverIdentifier, setDriverIdentifier] = useState('V-24891023');
+  const [driverCodigo, setDriverCodigo] = useState('');
   const [driverPassword, setDriverPassword] = useState('chofer123');
   const [driverAuthError, setDriverAuthError] = useState('');
+  const [driverAuthMode, setDriverAuthMode] = useState<'login' | 'register'>('login');
+  const [driverIsLoggingIn, setDriverIsLoggingIn] = useState(false);
+
+  // Formulario de Registro de Nuevo Conductor
+  const [regNombre, setRegNombre] = useState('');
+  const [regApellido, setRegApellido] = useState('');
+  const [regCedula, setRegCedula] = useState('');
+  const [regTelefono, setRegTelefono] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regFechaNac, setRegFechaNac] = useState('');
+  const [regDireccion, setRegDireccion] = useState('');
+  const [regMotoMarca, setRegMotoMarca] = useState('Bera');
+  const [regMotoModelo, setRegMotoModelo] = useState('SBR 150');
+  const [regMotoColor, setRegMotoColor] = useState('Negro');
+  const [regMotoPlaca, setRegMotoPlaca] = useState('');
+  const [regMotoAno, setRegMotoAno] = useState('2024');
+  const [regLicencia, setRegLicencia] = useState('');
+  const [regIsSubmitting, setRegIsSubmitting] = useState(false);
+  const [regError, setRegError] = useState('');
+  const [regSuccessResult, setRegSuccessResult] = useState<{
+    codigo_conductor: string;
+    password_temporal: string;
+    cedula: string;
+  } | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedPass, setCopiedPass] = useState(false);
+
+  // Cambio de Contraseña del Conductor
+  const [driverPassCurrent, setDriverPassCurrent] = useState('');
+  const [driverPassNew, setDriverPassNew] = useState('');
+  const [driverPassConfirm, setDriverPassConfirm] = useState('');
+  const [driverPassError, setDriverPassError] = useState('');
+  const [driverPassSuccess, setDriverPassSuccess] = useState(false);
+  const [driverPassLoading, setDriverPassLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'viajes' | 'mapa' | 'cartera' | 'ficha_legal' | 'resenas'>('viajes');
   const [photoPreview, setPhotoPreview] = useState<string>('https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80');
@@ -169,17 +209,127 @@ export const DriverApp: React.FC = () => {
 
   const isBlocked = driverWallet.bloqueadoPorSaldo;
 
-  const handleDriverLogin = (e: React.FormEvent) => {
+  const handleDriverLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!driverIdentifier.trim()) {
-      setDriverAuthError('Ingresa tu cédula o teléfono registrado.');
+      setDriverAuthError('Por favor introduce tu RIF o CEDULA.');
       return;
     }
-    const res = loginDriver(driverIdentifier.trim(), driverPassword);
-    if (!res?.success) {
-      setDriverAuthError(res?.error || 'Credenciales de conductor incorrectas');
+    if (!driverCodigo.trim()) {
+      setDriverAuthError('Ingresa tu CODIGO DE VIXY.');
+      return;
+    }
+    if (!driverPassword.trim()) {
+      setDriverAuthError('Ingresa tu CONTRASEÑA.');
+      return;
+    }
+    setDriverIsLoggingIn(true);
+    setDriverAuthError('');
+    try {
+      const res = await loginDriver(driverIdentifier.trim(), driverPassword, driverCodigo.trim());
+      if (!res?.success) {
+        setDriverAuthError(res?.error || 'Credenciales de conductor incorrectas.');
+      }
+    } catch (err: any) {
+      setDriverAuthError(err?.message || 'Error al conectar con el servidor.');
+    } finally {
+      setDriverIsLoggingIn(false);
+    }
+  };
+
+  const handleRegisterDriver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError('');
+    if (!regNombre.trim() || !regApellido.trim() || !regCedula.trim() || !regTelefono.trim()) {
+      setRegError('Nombre, apellido, cédula y teléfono son campos obligatorios.');
+      return;
+    }
+    if (!regMotoPlaca.trim()) {
+      setRegError('La placa de la moto es obligatoria.');
+      return;
+    }
+
+    setRegIsSubmitting(true);
+    try {
+      const payload = {
+        nombre: regNombre.trim(),
+        apellido: regApellido.trim(),
+        cedula: regCedula.trim().toUpperCase(),
+        telefono: regTelefono.trim(),
+        email: regEmail.trim(),
+        fecha_nacimiento: regFechaNac,
+        direccion: regDireccion.trim(),
+        moto_marca: regMotoMarca.trim(),
+        moto_modelo: regMotoModelo.trim(),
+        moto_color: regMotoColor.trim(),
+        moto_placa: regMotoPlaca.trim().toUpperCase(),
+        moto_ano: regMotoAno.trim(),
+        licencia_conducir: regLicencia.trim()
+      };
+      const res = await api.registerConductor(payload);
+      if (res && res.success && res.codigo_conductor) {
+        setRegSuccessResult({
+          codigo_conductor: res.codigo_conductor,
+          password_temporal: res.password_temporal || '',
+          cedula: res.cedula || regCedula.trim().toUpperCase()
+        });
+        // Pre-llenar datos para facilitar el login
+        setDriverIdentifier(res.cedula || regCedula.trim().toUpperCase());
+        setDriverCodigo(res.codigo_conductor);
+        setDriverPassword(res.password_temporal || '');
+      } else {
+        setRegError(res?.mensaje || 'No se pudo procesar el registro del conductor.');
+      }
+    } catch (err: any) {
+      setRegError(err?.message || 'Error de conexión al registrar conductor.');
+    } finally {
+      setRegIsSubmitting(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, type: 'code' | 'pass') => {
+    navigator.clipboard.writeText(text);
+    if (type === 'code') {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
     } else {
-      setDriverAuthError('');
+      setCopiedPass(true);
+      setTimeout(() => setCopiedPass(false), 2000);
+    }
+  };
+
+  const handleChangeDriverPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDriverPassError('');
+    setDriverPassSuccess(false);
+    if (!driverPassNew.trim()) {
+      setDriverPassError('Ingresa la nueva contraseña.');
+      return;
+    }
+    if (driverPassNew.length < 6) {
+      setDriverPassError('La nueva contraseña debe tener mínimo 6 caracteres.');
+      return;
+    }
+    if (driverPassNew !== driverPassConfirm) {
+      setDriverPassError('Las contraseñas no coinciden.');
+      return;
+    }
+    setDriverPassLoading(true);
+    try {
+      const res = await api.changePassword(driverPassNew.trim(), driverPassCurrent.trim());
+      if (res && res.success) {
+        setDriverPassSuccess(true);
+        setDriverPassCurrent('');
+        setDriverPassNew('');
+        setDriverPassConfirm('');
+        setTimeout(() => setDriverPassSuccess(false), 5000);
+      } else {
+        setDriverPassError(res?.mensaje || 'Error al actualizar la contraseña');
+      }
+    } catch (err: any) {
+      setDriverPassError(err?.message || 'Error de red con el servidor');
+    } finally {
+      setDriverPassLoading(false);
     }
   };
 
@@ -192,8 +342,9 @@ export const DriverApp: React.FC = () => {
   // IF DRIVER IS LOGGED OUT
   if (!driverLoggedIn) {
     return (
-      <div className="flex flex-col h-full bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 p-4 items-center justify-center overflow-y-auto">
-        <div className="w-full max-w-sm bg-white dark:bg-neutral-850 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 my-auto">
+      <div className="flex flex-col h-full bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 p-3 sm:p-4 items-center justify-center overflow-y-auto">
+        <div className="w-full max-w-md bg-white dark:bg-neutral-850 p-5 sm:p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 my-auto">
+          {/* Header */}
           <div className="text-center space-y-1">
             <div className="w-14 h-14 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-amber-500/20">
               <Bike className="w-7 h-7" />
@@ -202,66 +353,414 @@ export const DriverApp: React.FC = () => {
             <p className="text-xs text-neutral-500">App para Repartidores y Flota de Motos</p>
           </div>
 
-          {driverAuthError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{driverAuthError}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleDriverLogin} className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-neutral-500">Cédula o Teléfono Registrado</label>
-              <input
-                type="text"
-                required
-                value={driverIdentifier}
-                onChange={(e) => setDriverIdentifier(e.target.value)}
-                placeholder="V-24891023 o 0414-9988776"
-                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-neutral-500">Contraseña de Repartidor</label>
-              <input
-                type="password"
-                required
-                value={driverPassword}
-                onChange={(e) => setDriverPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Lock className="w-4 h-4" />
-              <span>Iniciar Turno de Reparto</span>
-            </button>
-          </form>
-
-          <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
-            <a
-              href="/registro-delivery/"
-              className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 px-4 rounded-xl bg-purple-600/10 hover:bg-purple-600/20 text-purple-600 dark:text-purple-400 font-bold text-xs border border-purple-500/30 transition cursor-pointer"
-            >
-              <span>¿Quieres ser Repartidor? Regístrate aquí</span>
-            </a>
-
+          {/* Mode Switcher Tabs */}
+          <div className="flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
             <button
               type="button"
               onClick={() => {
-                loginDriver('V-24891023', 'chofer123');
+                setDriverAuthMode('login');
                 setDriverAuthError('');
               }}
-              className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer block mx-auto"
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                driverAuthMode === 'login'
+                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+              }`}
             >
-              Acceso Rápido como Conductor Demo (Carlos Ramírez)
+              <Lock className="w-3.5 h-3.5" />
+              <span>Iniciar Sesión</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDriverAuthMode('register');
+                setRegError('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                driverAuthMode === 'register'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+              }`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Registrarme</span>
             </button>
           </div>
+
+          {/* MODE: LOGIN */}
+          {driverAuthMode === 'login' && (
+            <div className="space-y-3">
+              {driverAuthError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{driverAuthError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleDriverLogin} className="space-y-3">
+                {/* Campo 1: RIF o CEDULA */}
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">RIF o CEDULA:</label>
+                  <input
+                    type="text"
+                    required
+                    value={driverIdentifier}
+                    onChange={(e) => setDriverIdentifier(e.target.value)}
+                    placeholder="XXXXXXX"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                {/* Campo 2: CODIGO DE VIXY */}
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">CODIGO DE VIXY:</label>
+                  <input
+                    type="text"
+                    required
+                    value={driverCodigo}
+                    onChange={(e) => setDriverCodigo(e.target.value.toUpperCase())}
+                    placeholder="XXXXXXX"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold tracking-wider"
+                  />
+                </div>
+
+                {/* Campo 3: CONTRASEÑA */}
+                <div className="space-y-1">
+                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">CONTRASEÑA:</label>
+                  <input
+                    type="password"
+                    required
+                    value={driverPassword}
+                    onChange={(e) => setDriverPassword(e.target.value)}
+                    placeholder="XXXXXXX"
+                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={driverIsLoggingIn}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>{driverIsLoggingIn ? 'Verificando credenciales...' : 'Iniciar Turno de Reparto'}</span>
+                </button>
+              </form>
+
+              <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDriverAuthMode('register');
+                    setRegError('');
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 px-4 rounded-xl bg-purple-600/10 hover:bg-purple-600/20 text-purple-600 dark:text-purple-400 font-bold text-xs border border-purple-500/30 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>¿Aún no estás registrado? Afíliate aquí</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDriverIdentifier('V-24891023');
+                    setDriverCodigo('DRV-2026-DEMO');
+                    setDriverPassword('chofer123');
+                    loginDriver('V-24891023', 'chofer123', 'DRV-2026-DEMO');
+                    setDriverAuthError('');
+                  }}
+                  className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer block mx-auto"
+                >
+                  Acceso Rápido como Conductor Demo (Carlos Ramírez)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* MODE: REGISTER */}
+          {driverAuthMode === 'register' && (
+            <div className="space-y-3">
+              {regSuccessResult ? (
+                /* Éxito de Registro con Credenciales Mostradas */
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl space-y-3.5">
+                  <div className="text-center space-y-1">
+                    <div className="w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center mx-auto">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                      ¡Registro de Conductor Exitoso!
+                    </h3>
+                    <p className="text-[11px] text-neutral-600 dark:text-neutral-300">
+                      Guarda tus credenciales de acceso para iniciar sesión en Vixy Conductor:
+                    </p>
+                  </div>
+
+                  {/* Tarjeta de Credenciales */}
+                  <div className="p-3 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 space-y-2.5">
+                    {/* Código de Conductor */}
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400">Código de Conductor</span>
+                      <div className="flex items-center justify-between bg-neutral-50 dark:bg-neutral-900 p-2 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                        <span className="font-mono font-bold text-xs text-amber-600 dark:text-amber-400 tracking-wider">
+                          {regSuccessResult.codigo_conductor}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(regSuccessResult.codigo_conductor, 'code')}
+                          className="text-[10px] font-bold text-neutral-500 hover:text-amber-500 flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedCode ? 'Copiado' : 'Copiar'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Contraseña Temporal */}
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400">Contraseña Temporal</span>
+                      <div className="flex items-center justify-between bg-neutral-50 dark:bg-neutral-900 p-2 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                        <span className="font-mono font-bold text-xs text-blue-600 dark:text-blue-400 tracking-wider">
+                          {regSuccessResult.password_temporal}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(regSuccessResult.password_temporal, 'pass')}
+                          className="text-[10px] font-bold text-neutral-500 hover:text-blue-500 flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedPass ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedPass ? 'Copiado' : 'Copiar'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Cédula Registrada */}
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400">Cédula de Identidad</span>
+                      <p className="font-mono font-bold text-xs text-neutral-700 dark:text-neutral-300">
+                        {regSuccessResult.cedula}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                    <p className="font-bold flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      Estado: En Revisión Administrativa
+                    </p>
+                    <p className="text-[10px] leading-tight">
+                      Tu solicitud ha sido registrada en el sistema. El equipo de Vixy validará tus documentos y activará tu cuenta para recibir carreras.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDriverAuthMode('login');
+                      setRegSuccessResult(null);
+                    }}
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Ir a Iniciar Sesión con mis Credenciales</span>
+                  </button>
+                </div>
+              ) : (
+                /* Formulario de Afiliación */
+                <form onSubmit={handleRegisterDriver} className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                  {regError && (
+                    <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 text-[11px] font-semibold flex items-center gap-2">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{regError}</span>
+                    </div>
+                  )}
+
+                  {/* Sección: Datos Personales */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-amber-500 block border-b border-neutral-200 dark:border-neutral-700 pb-1">
+                      1. Datos del Conductor
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Nombre *</label>
+                        <input
+                          type="text"
+                          required
+                          value={regNombre}
+                          onChange={(e) => setRegNombre(e.target.value)}
+                          placeholder="Ej. Carlos"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Apellido *</label>
+                        <input
+                          type="text"
+                          required
+                          value={regApellido}
+                          onChange={(e) => setRegApellido(e.target.value)}
+                          placeholder="Ej. Ramírez"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Cédula *</label>
+                        <input
+                          type="text"
+                          required
+                          value={regCedula}
+                          onChange={(e) => setRegCedula(e.target.value.toUpperCase())}
+                          placeholder="V-24891023"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Teléfono WhatsApp *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={regTelefono}
+                          onChange={(e) => setRegTelefono(e.target.value)}
+                          placeholder="0414-9988776"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Correo Electrónico</label>
+                        <input
+                          type="email"
+                          value={regEmail}
+                          onChange={(e) => setRegEmail(e.target.value)}
+                          placeholder="conductor@gmail.com"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Fecha de Nacimiento</label>
+                        <input
+                          type="date"
+                          value={regFechaNac}
+                          onChange={(e) => setRegFechaNac(e.target.value)}
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <label className="text-[10px] font-bold text-neutral-500">Dirección / Sector de Residencia</label>
+                      <input
+                        type="text"
+                        value={regDireccion}
+                        onChange={(e) => setRegDireccion(e.target.value)}
+                        placeholder="Ej. Petare, Caracas"
+                        className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sección: Datos de la Moto */}
+                  <div className="space-y-2 pt-1">
+                    <span className="text-[10px] uppercase font-bold text-amber-500 block border-b border-neutral-200 dark:border-neutral-700 pb-1">
+                      2. Datos de la Motocicleta
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Marca *</label>
+                        <input
+                          type="text"
+                          required
+                          value={regMotoMarca}
+                          onChange={(e) => setRegMotoMarca(e.target.value)}
+                          placeholder="Bera, Empire, etc."
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-semibold"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Modelo *</label>
+                        <input
+                          type="text"
+                          required
+                          value={regMotoModelo}
+                          onChange={(e) => setRegMotoModelo(e.target.value)}
+                          placeholder="SBR 150, Horse, etc."
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-semibold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Color</label>
+                        <input
+                          type="text"
+                          value={regMotoColor}
+                          onChange={(e) => setRegMotoColor(e.target.value)}
+                          placeholder="Negro"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Año</label>
+                        <input
+                          type="text"
+                          value={regMotoAno}
+                          onChange={(e) => setRegMotoAno(e.target.value)}
+                          placeholder="2024"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-amber-500">Placa INTT *</label>
+                        <input
+                          type="text"
+                          required
+                          value={regMotoPlaca}
+                          onChange={(e) => setRegMotoPlaca(e.target.value.toUpperCase())}
+                          placeholder="AA1B22C"
+                          className="w-full p-2 bg-amber-500/10 rounded-xl border border-amber-500/40 text-xs font-mono font-bold text-amber-600 dark:text-amber-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <label className="text-[10px] font-bold text-neutral-500">N° Licencia de Conducir (2da Grado)</label>
+                      <input
+                        type="text"
+                        value={regLicencia}
+                        onChange={(e) => setRegLicencia(e.target.value)}
+                        placeholder="Ej. LIC-24891023"
+                        className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={regIsSubmitting}
+                    className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{regIsSubmitting ? 'Registrando conductor...' : 'Completar Registro y Generar Credenciales'}</span>
+                  </button>
+
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setDriverAuthMode('login')}
+                      className="text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white font-semibold cursor-pointer"
+                    >
+                      ¿Ya te registraste? Inicia sesión aquí
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1086,6 +1585,72 @@ export const DriverApp: React.FC = () => {
               <p>✓ Vencimiento Licencia: {driver.legal?.licenciaVencimiento || '2026-12-31'}</p>
               <p>✓ Certificado Médico Vial: {driver.legal?.certificadoMedicoNumero || (driver.legal as any)?.certificadoMedicoNro || 'S/N'} (Vence {driver.legal?.certificadoMedicoVencimiento || '2026-12-31'})</p>
               <p>✓ Póliza RCV: {driver.legal?.rcvAseguradora || 'Seguros Caracas'} - Póliza N° {driver.legal?.rcvPolizaNumero || (driver.legal as any)?.rcvPolizaNro || 'S/N'} (Vence {driver.legal?.rcvVencimiento || '2026-12-31'})</p>
+            </div>
+
+            {/* Sección: Cambiar Contraseña del Conductor */}
+            <div className="p-3 bg-blue-500/5 rounded-xl border border-blue-500/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <h5 className="font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Seguridad: Cambiar Contraseña</span>
+                </h5>
+                <span className="text-[10px] bg-blue-500/10 text-blue-500 font-mono px-2 py-0.5 rounded-full font-bold">
+                  {driver.codigoConductor || 'DRV-ACTIVO'}
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-500">
+                Si te registraste con la contraseña temporal generada por el sistema, cámbiala aquí por tu clave personal.
+              </p>
+
+              {driverPassError && (
+                <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 text-[11px] font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{driverPassError}</span>
+                </div>
+              )}
+
+              {driverPassSuccess && (
+                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 text-[11px] font-semibold flex items-center gap-2">
+                  <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>¡Contraseña de conductor actualizada con éxito!</span>
+                </div>
+              )}
+
+              <form onSubmit={handleChangeDriverPassword} className="space-y-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-neutral-500">Nueva Contraseña</label>
+                    <input
+                      type="password"
+                      required
+                      value={driverPassNew}
+                      onChange={(e) => setDriverPassNew(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-neutral-500">Confirmar Nueva Contraseña</label>
+                    <input
+                      type="password"
+                      required
+                      value={driverPassConfirm}
+                      onChange={(e) => setDriverPassConfirm(e.target.value)}
+                      placeholder="Repite la contraseña"
+                      className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={driverPassLoading}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition disabled:opacity-50"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{driverPassLoading ? 'Actualizando contraseña...' : 'Actualizar Contraseña'}</span>
+                </button>
+              </form>
             </div>
           </div>
         )}
