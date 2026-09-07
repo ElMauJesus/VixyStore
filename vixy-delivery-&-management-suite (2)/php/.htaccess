@@ -1,0 +1,26 @@
+# ==============================================================================
+# VIXY DELIVERY PLATFORM - BACKEND API .HTACCESS (cPanel Apache Compatible)
+# ==============================================================================
+
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Si es una petición OPTIONS (pre-flight de navegadores), responder 200 directo
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ $1 [R=200,L]
+
+    # Proteger archivos de configuración y base de datos contra accesos directos
+    <FilesMatch "^(config\.php|db\.php|\.env.*)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Deshabilitar listado de directorios
+Options -Indexes

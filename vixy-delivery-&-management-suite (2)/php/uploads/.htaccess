@@ -1,0 +1,7 @@
+# Permitir lectura directa de archivos multimedia
+<IfModule mod_mime.c>
+    AddType image/jpeg .jpg .jpeg
+    AddType image/png .png
+    AddType image/webp .webp
+</IfModule>
+Options -Indexes
