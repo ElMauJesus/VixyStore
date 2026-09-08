@@ -52,7 +52,6 @@ import { useDelivery } from '../../context/DeliveryContext';
 import { Producto, MetodoPagoTipo } from '../../types/delivery';
 import { RUBROS_COMERCIO_DISPONIBLES } from '../../data/initialData';
 import { StoreClaimsManager } from '../store/StoreClaimsManager';
-import { DriverApp } from './DriverApp';
 import { api } from '../../services/api';
 
 export const StoreApp: React.FC = () => {
@@ -117,12 +116,6 @@ export const StoreApp: React.FC = () => {
   );
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  // Dual Login Role Selector
-  const [loginRole, setLoginRole] = useState<'comercio' | 'delivery'>('comercio');
-  const [driverLoginId, setDriverLoginId] = useState('');
-  const [driverLoginCodigo, setDriverLoginCodigo] = useState('');
-  const [driverLoginPass, setDriverLoginPass] = useState('');
-  const [driverLoginError, setDriverLoginError] = useState('');
 
   // Store Login State when logged out
   const [storeLoginId, setStoreLoginId] = useState('');
@@ -266,35 +259,6 @@ export const StoreApp: React.FC = () => {
     updateStoreCategoriasCatalogo(updated);
   };
 
-  const handleDriverLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!driverLoginId.trim()) {
-      setDriverLoginError('Por favor introduce tu Cédula o Teléfono.');
-      return;
-    }
-    if (!driverLoginCodigo.trim()) {
-      setDriverLoginError('Ingresa tu CÓDIGO DE REPARTIDOR (DRV-...).');
-      return;
-    }
-    if (!driverLoginPass.trim()) {
-      setDriverLoginError('Ingresa tu CONTRASEÑA.');
-      return;
-    }
-    setIsLoggingIn(true);
-    setDriverLoginError('');
-    try {
-      const res = await loginDriver(driverLoginId.trim(), driverLoginPass.trim(), driverLoginCodigo.trim());
-      if (!res?.success) {
-        setDriverLoginError(res?.error || 'Credenciales de delivery incorrectas o cuenta no registrada.');
-      } else {
-        setDriverLoginError('');
-      }
-    } catch (err: any) {
-      setDriverLoginError('Error de comunicación con la base de datos.');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
 
   const handleStoreLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -528,242 +492,145 @@ export const StoreApp: React.FC = () => {
       return 0;
     });
 
-  if (driverLoggedIn && !storeLoggedIn) {
-    return <DriverApp />;
-  }
 
   if (!storeLoggedIn) {
     return (
-      <div className="flex flex-col h-full bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 p-4 items-center justify-center overflow-y-auto">
-        <div className="w-full max-w-md bg-white dark:bg-neutral-850 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 my-auto">
-          {/* Header */}
-          <div className="text-center space-y-1">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 border transition-all ${
-              loginRole === 'comercio' 
-                ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' 
-                : 'bg-purple-600/10 text-purple-400 border-purple-500/20'
-            }`}>
-              {loginRole === 'comercio' ? <Store className="w-7 h-7" /> : <Bike className="w-7 h-7" />}
+      <div className="relative flex flex-col min-h-full h-full bg-[#f6f2fd] text-slate-900 p-4 sm:p-6 md:p-8 items-center justify-center overflow-y-auto select-none">
+        {/* Subtle geometric light-purple ambient background */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-32 -left-32 w-96 h-96 bg-purple-200/40 rounded-full blur-3xl" />
+          <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-indigo-200/40 rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-purple-100/70 to-transparent" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-gradient-to-tr from-purple-100/70 to-transparent" />
+        </div>
+
+        <div className="relative z-10 w-full max-w-md bg-white rounded-[32px] p-6 sm:p-9 shadow-[0_20px_50px_rgba(76,29,149,0.12)] border border-purple-100/80 space-y-5 sm:space-y-6 my-auto">
+          {/* Header con Icono House */}
+          <div className="text-center">
+            <div className="flex items-center justify-center mx-auto -my-1 sm:-my-2">
+              <img
+                src="./houseicon.png"
+                alt="Comercio"
+                className="w-24 h-24 sm:w-28 sm:h-28 object-contain select-none pointer-events-none drop-shadow-sm transition-transform hover:scale-105"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (!target.src.endsWith('/houseicon.png')) {
+                    target.src = './houseicon.png';
+                  }
+                }}
+              />
             </div>
-            <h2 className="text-xl font-black text-neutral-900 dark:text-white">Vixy Delivery</h2>
-            <p className="text-xs text-neutral-500 font-medium">
-              {loginRole === 'comercio' ? 'Panel Comercial & Despacho de Pedidos' : 'Portal de Repartidores & Conductores'}
-            </p>
+            <h2 className="text-xl sm:text-2xl font-black text-[#1e1035] tracking-tight">
+              Panel Comercial &amp; Despacho de Pedidos
+            </h2>
           </div>
 
-          {/* DUAL SELECTOR: COMERCIO VS DELIVERY */}
-          <div className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setLoginRole('comercio');
-                setStoreLoginError('');
-              }}
-              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
-                loginRole === 'comercio'
-                  ? 'bg-amber-500 text-slate-950 shadow-md font-black'
-                  : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white font-medium'
-              }`}
-            >
-              <Store className="w-4 h-4" />
-              <span>Soy Comercio</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLoginRole('delivery');
-                setDriverLoginError('');
-              }}
-              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
-                loginRole === 'delivery'
-                  ? 'bg-purple-600 text-white shadow-md font-black'
-                  : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white font-medium'
-              }`}
-            >
-              <Bike className="w-4 h-4" />
-              <span>Soy Delivery</span>
-            </button>
-          </div>
-
-          {/* TAB 1: FORMULARIO COMERCIO */}
-          {loginRole === 'comercio' && (
-            <div className="space-y-4">
-              {storeLoginError && (
-                <div className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-start gap-2.5 ${
-                  storeLoginError.toLowerCase().includes('no te han verificado')
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 dark:text-amber-400'
-                    : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
-                }`}>
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-black block uppercase text-[10px] tracking-wider">
-                      {storeLoginError.toLowerCase().includes('no te han verificado') ? 'Cuenta No Verificada' : 'Aviso de Ingreso'}
-                    </span>
-                    <span className="text-xs">{storeLoginError}</span>
-                  </div>
+          {/* FORMULARIO LOGIN DE COMERCIO */}
+          <div className="space-y-4">
+            {storeLoginError && (
+              <div className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-start gap-2.5 ${
+                storeLoginError.toLowerCase().includes('no te han verificado')
+                  ? 'bg-purple-500/15 border-purple-500/40 text-purple-700 dark:text-purple-300'
+                  : 'bg-red-500/10 border-red-500/30 text-red-600'
+              }`}>
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-black block uppercase text-[10px] tracking-wider">
+                    {storeLoginError.toLowerCase().includes('no te han verificado') ? 'Cuenta No Verificada' : 'Aviso de Ingreso'}
+                  </span>
+                  <span className="text-xs">{storeLoginError}</span>
                 </div>
-              )}
+              </div>
+            )}
 
-              <form onSubmit={handleStoreLogin} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">RIF o Cédula:</label>
+            <form onSubmit={handleStoreLogin} className="space-y-3.5">
+              <div className="space-y-1 text-left">
+                <label className="text-xs uppercase font-black text-[#581c87] tracking-wider block">
+                  RIF O CEDULA:
+                </label>
+                <div className="flex items-center bg-[#23153c] focus-within:bg-[#2c1b4b] rounded-2xl px-3.5 py-3 transition shadow-inner border border-transparent focus-within:border-purple-400">
+                  <User className="w-5 h-5 text-purple-300 shrink-0 mr-3" />
                   <input
                     type="text"
                     required
                     value={storeLoginId}
                     onChange={(e) => setStoreLoginId(e.target.value)}
-                    placeholder="J-12345678-0 o V-12345678"
-                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
+                    placeholder="XXXXXXXX"
+                    className="w-full bg-transparent text-white placeholder:text-purple-300/40 text-sm font-bold tracking-wider outline-none font-mono"
                   />
                 </div>
+              </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Código de Vixy:</label>
+              <div className="space-y-1 text-left">
+                <label className="text-xs uppercase font-black text-[#581c87] tracking-wider block">
+                  CODIGO DE VIXY:
+                </label>
+                <div className="flex items-center bg-[#23153c] focus-within:bg-[#2c1b4b] rounded-2xl px-3.5 py-3 transition shadow-inner border border-transparent focus-within:border-purple-400">
+                  <ShieldCheck className="w-5 h-5 text-purple-300 shrink-0 mr-3" />
                   <input
                     type="text"
                     required
                     value={storeLoginCodigo}
                     onChange={(e) => setStoreLoginCodigo(e.target.value.toUpperCase())}
-                    placeholder="COM-2026-XXXX"
-                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold tracking-wider"
+                    placeholder="XXXXXXXX"
+                    className="w-full bg-transparent text-white placeholder:text-purple-300/40 text-sm font-bold tracking-wider outline-none font-mono uppercase"
                   />
                 </div>
+              </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Contraseña:</label>
+              <div className="space-y-1 text-left">
+                <label className="text-xs uppercase font-black text-[#581c87] tracking-wider block">
+                  CONTRASEÑA:
+                </label>
+                <div className="flex items-center bg-[#23153c] focus-within:bg-[#2c1b4b] rounded-2xl px-3.5 py-3 transition shadow-inner border border-transparent focus-within:border-purple-400">
+                  <Lock className="w-5 h-5 text-purple-300 shrink-0 mr-3" />
                   <input
                     type="password"
                     required
                     value={storeLoginPass}
                     onChange={(e) => setStoreLoginPass(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                    placeholder="XXXXXXXX"
+                    className="w-full bg-transparent text-white placeholder:text-purple-300/40 text-sm font-bold tracking-wider outline-none font-mono"
                   />
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 active:scale-98 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {isLoggingIn ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Verificando en Base de Datos...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Ingresar a mi Comercio</span>
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
-                <p className="text-[11px] text-neutral-500">¿Aún no has registrado tu comercio en Vixy?</p>
-                <a
-                  href="/registro-comercios/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 hover:underline font-bold"
-                >
-                  <span>Afiliar nuevo comercio aquí</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
               </div>
+
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full py-3.5 sm:py-4 px-6 bg-gradient-to-r from-[#6d28d9] via-[#7c3aed] to-[#6d28d9] hover:from-[#5b21b6] hover:to-[#6d28d9] disabled:opacity-50 active:scale-98 text-white font-black rounded-full text-sm sm:text-base shadow-[0_12px_24px_rgba(109,40,217,0.35)] transition transform cursor-pointer flex items-center justify-center gap-2 mt-4"
+              >
+                {isLoggingIn ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Verificando en Base de Datos...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    <span>Ingresar a mi Comercio</span>
+                    <span className="text-lg leading-none">→</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="pt-3 border-t border-purple-100 text-center space-y-2">
+              <p className="text-xs font-semibold text-neutral-600">¿Aún no has registrado tu comercio en Vixy?</p>
+              <a
+                href="/registro-comercios/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-black text-[#6d28d9] hover:text-[#5b21b6] hover:underline"
+              >
+                <span>Afiliar nuevo comercio aquí</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <p className="text-[11px] text-neutral-400 max-w-xs mx-auto leading-relaxed">
+                Al registrarte recibirás tu <strong className="text-neutral-600">Código de Comercio</strong> y una <strong className="text-neutral-600">contraseña temporal</strong> para iniciar sesión.
+              </p>
             </div>
-          )}
-
-          {/* TAB 2: FORMULARIO DELIVERY */}
-          {loginRole === 'delivery' && (
-            <div className="space-y-4">
-              {driverLoginError && (
-                <div className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-start gap-2.5 ${
-                  driverLoginError.toLowerCase().includes('no te han verificado')
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 dark:text-amber-400'
-                    : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
-                }`}>
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-black block uppercase text-[10px] tracking-wider">
-                      {driverLoginError.toLowerCase().includes('no te han verificado') ? 'Cuenta No Verificada' : 'Aviso de Ingreso'}
-                    </span>
-                    <span className="text-xs">{driverLoginError}</span>
-                  </div>
-                </div>
-              )}
-
-              <form onSubmit={handleDriverLogin} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Cédula o Teléfono:</label>
-                  <input
-                    type="text"
-                    required
-                    value={driverLoginId}
-                    onChange={(e) => setDriverLoginId(e.target.value)}
-                    placeholder="V-12345678 o 04141234567"
-                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Código de Repartidor:</label>
-                  <input
-                    type="text"
-                    required
-                    value={driverLoginCodigo}
-                    onChange={(e) => setDriverLoginCodigo(e.target.value.toUpperCase())}
-                    placeholder="DRV-2026-XXXX"
-                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold tracking-wider"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs uppercase font-bold text-neutral-700 dark:text-neutral-300 block">Contraseña:</label>
-                  <input
-                    type="password"
-                    required
-                    value={driverLoginPass}
-                    onChange={(e) => setDriverLoginPass(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full p-2.5 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 active:scale-98 text-white font-black rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {isLoggingIn ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Verificando en Base de Datos...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Ingresar como Repartidor / Delivery</span>
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center space-y-2">
-                <p className="text-[11px] text-neutral-500">¿Aún no te has registrado como repartidor en Vixy?</p>
-                <a
-                  href="/registro-conductores/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400 hover:underline font-bold"
-                >
-                  <span>Afiliarse como nuevo repartidor aquí</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     );
@@ -771,14 +638,14 @@ export const StoreApp: React.FC = () => {
 
 
   return (
-    <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
+    <div className="flex flex-col h-full bg-[#f8f6fc] dark:bg-[#0e071c] text-neutral-900 dark:text-neutral-100">
       {/* Top Header */}
-      <div className="px-3 py-2.5 bg-white dark:bg-neutral-850 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between shrink-0 gap-2">
+      <div className="px-4 py-3 bg-white dark:bg-[#160b29] border-b border-purple-100 dark:border-purple-900/40 flex items-center justify-between shrink-0 gap-2 shadow-xs">
         <div className="flex items-center gap-2 min-w-0">
           <img
             src={store.logoUrl}
             alt={store.nombre}
-            className="w-8 h-8 rounded-xl object-cover border border-amber-500 shrink-0"
+            className="w-8 h-8 rounded-xl object-cover border border-purple-500 shrink-0"
           />
           <div className="min-w-0">
             <div className="flex items-center gap-1">
@@ -803,7 +670,7 @@ export const StoreApp: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('cartera')}
-            className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 active:scale-95 text-amber-600 dark:text-amber-400 text-[10px] font-mono font-bold flex items-center gap-1 border border-amber-500/30 transition cursor-pointer"
+            className="px-2 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 active:scale-95 text-purple-600 dark:text-purple-400 text-[10px] font-mono font-bold flex items-center gap-1 border border-purple-500/30 transition cursor-pointer"
             title="Ver Cartera Comercial"
           >
             <Wallet className="w-3 h-3" />
@@ -850,7 +717,7 @@ export const StoreApp: React.FC = () => {
       )}
 
       {/* Desktop Web Subnav Tabs */}
-      <div className="hidden md:flex px-4 py-2 bg-white dark:bg-neutral-850 border-b border-neutral-200 dark:border-neutral-800 items-center justify-between gap-2 shrink-0">
+      <div className="hidden md:flex px-4 py-2.5 bg-white dark:bg-[#160b29] border-b border-purple-100 dark:border-purple-900/40 items-center justify-between gap-2 shrink-0 shadow-xs">
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveTab('pedidos')}
@@ -863,7 +730,7 @@ export const StoreApp: React.FC = () => {
             <ChefHat className="w-3.5 h-3.5" />
             <span>Pedidos & Comandas</span>
             {pendingApprovalOrders.length > 0 && (
-              <span className="px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[10px] font-black">
+              <span className="px-1.5 py-0.2 bg-purple-600 text-white rounded-full text-[10px] font-black">
                 {pendingApprovalOrders.length}
               </span>
             )}
@@ -932,7 +799,7 @@ export const StoreApp: React.FC = () => {
 
         <button
           onClick={() => setShowManualOrderModal(true)}
-          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+          className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Solicitar Despacho Manual</span>
@@ -943,7 +810,7 @@ export const StoreApp: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Global Incoming Orders Alert Banner across all tabs */}
         {pendingApprovalOrders.length > 0 && (
-          <div className="p-3 bg-gradient-to-r from-amber-500 via-purple-600 to-amber-600 text-white rounded-2xl shadow-md space-y-2 shrink-0 border border-white/20">
+          <div className="p-3 bg-gradient-to-r from-purple-600 via-purple-600 to-indigo-600 text-white rounded-2xl shadow-md space-y-2 shrink-0 border border-white/20">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0 animate-pulse">
@@ -954,7 +821,7 @@ export const StoreApp: React.FC = () => {
                     <span className="px-1.5 py-0.2 bg-white text-purple-700 font-black text-[9px] rounded uppercase tracking-wider">
                       ¡Nuevo Pedido!
                     </span>
-                    <span className="text-[11px] font-mono font-bold text-amber-100">
+                    <span className="text-[11px] font-mono font-bold text-purple-100">
                       #{pendingApprovalOrders[0].codigoSeguimiento}
                     </span>
                   </div>
@@ -1002,7 +869,7 @@ export const StoreApp: React.FC = () => {
             <div className="p-4 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-amber-500 block">Vixy Store - Mi Cuenta</span>
+                  <span className="text-[10px] uppercase font-bold text-purple-500 block">Vixy Store - Mi Cuenta</span>
                   <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
                     Datos del Comercio y Configuración
                   </h3>
@@ -1027,7 +894,7 @@ export const StoreApp: React.FC = () => {
               {/* Información General */}
               <div className="p-4 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 space-y-3">
                 <h4 className="font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-                  <Building className="w-4 h-4 text-amber-500" />
+                  <Building className="w-4 h-4 text-purple-500" />
                   Información Legal y Comercial (Venezuela)
                 </h4>
 
@@ -1058,7 +925,7 @@ export const StoreApp: React.FC = () => {
                 {/* Rubro Comercial Amplio (No solo comida) y Personalización */}
                 <div className="space-y-2 p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-xl border border-neutral-200 dark:border-neutral-700/60">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                    <label className="text-[10px] font-bold uppercase text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
                       <FolderTree className="w-3.5 h-3.5" />
                       Rubro Comercial (No solo comida: Farmacia, Ferretería, etc.)
                     </label>
@@ -1089,7 +956,7 @@ export const StoreApp: React.FC = () => {
                         placeholder="Ej. Joyería y Relojería, Óptica, Vivero y Plantas, etc."
                         value={storeCustomRubro}
                         onChange={(e) => setStoreCustomRubro(e.target.value)}
-                        className="w-full p-2 bg-amber-500/10 border border-amber-500/40 rounded-xl text-xs font-bold text-neutral-900 dark:text-white"
+                        className="w-full p-2 bg-purple-500/10 border border-purple-500/40 rounded-xl text-xs font-bold text-neutral-900 dark:text-white"
                       />
                       <p className="text-[10px] text-neutral-400">
                         Este rubro personalizado se guardará en la base de datos SQL para identificar tu negocio en toda la plataforma.
@@ -1206,7 +1073,7 @@ export const StoreApp: React.FC = () => {
                   </div>
 
                   <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-xl space-y-1.5">
-                    <span className="font-bold text-amber-600 dark:text-amber-400 block text-xs">
+                    <span className="font-bold text-purple-600 dark:text-purple-400 block text-xs">
                       🟡 Binance Pay (USDT)
                     </span>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -1262,7 +1129,7 @@ export const StoreApp: React.FC = () => {
               <div className="p-4 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-amber-500" />
+                    <Layers className="w-4 h-4 text-purple-500" />
                     Opciones y Categorías de Catálogo Personalizadas
                   </h4>
                   <span className="text-[10px] text-neutral-400 font-mono">
@@ -1320,7 +1187,7 @@ export const StoreApp: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full py-2 bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs flex items-center justify-center gap-2 cursor-pointer transition"
+                className="w-full py-2 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs flex items-center justify-center gap-2 cursor-pointer transition"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Guardar Cambios del Comercio</span>
@@ -1417,7 +1284,7 @@ export const StoreApp: React.FC = () => {
             {/* Header & Add Button */}
             <div className="p-3.5 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <span className="text-[10px] uppercase font-bold text-amber-500 block">Gestión de Catálogo</span>
+                <span className="text-[10px] uppercase font-bold text-purple-500 block">Gestión de Catálogo</span>
                 <h3 className="text-xs font-bold text-neutral-900 dark:text-white truncate">
                   Artículos del Menú ({filteredProducts.length} de {store.productos?.length ?? 0})
                 </h3>
@@ -1428,7 +1295,7 @@ export const StoreApp: React.FC = () => {
 
               <button
                 onClick={handleOpenNewProduct}
-                className="py-1.5 px-3 bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                className="py-1.5 px-3 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Nuevo Artículo</span>
@@ -1445,7 +1312,7 @@ export const StoreApp: React.FC = () => {
                     value={productSearchTerm}
                     onChange={(e) => setProductSearchTerm(e.target.value)}
                     placeholder="Buscar artículo por nombre o ingredientes..."
-                    className="w-full pl-8 pr-3 py-1.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-hidden focus:border-amber-500"
+                    className="w-full pl-8 pr-3 py-1.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-hidden focus:border-purple-500"
                   />
                   {productSearchTerm && (
                     <button
@@ -1461,7 +1328,7 @@ export const StoreApp: React.FC = () => {
                   <select
                     value={productSortOrder}
                     onChange={(e) => setProductSortOrder(e.target.value as any)}
-                    className="py-1.5 px-2 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-700 dark:text-neutral-300 focus:outline-hidden focus:border-amber-500 cursor-pointer"
+                    className="py-1.5 px-2 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-700 dark:text-neutral-300 focus:outline-hidden focus:border-purple-500 cursor-pointer"
                     title="Ordenar artículos"
                   >
                     <option value="disponibles">Disponibles 1°</option>
@@ -1480,7 +1347,7 @@ export const StoreApp: React.FC = () => {
                     onClick={() => setProductCategoryFilter(cat)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold capitalize whitespace-nowrap transition cursor-pointer ${
                       productCategoryFilter === cat
-                        ? 'bg-amber-500 text-white shadow-2xs'
+                        ? 'bg-purple-600 text-white shadow-2xs'
                         : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                     }`}
                   >
@@ -1522,7 +1389,7 @@ export const StoreApp: React.FC = () => {
                       {/* Product Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1 mb-0.5">
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider truncate">
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold uppercase tracking-wider truncate">
                             {prod.categoria}
                           </span>
                           <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase shrink-0 ${
@@ -1556,7 +1423,7 @@ export const StoreApp: React.FC = () => {
 
                     {/* SQL Image Path Reference */}
                     <div className="px-2 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-900 text-[9px] text-neutral-500 dark:text-neutral-400 font-mono border border-neutral-100 dark:border-neutral-800 flex items-center gap-1.5">
-                      <FileCode className="w-3 h-3 text-amber-500 shrink-0" />
+                      <FileCode className="w-3 h-3 text-purple-500 shrink-0" />
                       <span className="truncate">
                         SQL imagen_ruta: {prod.imagenRuta || `/uploads/comercios/${store.id}/articulos/${prod.id}.jpg`}
                       </span>
@@ -1580,7 +1447,7 @@ export const StoreApp: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenEditProduct(prod)}
-                          className="p-1.5 rounded-lg text-neutral-500 hover:text-amber-500 hover:bg-amber-500/10 transition cursor-pointer border border-neutral-200 dark:border-neutral-700"
+                          className="p-1.5 rounded-lg text-neutral-500 hover:text-purple-400 hover:bg-purple-500/10 transition cursor-pointer border border-neutral-200 dark:border-neutral-700"
                           title="Editar artículo"
                         >
                           <Edit2 className="w-3 h-3" />
@@ -1611,9 +1478,9 @@ export const StoreApp: React.FC = () => {
         {activeTab === 'pedidos' && (
           <div className="space-y-3">
             {/* Banner for In-Store Orders / Independent Delivery Request */}
-            <div className="p-3 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-500/25 rounded-2xl flex items-center justify-between gap-2 shadow-2xs">
+            <div className="p-3 bg-gradient-to-r from-purple-600/15 via-purple-500/5 to-transparent border border-purple-500/25 rounded-2xl flex items-center justify-between gap-2 shadow-2xs">
               <div className="space-y-0.5 min-w-0">
-                <span className="text-[10px] font-extrabold uppercase text-amber-600 dark:text-amber-400 tracking-wider flex items-center gap-1">
+                <span className="text-[10px] font-extrabold uppercase text-purple-600 dark:text-purple-400 tracking-wider flex items-center gap-1">
                   <Store className="w-3.5 h-3.5 shrink-0" />
                   Ventas Tienda / WhatsApp
                 </span>
@@ -1626,7 +1493,7 @@ export const StoreApp: React.FC = () => {
               </div>
               <button
                 onClick={() => setShowManualOrderModal(true)}
-                className="py-1.5 px-2.5 bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 shrink-0 shadow-xs cursor-pointer transition whitespace-nowrap"
+                className="py-1.5 px-2.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 shrink-0 shadow-xs cursor-pointer transition whitespace-nowrap"
               >
                 <Plus className="w-3 h-3" />
                 <span>Solicitar Motorizado</span>
@@ -1637,11 +1504,11 @@ export const StoreApp: React.FC = () => {
             <div className="grid grid-cols-3 gap-2">
               <div className={`p-2.5 rounded-2xl border text-center shadow-2xs transition ${
                 pendingApprovalOrders.length > 0 
-                  ? 'bg-amber-500/10 border-amber-500/40 dark:bg-amber-500/15' 
+                  ? 'bg-purple-500/10 border-purple-500/40 dark:bg-purple-500/15' 
                   : 'bg-white dark:bg-neutral-850 border-neutral-200 dark:border-neutral-800'
               }`}>
                 <span className="text-[10px] text-neutral-500 uppercase font-bold block">Por Aceptar</span>
-                <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
+                <span className="text-sm font-extrabold text-purple-600 dark:text-purple-400">
                   {pendingApprovalOrders.length}
                 </span>
               </div>
@@ -1661,16 +1528,16 @@ export const StoreApp: React.FC = () => {
 
             {/* Dedicated Section: Solicitudes Entrantes del Cliente por Aceptar o Rechazar */}
             {pendingApprovalOrders.length > 0 && (
-              <div className="space-y-2.5 p-3.5 bg-gradient-to-br from-amber-500/10 via-purple-500/5 to-transparent rounded-3xl border-2 border-amber-500/30 shadow-xs">
+              <div className="space-y-2.5 p-3.5 bg-gradient-to-br from-purple-600/10 via-purple-500/5 to-transparent rounded-3xl border-2 border-purple-500/30 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
-                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-ping" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
                       <Inbox className="w-4 h-4" />
                       Solicitudes Entrantes por Responder ({pendingApprovalOrders.length})
                     </h4>
                   </div>
-                  <span className="text-[10px] bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] bg-purple-600 text-white font-bold px-2 py-0.5 rounded-full">
                     Acción Requerida
                   </span>
                 </div>
@@ -1682,13 +1549,13 @@ export const StoreApp: React.FC = () => {
                   {pendingApprovalOrders.map(order => (
                     <div
                       key={order.id}
-                      className="p-3.5 bg-white dark:bg-neutral-850 rounded-2xl border border-amber-500/40 shadow-md space-y-3"
+                      className="p-3.5 bg-white dark:bg-neutral-850 rounded-2xl border border-purple-500/40 shadow-md space-y-3"
                     >
                       {/* Order Code & Header */}
                       <div className="flex justify-between items-start border-b border-neutral-100 dark:border-neutral-800 pb-2.5">
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-lg bg-amber-500 text-white font-mono font-black text-xs">
+                            <span className="px-2 py-0.5 rounded-lg bg-purple-600 text-white font-mono font-black text-xs">
                               #{order.codigoSeguimiento}
                             </span>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300">
@@ -1700,7 +1567,7 @@ export const StoreApp: React.FC = () => {
                           </h4>
                         </div>
                         <div className="text-right">
-                          <span className="text-sm font-black text-amber-600 dark:text-amber-400 font-mono block">
+                          <span className="text-sm font-black text-purple-600 dark:text-purple-400 font-mono block">
                             ${(order.montoTotalUsd ?? 0).toFixed(2)} USD
                           </span>
                           <span className="text-[10px] text-neutral-400 font-mono block">
@@ -1738,9 +1605,9 @@ export const StoreApp: React.FC = () => {
                             </>
                           ) : order.metodoPagoSeleccionado === 'efectivo_usd' || order.metodoPagoSeleccionado === 'efectivo' ? (
                             <>
-                              <DollarSign className="w-4 h-4 text-amber-500 shrink-0" />
+                              <DollarSign className="w-4 h-4 text-purple-500 shrink-0" />
                               <div>
-                                <span className="font-bold text-amber-600 dark:text-amber-400 block">
+                                <span className="font-bold text-purple-600 dark:text-purple-400 block">
                                   Efectivo en Entrega
                                 </span>
                                 <span className="text-[10px] text-neutral-400">
@@ -1773,7 +1640,7 @@ export const StoreApp: React.FC = () => {
                       <div className="space-y-1 text-xs">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-1.5 text-neutral-600 dark:text-neutral-300 min-w-0">
-                            <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                            <MapPin className="w-3.5 h-3.5 text-purple-500 shrink-0 mt-0.5" />
                             <div>
                               <p className="text-[11px] font-semibold leading-tight">{order.cliente.direccion}</p>
                               {order.cliente.puntoReferencia && (
@@ -1841,7 +1708,7 @@ export const StoreApp: React.FC = () => {
                 </h4>
                 <button
                   onClick={() => setShowManualOrderModal(true)}
-                  className="text-[11px] text-amber-600 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] text-purple-600 dark:text-purple-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Nuevo Pedido de Tienda
@@ -1854,7 +1721,7 @@ export const StoreApp: React.FC = () => {
                   <p className="text-xs font-medium">No hay pedidos pendientes en preparación.</p>
                   <button
                     onClick={() => setShowManualOrderModal(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-600 rounded-xl text-xs font-bold hover:bg-amber-500/20 transition cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-600 rounded-xl text-xs font-bold hover:bg-purple-500/20 transition cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Crear comanda de tienda y pedir conductor
@@ -1869,7 +1736,7 @@ export const StoreApp: React.FC = () => {
                     <div className="flex justify-between items-start border-b border-neutral-100 dark:border-neutral-800 pb-2">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[10px] font-bold text-amber-500 font-mono">
+                          <span className="text-[10px] font-bold text-purple-500 font-mono">
                             #{order.codigoSeguimiento}
                           </span>
                           {order.esPedidoTienda ? (
@@ -1891,7 +1758,7 @@ export const StoreApp: React.FC = () => {
                           </p>
                         )}
                       </div>
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 capitalize">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 capitalize">
                         {order.estado.replace(/_/g, ' ')}
                       </span>
                     </div>
@@ -1899,7 +1766,7 @@ export const StoreApp: React.FC = () => {
                     {/* Customer Delivery Location Card (Crucial for store manual orders) */}
                     <div className="p-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/60 text-xs space-y-1">
                       <div className="flex items-start gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <MapPin className="w-3.5 h-3.5 text-purple-500 shrink-0 mt-0.5" />
                         <div>
                           <span className="text-[10px] text-neutral-400 font-semibold block uppercase">
                             {order.esPedidoTienda ? 'Ubicación Solicitada por el Cliente:' : 'Dirección de Entrega:'}
@@ -1915,7 +1782,7 @@ export const StoreApp: React.FC = () => {
                         </p>
                       )}
                       {order.detallesEntregaTienda?.zonaMunicipio && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400 pl-5 font-semibold">
+                        <p className="text-[10px] text-purple-600 dark:text-purple-400 pl-5 font-semibold">
                           Municipio / Zona: {order.detallesEntregaTienda.zonaMunicipio}
                         </p>
                       )}
@@ -1933,14 +1800,14 @@ export const StoreApp: React.FC = () => {
 
                     <div className="p-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex justify-between items-center text-xs font-bold">
                       <span>Total Productos</span>
-                      <span className="text-amber-500 font-mono">${(order.montoSubtotalUsd ?? 0).toFixed(2)} USD</span>
+                      <span className="text-purple-500 font-mono">${(order.montoSubtotalUsd ?? 0).toFixed(2)} USD</span>
                     </div>
 
                     {/* Payment verification & Order Accept/Reject */}
                     {(order.estado === 'pendiente_pago' || order.estado === 'pago_verificado') && (
-                      <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
+                      <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-xs space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-amber-700 dark:text-amber-300">
+                          <span className="font-bold text-purple-700 dark:text-purple-300">
                             Confirmar Pedido ({order.metodoPagoSeleccionado === 'saldo_cartera' ? 'Cartera Vixy' : order.metodoPagoSeleccionado.replace('_', ' ')})
                           </span>
                           <span className="font-mono text-[10px]">Ref: {order.referenciaPago || (order.metodoPagoSeleccionado === 'saldo_cartera' ? 'Auto-Billetera' : 'Sin Ref')}</span>
@@ -2009,7 +1876,7 @@ export const StoreApp: React.FC = () => {
                           <img
                             src={order.conductor.fotoUrl}
                             alt="Conductor"
-                            className="w-7 h-7 rounded-lg object-cover border border-amber-500 shrink-0"
+                            className="w-7 h-7 rounded-lg object-cover border border-purple-500 shrink-0"
                           />
                           <div className="text-[11px] min-w-0">
                             <p className="font-bold leading-tight truncate">{order.conductor.nombre}</p>
@@ -2034,7 +1901,7 @@ export const StoreApp: React.FC = () => {
                           </button>
                           <button
                             onClick={() => setSelectedOrderForDriverModal(order)}
-                            className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold cursor-pointer transition"
+                            className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold cursor-pointer transition"
                           >
                             Ficha Legal
                           </button>
@@ -2096,25 +1963,25 @@ export const StoreApp: React.FC = () => {
         {activeTab === 'cartera' && (
           <div className="space-y-3.5 text-xs">
             {/* Wallet Balance Card */}
-            <div className="p-4 bg-linear-to-br from-amber-500 to-amber-600 text-white rounded-3xl shadow-lg space-y-3">
+            <div className="p-4 bg-linear-to-br from-purple-600 to-indigo-600 text-white rounded-3xl shadow-lg space-y-3">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-100 flex items-center gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-100 flex items-center gap-1">
                     <Wallet className="w-3.5 h-3.5" />
                     Cartera Comercial Vixy
                   </span>
                   <h3 className="text-2xl font-black font-mono mt-0.5">
-                    ${(storeWallet?.saldoUsd ?? 0).toFixed(2)} <span className="text-sm font-normal text-amber-100">USD</span>
+                    ${(storeWallet?.saldoUsd ?? 0).toFixed(2)} <span className="text-sm font-normal text-purple-100">USD</span>
                   </h3>
                 </div>
                 <div className="text-right bg-white/15 backdrop-blur-xs px-2.5 py-1 rounded-xl">
-                  <span className="text-[9px] uppercase tracking-wider text-amber-100 block">Tasa BCV Oficial</span>
+                  <span className="text-[9px] uppercase tracking-wider text-purple-100 block">Tasa BCV Oficial</span>
                   <span className="text-xs font-bold font-mono">Bs. {(tasaBcv ?? 78.50).toFixed(2)}</span>
                 </div>
               </div>
 
               <div className="p-2.5 bg-black/15 rounded-2xl flex justify-between items-center text-[11px]">
-                <span className="text-amber-100">Equivalente Oficial en Bolívares:</span>
+                <span className="text-purple-100">Equivalente Oficial en Bolívares:</span>
                 <span className="font-extrabold font-mono text-white text-xs">
                   Bs. {((storeWallet?.saldoUsd ?? 0) * tasaBcv).toFixed(2)}
                 </span>
@@ -2122,11 +1989,11 @@ export const StoreApp: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/20 text-[11px]">
                 <div>
-                  <span className="text-[10px] text-amber-200 block">Total Acreditado</span>
+                  <span className="text-[10px] text-purple-200 block">Total Acreditado</span>
                   <strong className="font-mono">${(storeWallet?.totalAcreditadoUsd ?? 0).toFixed(2)} USD</strong>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-amber-200 block">Total Retirado</span>
+                  <span className="text-[10px] text-purple-200 block">Total Retirado</span>
                   <strong className="font-mono">${(storeWallet?.totalRetiradoUsd ?? 0).toFixed(2)} USD</strong>
                 </div>
               </div>
@@ -2137,7 +2004,7 @@ export const StoreApp: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Database className="w-4 h-4 text-emerald-500 shrink-0" />
                 <div>
-                  <p className="font-bold text-neutral-800 dark:text-neutral-200">Tabla SQL: <code className="text-amber-500 font-mono">comercio_billeteras</code></p>
+                  <p className="font-bold text-neutral-800 dark:text-neutral-200">Tabla SQL: <code className="text-purple-500 font-mono">comercio_billeteras</code></p>
                   <p className="text-[10px] text-neutral-400">Acreditaciones directas de pedidos abonados con Cartera de Cliente</p>
                 </div>
               </div>
@@ -2150,7 +2017,7 @@ export const StoreApp: React.FC = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
-                  <History className="w-3.5 h-3.5 text-amber-500" />
+                  <History className="w-3.5 h-3.5 text-purple-500" />
                   Movimientos y Comprobantes de Cartera
                 </h4>
                 <span className="text-[10px] text-neutral-400">
@@ -2209,7 +2076,7 @@ export const StoreApp: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setSelectedWalletTx(tx)}
-                          className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 font-bold hover:bg-amber-500/20 cursor-pointer flex items-center gap-1"
+                          className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 font-bold hover:bg-purple-500/20 cursor-pointer flex items-center gap-1"
                         >
                           <Eye className="w-3 h-3" />
                           <span>Ver Recibo</span>
@@ -2314,13 +2181,13 @@ export const StoreApp: React.FC = () => {
                   <img
                     src={prodImagenUrl}
                     alt="Preview"
-                    className="w-9 h-9 rounded-xl object-cover border border-amber-500 shrink-0"
+                    className="w-9 h-9 rounded-xl object-cover border border-purple-500 shrink-0"
                   />
                 </div>
               </div>
 
               {/* Server Folder Path indicator */}
-              <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-800 dark:text-amber-300 space-y-0.5">
+              <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-800 dark:text-purple-300 space-y-0.5">
                 <span className="font-bold block">Destino de Archivo en Servidor Namecheap:</span>
                 <code className="font-mono text-[9px] block">
                   /uploads/comercios/{store.id}/articulos/{prodNombre ? prodNombre.toLowerCase().replace(/[^a-z0-9]/g, '_') : 'articulo'}.jpg
@@ -2329,7 +2196,7 @@ export const StoreApp: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full py-2 bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer transition flex items-center justify-center gap-1.5"
+                className="w-full py-2 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer transition flex items-center justify-center gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>{editingProduct ? 'Actualizar Artículo' : 'Guardar Artículo'}</span>
@@ -2367,8 +2234,8 @@ export const StoreApp: React.FC = () => {
                   {selectedOrderForDriverModal.conductor.nombre} {selectedOrderForDriverModal.conductor.apellido}
                 </h4>
                 <p className="text-neutral-500 font-mono">C.I: {selectedOrderForDriverModal.conductor?.legal?.cedula || selectedOrderForDriverModal.conductor?.cedula || 'N/A'}</p>
-                <div className="flex items-center gap-1 text-amber-500 font-bold mt-0.5">
-                  <Star className="w-3 h-3 fill-amber-500" />
+                <div className="flex items-center gap-1 text-purple-500 font-bold mt-0.5">
+                  <Star className="w-3 h-3 fill-purple-500" />
                   {selectedOrderForDriverModal.conductor?.rating || 5.0} ({selectedOrderForDriverModal.conductor?.totalEntregas || 0} viajes exitosos)
                 </div>
               </div>
@@ -2380,7 +2247,7 @@ export const StoreApp: React.FC = () => {
               </span>
               <p><strong>Marca y Modelo:</strong> {selectedOrderForDriverModal.conductor?.moto?.marca || 'Bera'} {selectedOrderForDriverModal.conductor?.moto?.modelo || 'SBR'} ({selectedOrderForDriverModal.conductor?.moto?.ano || 2024})</p>
               <p><strong>Color:</strong> {selectedOrderForDriverModal.conductor?.moto?.color || 'Negro'}</p>
-              <p className="text-amber-500 font-bold font-mono"><strong>Placa INTT:</strong> {selectedOrderForDriverModal.conductor?.moto?.placa || 'S/P'}</p>
+              <p className="text-purple-500 font-bold font-mono"><strong>Placa INTT:</strong> {selectedOrderForDriverModal.conductor?.moto?.placa || 'S/P'}</p>
               <p><strong>Serial Motor:</strong> {selectedOrderForDriverModal.conductor?.moto?.serialMotor || 'S/N'}</p>
             </div>
 
@@ -2422,7 +2289,7 @@ export const StoreApp: React.FC = () => {
                     <span className="text-neutral-900 dark:text-white">
                       {targetOrder.cliente.nombre} {targetOrder.cliente.apellido}
                     </span>
-                    <span className="text-amber-600 dark:text-amber-400 font-mono">
+                    <span className="text-purple-600 dark:text-purple-400 font-mono">
                       ${(targetOrder.montoTotalUsd ?? 0).toFixed(2)} USD
                     </span>
                   </div>
@@ -2508,7 +2375,7 @@ export const StoreApp: React.FC = () => {
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-neutral-200 dark:border-neutral-800 pb-3">
               <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5 text-amber-500 font-extrabold text-sm">
+                <div className="flex items-center gap-1.5 text-purple-500 font-extrabold text-sm">
                   <Store className="w-4 h-4" />
                   <span>Procesar Pedido de Tienda & Solicitar Delivery</span>
                 </div>
@@ -2537,7 +2404,7 @@ export const StoreApp: React.FC = () => {
             <form onSubmit={handleCreateManualOrder} className="space-y-4">
               {/* Section 1: Customer Details */}
               <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 space-y-2.5">
-                <span className="text-[10px] font-extrabold uppercase text-amber-600 dark:text-amber-400 tracking-wider block">
+                <span className="text-[10px] font-extrabold uppercase text-purple-600 dark:text-purple-400 tracking-wider block">
                   1. Datos del Cliente (Venta Directa)
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2551,7 +2418,7 @@ export const StoreApp: React.FC = () => {
                       placeholder="Ej: Carlos Mendoza"
                       value={manualClientName}
                       onChange={(e) => setManualClientName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500"
                     />
                   </div>
                   <div className="space-y-1">
@@ -2563,7 +2430,7 @@ export const StoreApp: React.FC = () => {
                       placeholder="Ej: 0414-1234567"
                       value={manualClientPhone}
                       onChange={(e) => setManualClientPhone(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500 font-mono"
                     />
                   </div>
                 </div>
@@ -2572,7 +2439,7 @@ export const StoreApp: React.FC = () => {
               {/* Section 2: Destination requested by customer */}
               <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase text-amber-600 dark:text-amber-400 tracking-wider flex items-center gap-1">
+                  <span className="text-[10px] font-extrabold uppercase text-purple-600 dark:text-purple-400 tracking-wider flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5" />
                     2. Ubicación de Entrega Indicada por el Cliente
                   </span>
@@ -2589,7 +2456,7 @@ export const StoreApp: React.FC = () => {
                     placeholder="Ej: Av. Francisco de Miranda, Res. Centro Plaza, Torre B, Piso 5, Apto 5-B"
                     value={manualClientAddress}
                     onChange={(e) => setManualClientAddress(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500 resize-none"
                   />
                 </div>
 
@@ -2603,7 +2470,7 @@ export const StoreApp: React.FC = () => {
                       placeholder="Ej: Al lado de Farmatodo, portón azul"
                       value={manualReference}
                       onChange={(e) => setManualReference(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500"
                     />
                   </div>
 
@@ -2614,7 +2481,7 @@ export const StoreApp: React.FC = () => {
                     <select
                       value={manualZone}
                       onChange={(e) => setManualZone(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500"
                     >
                       <option value="Chacao">Chacao</option>
                       <option value="Baruta">Baruta</option>
@@ -2629,10 +2496,10 @@ export const StoreApp: React.FC = () => {
                 <div className="pt-2 border-t border-neutral-200/60 dark:border-neutral-700/60 space-y-2">
                   <div className="flex justify-between items-center text-[11px]">
                     <span className="font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
-                      <Navigation className="w-3 h-3 text-amber-500" />
+                      <Navigation className="w-3 h-3 text-purple-500" />
                       Distancia Estimada desde tu Tienda:
                     </span>
-                    <span className="font-mono font-bold text-amber-500 text-xs">
+                    <span className="font-mono font-bold text-purple-500 text-xs">
                       {manualDistanceKm} km
                     </span>
                   </div>
@@ -2643,12 +2510,12 @@ export const StoreApp: React.FC = () => {
                     step="0.5"
                     value={manualDistanceKm}
                     onChange={(e) => setManualDistanceKm(parseFloat(e.target.value))}
-                    className="w-full accent-amber-500 cursor-pointer"
+                    className="w-full accent-purple-600 cursor-pointer"
                   />
-                  <div className="flex justify-between items-center p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px]">
+                  <div className="flex justify-between items-center p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px]">
                     <div>
                       <span className="text-neutral-500 block text-[10px]">Costo Delivery Vixy</span>
-                      <strong className="text-amber-600 dark:text-amber-400 font-mono text-xs">
+                      <strong className="text-purple-600 dark:text-purple-400 font-mono text-xs">
                         ${(manualTripCalculation?.totalViajeUsd ?? 0).toFixed(2)} USD
                       </strong>
                     </div>
@@ -2665,10 +2532,10 @@ export const StoreApp: React.FC = () => {
               {/* Section 3: Select Products / Order Items */}
               <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase text-amber-600 dark:text-amber-400 tracking-wider">
+                  <span className="text-[10px] font-extrabold uppercase text-purple-600 dark:text-purple-400 tracking-wider">
                     3. Comanda de Artículos
                   </span>
-                  <span className="font-mono font-bold text-xs text-amber-500">
+                  <span className="font-mono font-bold text-xs text-purple-500">
                     Subtotal: ${(selectedItemsSubtotal ?? 0).toFixed(2)} USD
                   </span>
                 </div>
@@ -2713,7 +2580,7 @@ export const StoreApp: React.FC = () => {
                                 [prod.id]: (prev[prod.id] || 0) + 1
                               }));
                             }}
-                            className="w-6 h-6 rounded-lg bg-amber-500 text-white font-bold flex items-center justify-center hover:bg-amber-600 cursor-pointer"
+                            className="w-6 h-6 rounded-lg bg-purple-600 text-white font-bold flex items-center justify-center hover:bg-purple-700 cursor-pointer"
                           >
                             +
                           </button>
@@ -2751,7 +2618,7 @@ export const StoreApp: React.FC = () => {
 
               {/* Section 4: Payment & Notes */}
               <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 space-y-2.5">
-                <span className="text-[10px] font-extrabold uppercase text-amber-600 dark:text-amber-400 tracking-wider block">
+                <span className="text-[10px] font-extrabold uppercase text-purple-600 dark:text-purple-400 tracking-wider block">
                   4. Cobro en Tienda & Instrucciones
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2762,7 +2629,7 @@ export const StoreApp: React.FC = () => {
                     <select
                       value={manualPaymentMethod}
                       onChange={(e) => setManualPaymentMethod(e.target.value as MetodoPagoTipo)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500"
                     >
                       <option value="efectivo_usd">Efectivo Divisas ($)</option>
                       <option value="pago_movil">Pago Móvil Comercio (Bs)</option>
@@ -2781,7 +2648,7 @@ export const StoreApp: React.FC = () => {
                       placeholder="Ej: Ref 849201"
                       value={manualPaymentRef}
                       onChange={(e) => setManualPaymentRef(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500 font-mono"
                     />
                   </div>
                 </div>
@@ -2795,13 +2662,13 @@ export const StoreApp: React.FC = () => {
                     placeholder="Ej: Empacar salsa tártara extra, cliente espera en la garita"
                     value={manualNotes}
                     onChange={(e) => setManualNotes(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 outline-none focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
               </div>
 
               {/* Economic Summary and Submit Button */}
-              <div className="p-3 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/25 rounded-2xl space-y-2">
+              <div className="p-3 bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/25 rounded-2xl space-y-2">
                 <div className="flex justify-between text-xs text-neutral-600 dark:text-neutral-300">
                   <span>Productos del Comercio:</span>
                   <span className="font-mono font-semibold">${(selectedItemsSubtotal ?? 0).toFixed(2)} USD</span>
@@ -2810,7 +2677,7 @@ export const StoreApp: React.FC = () => {
                   <span>Tarifa de Delivery ({manualDistanceKm} km):</span>
                   <span className="font-mono font-semibold">${(manualTripCalculation?.totalViajeUsd ?? 0).toFixed(2)} USD</span>
                 </div>
-                <div className="border-t border-amber-500/20 pt-2 flex justify-between items-center">
+                <div className="border-t border-purple-500/20 pt-2 flex justify-between items-center">
                   <div>
                     <span className="text-xs font-bold block text-neutral-900 dark:text-white">
                       Total Pedido
@@ -2820,7 +2687,7 @@ export const StoreApp: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400 font-mono block">
+                    <span className="text-sm font-extrabold text-purple-600 dark:text-purple-400 font-mono block">
                       ${(manualTotalOrderUsd ?? 0).toFixed(2)} USD
                     </span>
                     <span className="text-[10px] text-neutral-500 font-mono">
@@ -2844,7 +2711,7 @@ export const StoreApp: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="py-2 bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                  className="py-2 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
                 >
                   <Bike className="w-3.5 h-3.5" />
                   <span>Pedir Conductor</span>
@@ -2860,7 +2727,7 @@ export const StoreApp: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3">
           <div className="w-full max-w-sm bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200 dark:border-neutral-800 shadow-2xl text-xs space-y-3">
             <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-2">
-              <div className="flex items-center gap-1.5 text-amber-500 font-bold">
+              <div className="flex items-center gap-1.5 text-purple-500 font-bold">
                 <FileText className="w-4 h-4" />
                 <span>Comprobante de Pago Digital (SQL)</span>
               </div>
@@ -2905,7 +2772,7 @@ export const StoreApp: React.FC = () => {
                 Archivo Guardado en Sistema Interno
               </span>
               <div className="w-full h-32 rounded-xl bg-neutral-200 dark:bg-neutral-900 border border-dashed border-neutral-300 dark:border-neutral-700 flex flex-col items-center justify-center p-3 text-neutral-500">
-                <FileImage className="w-8 h-8 text-amber-500 mb-1" />
+                <FileImage className="w-8 h-8 text-purple-500 mb-1" />
                 <span className="font-mono text-[9px] break-all">
                   {selectedWalletTx.comprobanteRuta || `/uploads/comprobantes_pago/${selectedWalletTx.id}.png`}
                 </span>
@@ -2967,7 +2834,7 @@ export const StoreApp: React.FC = () => {
           <div className="relative">
             <ChefHat className="w-3.5 h-3.5" />
             {pendingApprovalOrders.length > 0 ? (
-              <span className="absolute -top-1 -right-2 px-1 py-0.2 bg-amber-500 text-white font-black text-[8px] rounded-full animate-bounce shadow-2xs leading-none">
+              <span className="absolute -top-1 -right-2 px-1 py-0.2 bg-purple-600 text-white font-black text-[8px] rounded-full animate-bounce shadow-2xs leading-none">
                 {pendingApprovalOrders.length}
               </span>
             ) : activeOrders.length > 0 ? (

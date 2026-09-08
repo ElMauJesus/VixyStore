@@ -1,29 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Store, 
-  Bike,
   LayoutDashboard, 
   Compass, 
   RefreshCw,
   ExternalLink,
   ShieldCheck,
   ShoppingBag,
-  Layers,
-  ArrowRight
 } from 'lucide-react';
 import { DeliveryProvider, useDelivery } from './context/DeliveryContext';
 import { StoreApp } from './components/apps/StoreApp';
-import { DriverApp } from './components/apps/DriverApp';
 import { AdminPanel } from './components/apps/AdminPanel';
 import { LiveFleetMapView } from './components/common/LiveFleetMapView';
 import { CallModal } from './components/common/CallModal';
 import { PushNotificationToast } from './components/common/PushNotificationToast';
 
-type WebTabMode = 'comercio' | 'delivery' | 'mapa' | 'admin';
+type WebTabMode = 'comercio' | 'mapa' | 'admin';
 
 const MainAppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<WebTabMode>('comercio');
-  const { tasaBcv, resetDemo, store, storeLoggedIn, driverLoggedIn } = useDelivery();
+  const { tasaBcv, resetDemo } = useDelivery();
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -32,45 +28,49 @@ const MainAppContent: React.FC = () => {
       if (tabParam === 'admin') setActiveTab('admin');
       else if (tabParam === 'mapa' || tabParam === 'map') setActiveTab('mapa');
       else if (tabParam === 'comercio' || tabParam === 'store') setActiveTab('comercio');
-      else if (tabParam === 'delivery' || tabParam === 'driver' || tabParam === 'conductor') setActiveTab('delivery');
     }
   }, []);
 
   return (
     <div className="flex flex-col min-h-screen h-screen w-screen bg-slate-900 text-slate-100 font-sans select-none overflow-hidden">
       {/* Barra de Navegación Web Superior */}
-      <header className="h-16 px-4 md:px-8 bg-[#0b0817] border-b border-purple-900/40 flex items-center justify-between shrink-0 z-30 shadow-lg">
+      <header className="h-16 px-4 md:px-8 bg-[#130924] border-b border-purple-900/40 flex items-center justify-between shrink-0 z-30 shadow-xl">
         {/* Brand & Descripción */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center font-black text-white text-lg shadow-md shadow-purple-600/40 border border-purple-400/30">
-            V
-          </div>
-          <div>
+          <img
+            src="./logo/logovixycomercios.png"
+            alt="Vixy Comercios"
+            className="h-9 md:h-10 w-auto object-contain drop-shadow"
+            onError={(e) => {
+              const target = e.currentTarget as HTMLImageElement;
+              if (!target.src.endsWith('/logovixycomercios.png')) {
+                target.src = './logovixycomercios.png';
+              }
+            }}
+          />
+          <div className="hidden sm:block border-l border-purple-800/40 pl-3">
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
-                VIXY <span className="text-purple-400 font-bold">DELIVERY</span>
-              </h1>
-              <span className="px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 text-[10px] font-bold border border-purple-800/50 uppercase tracking-wider">
+              <span className="px-2.5 py-0.5 rounded-full bg-purple-950/80 text-purple-300 text-[10px] font-bold border border-purple-700/50 uppercase tracking-wider">
                 Portal Comercios Web
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
+            <p className="text-[11px] text-purple-300/60 hidden md:block">
               Gestión comercial, catálogo, comanda de pedidos y despacho logístico
             </p>
           </div>
         </div>
 
         {/* Pestañas de Navegación Web */}
-        <nav className="flex items-center bg-slate-950/80 p-1.5 rounded-2xl border border-purple-950 text-xs">
+        <nav className="flex items-center bg-[#1e1035] p-1.5 rounded-2xl border border-purple-900/50 text-xs shadow-inner">
           <button
             onClick={() => setActiveTab('comercio')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
               activeTab === 'comercio'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                ? 'bg-gradient-to-r from-[#6d28d9] to-[#7c3aed] text-white shadow-md shadow-purple-600/40'
+                : 'text-purple-300/70 hover:text-white hover:bg-purple-900/40'
             }`}
           >
-            <Store className="w-4 h-4 text-purple-300" />
+            <Store className="w-4 h-4 text-purple-200" />
             <span>Mi Comercio</span>
           </button>
 
@@ -78,8 +78,8 @@ const MainAppContent: React.FC = () => {
             onClick={() => setActiveTab('mapa')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
               activeTab === 'mapa'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                ? 'bg-gradient-to-r from-[#6d28d9] to-[#7c3aed] text-white shadow-md shadow-purple-600/40'
+                : 'text-purple-300/70 hover:text-white hover:bg-purple-900/40'
             }`}
           >
             <Compass className="w-4 h-4 text-emerald-400" />
@@ -92,8 +92,8 @@ const MainAppContent: React.FC = () => {
             onClick={() => setActiveTab('admin')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
               activeTab === 'admin'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                ? 'bg-gradient-to-r from-[#6d28d9] to-[#7c3aed] text-white shadow-md shadow-purple-600/40'
+                : 'text-purple-300/70 hover:text-white hover:bg-purple-900/40'
             }`}
           >
             <LayoutDashboard className="w-4 h-4 text-indigo-300" />
@@ -103,10 +103,10 @@ const MainAppContent: React.FC = () => {
 
         {/* Info lateral derecha: Tasa BCV y Enlaces del Ecosistema */}
         <div className="flex items-center gap-3">
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-purple-950/60 text-xs">
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-[#1e1035] rounded-xl border border-purple-900/50 text-xs">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-slate-400 uppercase text-[10px] tracking-wider font-semibold">Tasa BCV:</span>
-            <span className="font-mono font-bold text-purple-300">
+            <span className="text-purple-300/70 uppercase text-[10px] tracking-wider font-semibold">Tasa BCV:</span>
+            <span className="font-mono font-bold text-purple-200">
               Bs. {(tasaBcv ?? 78.50).toFixed(2)}
             </span>
           </div>
@@ -116,14 +116,14 @@ const MainAppContent: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 text-xs font-bold transition border border-purple-800/40"
             title="Ir a Vixy Store (Exclusivo Conductores)"
           >
-            <ShoppingBag className="w-3.5 h-3.5 text-purple-400" />
+            <ShoppingBag className="w-3.5 h-3.5 text-purple-300" />
             <span className="hidden md:inline">Vixy Store</span>
             <ExternalLink className="w-3 h-3 text-purple-400" />
           </a>
 
           <button
             onClick={resetDemo}
-            className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white transition border border-slate-800"
+            className="p-2 rounded-xl bg-[#1e1035] hover:bg-purple-900/50 text-purple-300 hover:text-white transition border border-purple-900/50 cursor-pointer"
             title="Sincronizar datos con la Base de Datos"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -133,13 +133,6 @@ const MainAppContent: React.FC = () => {
 
       {/* Contenedor Web Principal (Pantalla Completa Responsiva, sin marcos de teléfono) */}
       <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col bg-slate-950">
-        {/* PESTAÑA: PANEL DE CONDUCTOR / REPARTIDOR */}
-        {activeTab === 'delivery' && (
-          <div className="flex-1 overflow-y-auto w-full">
-            <DriverApp />
-          </div>
-        )}
-
         {/* PESTAÑA 1: PANEL WEB DE COMERCIO (STORE APP) */}
         {activeTab === 'comercio' && (
           <div className="flex-1 overflow-y-auto w-full">
