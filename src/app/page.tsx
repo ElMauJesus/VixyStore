@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Search, ChevronRight, User, Lock, Eye, EyeOff, Truck, ShieldCheck, CreditCard, ArrowUpRight
@@ -26,6 +27,12 @@ function CatalogContent() {
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(currentSearch);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Estados del login
+  const [cedula, setCedula] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     setSearchInput(currentSearch);
@@ -87,6 +94,43 @@ function CatalogContent() {
     updateFilters({ busqueda: searchInput.trim() || null });
   };
 
+  // Login del conductor
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+
+    if (!cedula.trim() || !password.trim()) {
+      setLoginError('Ingresa tu cédula y contraseña.');
+      return;
+    }
+
+    setLoginLoading(true);
+
+    try {
+      const res = await storeApi.login({ email: cedula.trim(), password });
+
+      if (res.success && res.token) {
+        // Guardar token y usuario
+        localStorage.setItem('vixy_auth_token', res.token);
+        if (res.user) {
+          localStorage.setItem('vixy_user', JSON.stringify(res.user));
+        }
+        // Redirigir según el rol
+        if (res.user?.role === 'administrator' || res.user?.role === 'secretary') {
+          router.push('/admin');
+        } else {
+          router.push('/shop/');
+        }
+      } else {
+        setLoginError(res.message || 'Credenciales inválidas.');
+      }
+    } catch {
+      setLoginError('Error de conexión con el servidor.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
   return (
     <div className="w-full min-h-screen bg-[#f5f5f7]">
 
@@ -106,7 +150,7 @@ function CatalogContent() {
             <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent p-8 md:p-12 flex flex-col justify-center">
               <div className="relative w-32 h-24 md:w-56 md:h-40 mb-6">
                 <Image
-                  src="/logo/logostore2.png" // Logo con la mascota
+                  src="/logo/logostore2.png"
                   alt="Vixy Store"
                   fill
                   className="object-contain"
@@ -132,13 +176,20 @@ function CatalogContent() {
             </div>
           </div>
 
-          {/* Panel de Login (Solo desktop) */}
+          {/* Panel de Login */}
           <div className="hidden lg:block bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div className="mb-4">
               <h2 className="text-lg font-bold text-gray-900">Iniciar Sesión</h2>
-              <p className="text-xs text-gray-500">Bienvenido de nuevo</p>
+              <p className="text-xs text-gray-500">Acceso exclusivo para conductores Vixy</p>
             </div>
-            <form className="space-y-4">
+
+            {loginError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
+                {loginError}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Número de cédula</label>
                 <div className="relative">
@@ -146,6 +197,8 @@ function CatalogContent() {
                   <input
                     type="text"
                     placeholder="Ingresa tu número de cédula"
+                    value={cedula}
+                    onChange={(e) => setCedula(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5A20CB]/20"
                   />
                 </div>
@@ -157,6 +210,8 @@ function CatalogContent() {
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="Ingresa tu contraseña"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-9 pr-10 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5A20CB]/20"
                   />
                   <button
@@ -169,15 +224,19 @@ function CatalogContent() {
                 </div>
               </div>
               <button
-                type="button"
-                className="w-full py-2.5 bg-[#5A20CB] hover:bg-[#4715c0] text-white text-sm font-bold rounded-lg transition-colors"
+                type="submit"
+                disabled={loginLoading}
+                className="w-full py-2.5 bg-[#5A20CB] hover:bg-[#4715c0] text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Iniciar Sesión
+                {loginLoading ? 'Iniciando...' : 'Iniciar Sesión'}
               </button>
               <div className="text-center space-y-1">
                 <a href="#" className="block text-xs text-gray-500 hover:text-[#5A20CB]">¿Olvidaste tu contraseña?</a>
                 <p className="text-xs text-gray-500">
-                  ¿No tienes cuenta? <a href="#" className="text-[#5A20CB] font-semibold hover:underline">Regístrate</a>
+                  ¿No tienes cuenta?{' '}
+                  <Link href="/registro-rider/" className="text-[#5A20CB] font-semibold hover:underline">
+                    Regístrate
+                  </Link>
                 </p>
               </div>
             </form>
@@ -197,7 +256,6 @@ function CatalogContent() {
           </button>
         </div>
 
-        {/* Si hay categorías de la API, las mostramos */}
         {categories.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {categories.map((cat) => (
@@ -218,7 +276,6 @@ function CatalogContent() {
             ))}
           </div>
         ) : (
-          /* Placeholders visuales para que se vea como la imagen aunque no haya datos */
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {[
               { name: 'Repuestos para Motos', desc: 'Todo para el mantenimiento y reparación de tu moto' },
@@ -233,8 +290,6 @@ function CatalogContent() {
                 </div>
                 <h3 className="text-sm font-bold text-gray-800 group-hover:text-[#5A20CB]">{cat.name}</h3>
                 <p className="text-xs text-gray-500 mt-1 line-clamp-2">{cat.desc}</p>
-
-                {/* Botón circular con flecha */}
                 <div className="absolute bottom-4 right-4 bg-[#5A20CB] text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <ArrowUpRight className="w-4 h-4" />
                 </div>
