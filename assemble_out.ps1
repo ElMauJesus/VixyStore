@@ -86,7 +86,28 @@ if (Test-Path "out/_next") {
 # 6. Copiar backend de VixyStore a out/store/api y out/api
 Copy-Item -Path "api/*" -Destination "out/store/api" -Recurse -Force
 Copy-Item -Path "api/*" -Destination "out/api" -Recurse -Force
-Write-Host "[OK] Backend PHP sincronizado en out/api y out/store/api"
+Write-Host "[OK] Backend PHP VixyStore sincronizado en out/api y out/store/api"
+
+# 6b. Copiar backend de Delivery a out/api/ (endpoints para la APK de conductores/comercios)
+#     Se hace DESPUÉS del store API para que los archivos de delivery tengan prioridad
+#     La APK se conecta a: https://vixy.uno/api/auth.php, /api/conductores.php, etc.
+if (-not (Test-Path "out/api/config")) {
+    New-Item -ItemType Directory -Path "out/api/config" -Force | Out-Null
+}
+Copy-Item -Path "delivery/backend/php/*.php" -Destination "out/api" -Recurse -Force
+Copy-Item -Path "delivery/backend/php/.htaccess" -Destination "out/api" -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item -Path "delivery/backend/php/config/*" -Destination "out/api/config" -Recurse -Force
+if (-not (Test-Path "out/api/uploads")) {
+    New-Item -ItemType Directory -Path "out/api/uploads" -Force | Out-Null
+}
+$uploadDirs = @("admin","comercios","comprobantes","entregas","productos","reclamos")
+foreach ($ud in $uploadDirs) {
+    if (-not (Test-Path "out/api/uploads/$ud")) {
+        New-Item -ItemType Directory -Path "out/api/uploads/$ud" -Force | Out-Null
+    }
+}
+Write-Host "[OK] Backend PHP Delivery (APK endpoints) sincronizado en out/api"
+
 
 # 7. Copiar frontend y backend de Shop (Vixy Shop)
 if (Test-Path "out/shop/assets") {

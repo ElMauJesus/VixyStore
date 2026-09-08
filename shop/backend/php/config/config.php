@@ -11,6 +11,7 @@ define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_PORT', getenv('DB_PORT') ?: '3306');
 define('DB_NAME', getenv('DB_NAME') ?: 'c2861522_vixy_dl');
 define('REGIST_DB_NAME', getenv('REGIST_DB_NAME') ?: 'c2861522_regist');
+define('STORE_DB_NAME', getenv('STORE_DB_NAME') ?: 'c2861522_vixy_st');
 define('DB_USER', getenv('DB_USER') ?: 'c2861522_VixySD');
 define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : 'LnsdEjc@st6f4fY');
 

@@ -70,7 +70,27 @@ class Database {
             ]);
             return $pdo;
         } catch (Exception $e) {
-            error_log("Error conectando a BD de registros: " . $e->getMessage());
+            error_log("Error conectando a BD de registros (c2861522_regist): " . $e->getMessage());
+            return null;
+        }
+    }
+
+    public static function getStoreConnection(): ?PDO {
+        $host = DB_HOST;
+        $port = DB_PORT;
+        $dbname = defined('STORE_DB_NAME') ? STORE_DB_NAME : 'c2861522_vixy_st';
+        $user = DB_USER;
+        $pass = DB_PASS;
+        try {
+            $dsn = "mysql:host={$host};port={$port};dbname={$dbname};charset=utf8mb4";
+            $pdo = new PDO($dsn, $user, $pass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => true
+            ]);
+            return $pdo;
+        } catch (Exception $e) {
+            error_log("Error conectando a BD de tienda (c2861522_vixy_st): " . $e->getMessage());
             return null;
         }
     }

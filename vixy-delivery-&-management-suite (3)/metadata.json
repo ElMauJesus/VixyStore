@@ -1,0 +1,6 @@
+{
+  "name": "Vixy Delivery & Management Suite",
+  "description": "Sistema integral de delivery: apps independientes Vixy Pedidos, Vixy Store, Vixy Delivery y panel web con arquitectura PHP/MySQL, autenticación JWT, leyes venezolanas y Docker.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

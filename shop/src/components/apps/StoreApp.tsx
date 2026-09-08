@@ -507,11 +507,11 @@ export const StoreApp: React.FC = () => {
         <div className="relative z-10 w-full max-w-md bg-white rounded-[32px] p-6 sm:p-9 shadow-[0_20px_50px_rgba(76,29,149,0.12)] border border-purple-100/80 space-y-5 sm:space-y-6 my-auto">
           {/* Header con Icono House */}
           <div className="text-center">
-            <div className="flex items-center justify-center mx-auto -my-1 sm:-my-2">
+            <div className="flex items-center justify-center mx-auto -my-3 sm:-my-5">
               <img
                 src="./houseicon.png"
                 alt="Comercio"
-                className="w-24 h-24 sm:w-28 sm:h-28 object-contain select-none pointer-events-none drop-shadow-sm transition-transform hover:scale-105"
+                className="w-36 h-36 sm:w-44 sm:h-44 object-contain select-none pointer-events-none drop-shadow-md transition-transform hover:scale-105"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
                   if (!target.src.endsWith('/houseicon.png')) {
