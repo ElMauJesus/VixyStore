@@ -6,12 +6,14 @@
  * Edite este archivo con las credenciales de su base de datos creadas en cPanel.
  */
 
-// 1. CREDENCIALES DE BASE DE DATOS (Ajustar según cPanel)
-define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+// 1. CREDENCIALES DE BASE DE DATOS (Donweb / Ferozo / cPanel)
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_PORT', getenv('DB_PORT') ?: '3306');
-define('DB_NAME', getenv('DB_NAME') ?: 'vixyhgtk_vixy_driver_prereg');
-define('DB_USER', getenv('DB_USER') ?: 'vixyhgtk_vixy_dba');
-define('DB_PASS', getenv('DB_PASS') ?: 'K2e+U@#U*7HtYC~b');
+define('DB_NAME', getenv('DB_NAME') ?: 'c2861522_vixy_dl');
+define('REGIST_DB_NAME', getenv('REGIST_DB_NAME') ?: 'c2861522_regist');
+define('STORE_DB_NAME', getenv('STORE_DB_NAME') ?: 'c2861522_vixy_st');
+define('DB_USER', getenv('DB_USER') ?: 'c2861522_VixySD');
+define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : 'LnsdEjc@st6f4fY');
 
 // 2. SEGURIDAD Y JWT SECRET (Cambie esta clave en producción)
 define('JWT_SECRET', getenv('JWT_SECRET') ?: 'VIXY_SECRET_KEY_SUPER_SECURE_2026_PROD_JWT_AUTH_TOKEN');

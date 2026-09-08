@@ -289,9 +289,41 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // 4. Validar Estado de Aprobación y Verificación Administrativa
         $storeStatus = strtolower(trim($store['status'] ?? ''));
+
+        // Si el campo status está vacío o no existe (tabla c2861522_vixy_dl no tiene campo status),
+        // derivar el status desde activo/abierto_manual
         if (empty($storeStatus)) {
-            $storeStatus = (isset($store['activo']) && (int)$store['activo'] === 1) ? 'aprobado' : 'pendiente';
+            if (isset($store['activo'])) {
+                $storeStatus = ((int)$store['activo'] === 1) ? 'aprobado' : 'pendiente';
+            } else {
+                // Si el comercio viene de la tabla de delivery (sin campo status), asumir aprobado
+                $storeStatus = 'aprobado';
+            }
         }
+
+        // Si está aprobado en regist, auto-sincronizar el campo activo en vixy_dl
+        if ($storeStatus === 'aprobado' && $isFromRegist) {
+            try {
+                $storeId_sync = !empty($store['codigo_comercio']) ? $store['codigo_comercio'] : null;
+                $storeRif_sync = $store['rif_cedula_juridica'] ?? null;
+                $storeEmail_sync = $store['email'] ?? null;
+
+                // Verificar si ya existe en vixy_dl
+                $checkDl = $pdo->prepare("SELECT id FROM comercios WHERE id = :id OR rif = :rif OR email = :email LIMIT 1");
+                $checkDl->execute(['id' => $storeId_sync ?: '', 'rif' => $storeRif_sync ?: '', 'email' => $storeEmail_sync ?: '']);
+                $existsInDl = $checkDl->fetch();
+
+                if ($existsInDl) {
+                    // Activar si está desactivado
+                    $activarDl = $pdo->prepare("UPDATE comercios SET activo = 1, abierto_manual = 1 WHERE id = :id OR rif = :rif OR email = :email");
+                    $activarDl->execute(['id' => $storeId_sync ?: '', 'rif' => $storeRif_sync ?: '', 'email' => $storeEmail_sync ?: '']);
+                }
+                // Si no existe en dl, se insertará más abajo en el flujo normal
+            } catch (Exception $e) {
+                // No bloquear el login por fallo de sincronización
+            }
+        }
+
         if ($storeStatus !== 'aprobado') {
             Database::jsonResponse([
                 'error' => true,

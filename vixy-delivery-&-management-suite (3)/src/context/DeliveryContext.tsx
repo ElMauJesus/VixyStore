@@ -1,0 +1,3310 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  Cliente, 
+  Comercio, 
+  Conductor, 
+  Pedido, 
+  EstadoPedido, 
+  Incidencia, 
+  UsuarioBackend, 
+  NotificacionPush, 
+  FotoVerificacion,
+  MensajeChat,
+  MensajeSoporte,
+  MetodoPagoTipo,
+  ConductorBilletera,
+  ClienteBilletera,
+  ComercioBilletera,
+  AdminUser,
+  Producto,
+  LogActividad,
+  TarifasDeliveryConfig,
+  SolicitudRecarga,
+  ReclamoCliente,
+  LiquidacionComercio,
+  LiquidacionConductor,
+  SolicitudRegistroConductor,
+  CarterasConfig,
+  PagoMovilEmpresaConfig
+} from '../types/delivery';
+import { 
+  DEMO_CLIENTE, 
+  DEMO_CONDUCTOR, 
+  DEMO_COMERCIO, 
+  DEMO_CONDUCTOR_BILLETERA,
+  DEMO_CLIENTE_BILLETERA,
+  DEMO_COMERCIO_BILLETERA,
+  ALL_DEMO_COMERCIOS,
+  ALL_DEMO_CLIENTES,
+  ALL_DEMO_CONDUCTORES,
+  INITIAL_RECHARGE_REQUESTS,
+  INITIAL_CLIENT_CLAIMS,
+  INITIAL_ORDERS, 
+  INITIAL_INCIDENTS, 
+  INITIAL_BACKEND_USERS, 
+  INITIAL_ADMIN_USERS,
+  INITIAL_NOTIFICATIONS,
+  INITIAL_ACTIVITY_LOGS,
+  INITIAL_TARIFAS_CONFIG,
+  INITIAL_LIQUIDACIONES_COMERCIOS,
+  INITIAL_LIQUIDACIONES_CONDUCTORES,
+  INITIAL_SOLICITUDES_CONDUCTORES,
+  TASA_BCV_ACTUAL 
+} from '../data/initialData';
+import { playBellChimeSound } from '../utils/audio';
+
+export const INITIAL_CARTERAS_CONFIG: CarterasConfig = {
+  habilitadasGlobal: true,
+  comerciosHabilitada: true,
+  deliveriesHabilitada: true,
+  clientesHabilitada: true,
+  mensajeMantenimiento: 'El sistema de pagos y retiros mediante cartera digital se encuentra en mantenimiento programado.'
+};
+
+export const INITIAL_PAGO_MOVIL_CONFIG: PagoMovilEmpresaConfig = {
+  banco: '0102 - Banco de Venezuela',
+  telefono: '0414-1234567',
+  cedulaRif: 'J-50123456-0',
+  nombreTitular: 'Vixy Delivery C.A.',
+  qrImageUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=0102%2004141234567%20J501234560',
+  instrucciones: 'Realice su pago móvil a los datos oficiales de la empresa e ingrese los dígitos de la referencia para su validación.'
+};
+
+interface DeliveryContextType {
+  orders: Pedido[];
+  activeOrder: Pedido | null;
+  client: Cliente;
+  clientWallet: ClienteBilletera;
+  clientLoggedIn: boolean;
+  registeredClients: Cliente[];
+  switchActiveClient: (clientId: string) => void;
+  loginClient: (usernameOrPhone: string, password: string) => { success: boolean; error?: string };
+  logoutClient: () => void;
+  registerClient: (data: { nombre: string; apellido: string; cedula: string; telefono: string; username: string; password: string; direccion: string; puntoReferencia: string; email?: string; fotoCedulaUrl?: string; fotoSelfieUrl?: string }) => { success: boolean; error?: string };
+  rechargeClientWallet: (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string) => { success: boolean; error?: string };
+  driver: Conductor;
+  driverWallet: ConductorBilletera;
+  driverLoggedIn: boolean;
+  allDrivers: Conductor[];
+  switchActiveDriver: (driverId: string) => void;
+  loginDriver: (cedulaOrPhone: string, password?: string) => { success: boolean; error?: string };
+  logoutDriver: () => void;
+  store: Comercio;
+  stores: Comercio[];
+  switchStore: (storeId: string) => void;
+  updateStoreSchedule: (storeId: string, scheduleData: string | { horaApertura?: string; horaCierre?: string; diasOperacion?: string[]; horarios?: string; activo?: boolean; abierto?: boolean }, abiertoParam?: boolean) => void;
+  toggleStoreActive: (storeId: string) => void;
+  rateStore: (storeId: string, calificacion: number, comentario: string, clienteNombre: string) => void;
+  storeWallet: ComercioBilletera;
+  storeLoggedIn: boolean;
+  loginStore: (identifier: string, password?: string) => { success: boolean; error?: string };
+  logoutStore: () => void;
+  creditStoreWallet: (params: { montoUsd: number; pedidoId?: string; codigoSeguimiento?: string; tipo: 'pago_pedido_cartera' | 'pago_pedido_directo'; metodoPago?: MetodoPagoTipo; referencia?: string; comprobanteUrl?: string; descripcion: string }) => void;
+  updateStoreRubro: (rubro: string, rubroPersonalizado?: string) => void;
+  updateStoreCategoriasCatalogo: (categorias: string[]) => void;
+  // Solicitudes de Recarga con Autorización Backend
+  rechargeRequests: SolicitudRecarga[];
+  solicitarRecargaCliente: (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string) => { success: boolean; error?: string };
+  solicitarRecargaConductor: (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string) => { success: boolean; error?: string };
+  aprobarRecarga: (solicitudId: string, nota?: string) => void;
+  rechazarRecarga: (solicitudId: string, motivo: string) => void;
+  // Confirmación y Calificación de Entrega
+  confirmDeliveryByClient: (orderId: string, calificacionComercio: number, calificacionConductor: number, comentario: string) => void;
+  // Reclamos y Quejas
+  claims: ReclamoCliente[];
+  createClaim: (data: { pedidoId: string; motivo: string; descripcion: string; imagenes?: string[] }) => ReclamoCliente;
+  updateClaimStatus: (claimId: string, nuevoEstado: 'en_espera_de_respuesta' | 'atendido' | 'solucionado', respuesta: string, autor: 'comercio' | 'backend') => void;
+  // Custodia y Wallets Globales
+  allClientWallets: Array<{ clienteId: string; clienteNombre: string; cedula: string; saldoUsd: number; saldoBs: number; totalRecargadoUsd: number; totalGastadoUsd: number; carpetaComprobantes: string; transacciones: any[] }>;
+  allDriverWallets: Array<{ 
+    conductorId: string; 
+    conductorNombre: string; 
+    cedula: string; 
+    carrerasEntregadas: number;
+    ingresoBrutoDeliveryUsd: number;
+    comisionEmpresaDeliveryUsd: number;
+    gananciaNetaConductorUsd: number;
+    totalRetiradoUsd: number;
+    saldoUsd: number; 
+    saldoBs: number;
+    saldoEnWalletUsd: number;
+    saldoEnWalletBs: number;
+    estadoWallet: 'dinero_en_wallet' | 'totalmente_liquidado';
+    limiteSaldoNegativo: number; 
+    bloqueado: boolean; 
+    carpetaComprobantes: string; 
+    transacciones: any[];
+    liquidaciones: LiquidacionConductor[];
+  }>;
+  allStoreWallets: Array<{ 
+    comercioId: string; 
+    comercioNombre: string; 
+    rif: string; 
+    ventasBrutasUsd: number;
+    comisionEmpresaUsd: number;
+    ingresoNetoUsd: number;
+    totalRetiradoUsd: number;
+    saldoUsd: number; 
+    saldoBs: number; 
+    saldoEnWalletUsd: number;
+    saldoEnWalletBs: number;
+    totalVentasUsd: number; 
+    estadoWallet: 'dinero_en_wallet' | 'totalmente_liquidado' | 'sin_movimientos';
+    transacciones: any[];
+    pedidosComercio: Pedido[];
+    liquidaciones: LiquidacionComercio[];
+  }>;
+  liquidacionesComercios: LiquidacionComercio[];
+  liquidacionesConductores: LiquidacionConductor[];
+  solicitudesRegistroConductores: SolicitudRegistroConductor[];
+  porcentajeComisionComercio: number;
+  setPorcentajeComisionComercio: (val: number) => void;
+  liquidarComercio: (data: Omit<LiquidacionComercio, 'id' | 'fecha'>) => { success: boolean; id?: string; error?: string };
+  liquidarConductor: (data: Omit<LiquidacionConductor, 'id' | 'fecha'>) => { success: boolean; id?: string; error?: string };
+  solicitarRegistroConductor: (data: Omit<SolicitudRegistroConductor, 'id' | 'fechaSolicitud' | 'estado'>) => { success: boolean; error?: string };
+  aprobarRegistroConductor: (solicitudId: string) => void;
+  rechazarRegistroConductor: (solicitudId: string, motivo: string) => void;
+  globalLedger: { totalClientesUsd: number; totalConductoresUsd: number; totalComerciosUsd: number; totalGlobalCustodiaUsd: number };
+  incidents: Incidencia[];
+  backendUsers: UsuarioBackend[];
+  adminUsers: AdminUser[];
+  currentAdminUser: AdminUser;
+  adminIsLoggedIn: boolean;
+  loginAdmin: (identifier?: string, password?: string, fallbackId?: string) => { success: boolean; error?: string };
+  logoutAdmin: () => void;
+  changeAdminPassword: (userId: string, newPassword: string) => { success: boolean; error?: string };
+  activityLogs: LogActividad[];
+  addActivityLog: (log: Omit<LogActividad, 'id' | 'fecha'>) => void;
+  clearActivityLogs: () => void;
+  deliveryRates: TarifasDeliveryConfig;
+  updateDeliveryRates: (rates: Partial<TarifasDeliveryConfig>) => void;
+  carterasConfig: CarterasConfig;
+  updateCarterasConfig: (cfg: Partial<CarterasConfig>) => void;
+  pagoMovilConfig: PagoMovilEmpresaConfig;
+  updatePagoMovilConfig: (cfg: Partial<PagoMovilEmpresaConfig>) => void;
+  calculateDeliveryTripCost: (distanciaKm: number) => {
+    distanciaKm: number;
+    tarifaBaseUsd: number;
+    distanciaBaseKm: number;
+    distanciaExcedenteKm: number;
+    fraccionesAdicionales: number;
+    costoAdicionalUsd: number;
+    totalViajeUsd: number;
+    totalViajeBs: number;
+    comisionPlataformaUsd: number;
+    gananciaMotorizadoUsd: number;
+  };
+  notifications: NotificacionPush[];
+  verificationPhotos: FotoVerificacion[];
+  chatMessages: MensajeChat[];
+  supportMessages: MensajeSoporte[];
+  tasaBcv: number;
+  setTasaBcv: (val: number) => void;
+  updateDriverAvailability: (available: boolean) => void;
+  rechargeDriverWallet: (monto: number, metodoPago: MetodoPagoTipo, referencia: string) => void;
+  toggleSimulatedNegativeBalance: () => void;
+  updateStoreInfo: (info: Partial<Comercio>) => void;
+  updateStorePayments: (payments: any) => void;
+  addProduct: (prod: Omit<Producto, 'id' | 'precioBs'>) => void;
+  updateProduct: (id: string, prod: Partial<Producto>) => void;
+  deleteProduct: (id: string) => void;
+  addProductToStore: (prod: any) => void;
+  updateProductInStore: (id: string, prod: any) => void;
+  deleteProductFromStore: (id: string) => void;
+  switchAdminUser: (userId: string) => void;
+  addAdminUser: (userData: Omit<AdminUser, 'id' | 'ultimoAcceso'>) => void;
+  updateAdminUser: (id: string, updates: Partial<AdminUser>) => void;
+  deleteAdminUser: (id: string) => void;
+  createOrder: (data: {
+    items: { productoId: string; nombre: string; cantidad: number; precioUnitarioUsd: number }[];
+    metodoPago: MetodoPagoTipo;
+    referenciaPago?: string;
+  }) => Pedido;
+  createStoreManualOrder: (params: {
+    clienteNombre: string;
+    clienteTelefono: string;
+    clienteDireccion: string;
+    puntoReferencia?: string;
+    zonaMunicipio?: string;
+    items: Array<{ productoId?: string; nombre: string; cantidad: number; precioUnitarioUsd: number }>;
+    montoSubtotalUsd: number;
+    distanciaKm?: number;
+    metodoPago: MetodoPagoTipo;
+    referenciaPago?: string;
+    notas?: string;
+  }) => Pedido;
+  storeAcceptOrder: (orderId: string) => void;
+  storeRejectOrder: (orderId: string, motivo?: string) => void;
+  verifyPayment: (orderId: string) => void;
+  startPreparing: (orderId: string) => void;
+  readyForPickup: (orderId: string) => void;
+  assignDriverToOrder: (orderId: string, driverId: string) => void;
+  driverAcceptOrder: (orderId: string) => void;
+  driverRejectOrder: (orderId: string, motivo?: string) => void;
+  driverPickUpOrder: (orderId: string) => void;
+  driverDeliverOrder: (orderId: string, photoUrl: string, comentario: string) => void;
+  rateDriver: (orderId: string, estrellas: number, comentario: string) => void;
+  reportIncident: (inc: Omit<Incidencia, 'id' | 'codigoIncidencia' | 'fechaCreacion' | 'estado'>) => void;
+  resolveIncident: (id: string, resolucion: string) => void;
+  sendChatMessage: (orderId: string, emisorTipo: 'cliente' | 'comercio' | 'conductor', emisorNombre: string, mensaje: string) => void;
+  sendSupportMessage: (usuarioTipo: 'cliente' | 'comercio' | 'conductor', usuarioNombre: string, texto: string) => void;
+  respondSupportMessage: (texto: string) => void;
+  // Modal states
+  callModal: { isOpen: boolean; caller: string; callee: string; phone: string; role: string };
+  openCall: (caller: string, callee: string, phone: string, role: string) => void;
+  closeCall: () => void;
+  chatModal: { isOpen: boolean; orderId: string };
+  openChat: (orderId: string) => void;
+  closeChat: () => void;
+  // Maps Open Source (CARTO & OSM) Backend Managed API Key
+  cartoApiKey: string;
+  setCartoApiKey: (key: string) => void;
+  // Real GPS Telemetry & Push Notifications
+  realGpsActive: boolean;
+  realGpsCoords: {
+    lat: number;
+    lng: number;
+    accuracy: number;
+    speed: number;
+    heading: number;
+    timestamp: number;
+  } | null;
+  realGpsError: string | null;
+  requestPushNotificationPermission: () => Promise<boolean>;
+  playNotificationSound: () => void;
+  playBellSound: (variant?: 'store' | 'driver') => void;
+  // 5-second Real-time Synchronization Engine
+  lastSyncTime: string;
+  isLiveSyncing: boolean;
+  syncCountdown: number;
+  triggerManualSync: () => void;
+}
+
+export const findClosestAvailableDriver = (
+  pickupLat: number,
+  pickupLng: number,
+  rejectedDriverIds: string[] = [],
+  ordersList: Pedido[],
+  driversList: Conductor[],
+  preferredDriverId?: string
+): Conductor | null => {
+  const eligibleDrivers = driversList.filter(d => {
+    // 1. Debe estar activo y disponible
+    if (d.activo === false || d.disponible === false) return false;
+    // 2. Saldo no bloqueado (límite -$0.50)
+    if ((d.billetera?.saldoUsd ?? 0) <= -0.50) return false;
+    // 3. No haber rechazado este pedido previamente
+    if (rejectedDriverIds.includes(d.id)) return false;
+    // 4. Si el conductor está ocupado en una carrera activa en curso, saltarlo automáticamente al siguiente
+    const isOccupied = ordersList.some(o => 
+      o.conductor?.id === d.id && 
+      (o.estado === 'en_camino_al_comercio' || o.estado === 'en_camino_al_cliente')
+    );
+    if (isOccupied) return false;
+    return true;
+  });
+
+  if (eligibleDrivers.length === 0) return null;
+
+  // Si el conductor preferido (el motorizado activo en sesión) está disponible y elegible, priorizarlo
+  if (preferredDriverId) {
+    const preferred = eligibleDrivers.find(d => d.id === preferredDriverId);
+    if (preferred) return preferred;
+  }
+
+  // Ordenar de menor a mayor distancia euclidiana respecto al punto de recolección
+  eligibleDrivers.sort((a, b) => {
+    const distA = Math.hypot(a.lat - pickupLat, a.lng - pickupLng);
+    const distB = Math.hypot(b.lat - pickupLat, b.lng - pickupLng);
+    return distA - distB;
+  });
+
+  return eligibleDrivers[0];
+};
+
+const DeliveryContext = createContext<DeliveryContextType | undefined>(undefined);
+
+export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [orders, setOrders] = useState<Pedido[]>(INITIAL_ORDERS);
+  const [client, setClient] = useState<Cliente>(DEMO_CLIENTE);
+  const [clientWallet, setClientWallet] = useState<ClienteBilletera>(DEMO_CLIENTE_BILLETERA);
+  const [registeredClients, setRegisteredClients] = useState<Cliente[]>(ALL_DEMO_CLIENTES);
+  const [clientLoggedIn, setClientLoggedIn] = useState<boolean>(true);
+
+  const [driverWallet, setDriverWallet] = useState<ConductorBilletera>(DEMO_CONDUCTOR_BILLETERA);
+  const [driver, setDriver] = useState<Conductor>({
+    ...DEMO_CONDUCTOR,
+    billetera: DEMO_CONDUCTOR_BILLETERA
+  });
+  const [allDrivers, setAllDrivers] = useState<Conductor[]>(ALL_DEMO_CONDUCTORES);
+  const [driverLoggedIn, setDriverLoggedIn] = useState<boolean>(true);
+
+  const [stores, setStores] = useState<Comercio[]>(ALL_DEMO_COMERCIOS);
+  const [store, setStore] = useState<Comercio>(DEMO_COMERCIO);
+  const [storeWallet, setStoreWallet] = useState<ComercioBilletera>(DEMO_COMERCIO_BILLETERA);
+  const [storeLoggedIn, setStoreLoggedIn] = useState<boolean>(true);
+
+  const [rechargeRequests, setRechargeRequests] = useState<SolicitudRecarga[]>(INITIAL_RECHARGE_REQUESTS);
+  const [claims, setClaims] = useState<ReclamoCliente[]>(INITIAL_CLIENT_CLAIMS);
+  const [liquidacionesComercios, setLiquidacionesComercios] = useState<LiquidacionComercio[]>(INITIAL_LIQUIDACIONES_COMERCIOS);
+  const [liquidacionesConductores, setLiquidacionesConductores] = useState<LiquidacionConductor[]>(INITIAL_LIQUIDACIONES_CONDUCTORES);
+  const [solicitudesRegistroConductores, setSolicitudesRegistroConductores] = useState<SolicitudRegistroConductor[]>(INITIAL_SOLICITUDES_CONDUCTORES);
+  
+  // Modificador de comisión de la empresa que comienza en 0% (los precios de los artículos no son afectados)
+  const [porcentajeComisionComercio, setPorcentajeComisionComercioState] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_comision_comercio');
+      return saved !== null ? parseFloat(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const setPorcentajeComisionComercio = (val: number) => {
+    const num = Math.max(0, Math.min(100, isNaN(val) ? 0 : val));
+    setPorcentajeComisionComercioState(num);
+    try {
+      localStorage.setItem('vixy_comision_comercio', num.toString());
+    } catch (e) {
+      console.warn('Error saving comision comercio to localStorage', e);
+    }
+  };
+
+  // Configuración de Activación / Desactivación de Carteras sincronizadas con apps y panel
+  const [carterasConfig, setCarterasConfigState] = useState<CarterasConfig>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_carteras_config');
+      return saved ? JSON.parse(saved) : INITIAL_CARTERAS_CONFIG;
+    } catch {
+      return INITIAL_CARTERAS_CONFIG;
+    }
+  });
+
+  const updateCarterasConfig = (cfg: Partial<CarterasConfig>) => {
+    setCarterasConfigState(prev => {
+      const updated = { ...prev, ...cfg };
+      try {
+        localStorage.setItem('vixy_carteras_config', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Error saving carteras config to localStorage', e);
+      }
+      return updated;
+    });
+  };
+
+  // Datos oficiales de Pago Móvil modificables en Panel Web
+  const [pagoMovilConfig, setPagoMovilConfigState] = useState<PagoMovilEmpresaConfig>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_pago_movil_config');
+      return saved ? JSON.parse(saved) : INITIAL_PAGO_MOVIL_CONFIG;
+    } catch {
+      return INITIAL_PAGO_MOVIL_CONFIG;
+    }
+  });
+
+  const updatePagoMovilConfig = (cfg: Partial<PagoMovilEmpresaConfig>) => {
+    setPagoMovilConfigState(prev => {
+      const updated = { ...prev, ...cfg };
+      try {
+        localStorage.setItem('vixy_pago_movil_config', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Error saving pago movil config to localStorage', e);
+      }
+      return updated;
+    });
+  };
+
+  const [incidents, setIncidents] = useState<Incidencia[]>(INITIAL_INCIDENTS);
+  const [backendUsers, setBackendUsers] = useState<UsuarioBackend[]>(INITIAL_BACKEND_USERS);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>(INITIAL_ADMIN_USERS);
+  const [currentAdminUser, setCurrentAdminUser] = useState<AdminUser>(INITIAL_ADMIN_USERS[0]);
+  const [notifications, setNotifications] = useState<NotificacionPush[]>(INITIAL_NOTIFICATIONS);
+  const [tasaBcv, setTasaBcv] = useState<number>(TASA_BCV_ACTUAL);
+  const [adminIsLoggedIn, setAdminIsLoggedIn] = useState<boolean>(true);
+  const [activityLogs, setActivityLogs] = useState<LogActividad[]>(INITIAL_ACTIVITY_LOGS);
+  const [deliveryRates, setDeliveryRates] = useState<TarifasDeliveryConfig>(INITIAL_TARIFAS_CONFIG);
+  const [cartoApiKey, setCartoApiKeyState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('vixy_carto_api_key') || (import.meta as any).env?.VITE_CARTO_API_KEY || '';
+    } catch {
+      return (import.meta as any).env?.VITE_CARTO_API_KEY || '';
+    }
+  });
+
+  const handleSetCartoApiKey = (newKey: string) => {
+    const trimmed = newKey.trim();
+    setCartoApiKeyState(trimmed);
+    try {
+      localStorage.setItem('vixy_carto_api_key', trimmed);
+    } catch (e) {
+      console.warn('Error saving CARTO API key to localStorage', e);
+    }
+  };
+
+  const handleSetTasaBcv = (newVal: number) => {
+    setTasaBcv(newVal);
+    setDeliveryRates(prev => ({ ...prev, tasaBcvBs: newVal }));
+    // 1. Recalcular precios de los productos en Bs basados en la tasa oficial BCV
+    setStore(prev => ({
+      ...prev,
+      productos: (prev.productos || []).map(p => ({
+        ...p,
+        precioBs: Math.round(p.precioUsd * newVal)
+      }))
+    }));
+    // 2. Recalcular saldos de cartera en Bs
+    setClientWallet(prev => ({
+      ...prev,
+      saldoBs: Math.round(prev.saldoUsd * newVal * 100) / 100
+    }));
+    setStoreWallet(prev => ({
+      ...prev,
+      saldoBs: Math.round(prev.saldoUsd * newVal * 100) / 100
+    }));
+    setDriverWallet(prev => ({
+      ...prev,
+      saldoBs: Math.round(prev.saldoUsd * newVal * 100) / 100
+    }));
+    addActivityLog({
+      usuarioId: currentAdminUser?.id || 'admin-001',
+      usuarioNombre: currentAdminUser?.nombre || 'Administrador',
+      usuarioRol: 'admin',
+      modulo: 'tarifas',
+      accion: 'Actualización Tasa Oficial BCV',
+      detalles: `Tasa oficial del BCV establecida en ${newVal.toFixed(2)} Bs/USD. Precios de productos de comercios y saldos de carteras sincronizados con la base de datos SQL.`,
+      ip: '190.202.88.14 (Caracas, CANTV)',
+      severidad: 'exito'
+    });
+  };
+
+  // --- MOTOR DE SINCRONIZACIÓN EN VIVO (INTERVALO: 5 SEGUNDOS) ENTRE APPS Y PANEL WEB ---
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toTimeString().split(' ')[0]);
+  const [isLiveSyncing, setIsLiveSyncing] = useState<boolean>(false);
+  const [syncCountdown, setSyncCountdown] = useState<number>(5);
+
+  const performSync = () => {
+    setIsLiveSyncing(true);
+    const nowStr = new Date().toTimeString().split(' ')[0];
+    setLastSyncTime(nowStr);
+
+    try {
+      // Sincronizar parámetros compartidos en localStorage
+      const savedComision = localStorage.getItem('vixy_comision_comercio');
+      if (savedComision !== null) {
+        const val = parseFloat(savedComision);
+        if (!isNaN(val)) setPorcentajeComisionComercioState(val);
+      }
+      const savedCarteras = localStorage.getItem('vixy_carteras_config');
+      if (savedCarteras) {
+        setCarterasConfigState(JSON.parse(savedCarteras));
+      }
+      const savedPagoMovil = localStorage.getItem('vixy_pago_movil_config');
+      if (savedPagoMovil) {
+        setPagoMovilConfigState(JSON.parse(savedPagoMovil));
+      }
+    } catch (e) {
+      console.warn('Sync cycle warning', e);
+    }
+
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('vixy_sync_channel');
+        channel.postMessage({ type: 'HEARTBEAT_5S', timestamp: Date.now() });
+        channel.close();
+      }
+    } catch {}
+
+    setTimeout(() => {
+      setIsLiveSyncing(false);
+    }, 400);
+  };
+
+  const triggerManualSync = () => {
+    setSyncCountdown(5);
+    performSync();
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSyncCountdown(prev => {
+        if (prev <= 1) {
+          performSync();
+          return 5;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith('vixy_')) {
+        performSync();
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        channel = new BroadcastChannel('vixy_sync_channel');
+        channel.onmessage = (ev) => {
+          if (ev.data?.type === 'FORCE_REFRESH') {
+            performSync();
+          }
+        };
+      }
+    } catch {}
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('storage', handleStorageEvent);
+      if (channel) channel.close();
+    };
+  }, []);
+
+  // Auth Cliente
+  const logoutClient = () => {
+    setClientLoggedIn(false);
+    addNotification('cliente', '🔒 Sesión Cerrada', 'Has cerrado tu sesión en Vixy Pedidos de forma segura.');
+  };
+
+  const loginClient = (usernameOrPhone: string, password: string): { success: boolean; error?: string } => {
+    const cleanInput = usernameOrPhone.trim().toLowerCase();
+    const found = registeredClients.find(c => 
+      (c.username && c.username.toLowerCase() === cleanInput) ||
+      (c.telefono && c.telefono.replace(/\s+/g, '') === cleanInput.replace(/\s+/g, '')) ||
+      (c.cedula && c.cedula.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanInput.replace(/[^a-z0-9]/g, ''))
+    );
+
+    if (!found) {
+      return { success: false, error: 'Usuario, cédula o número de teléfono no encontrado en el sistema.' };
+    }
+
+    if (found.passwordHash && found.passwordHash !== password) {
+      return { success: false, error: 'Contraseña incorrecta. Por favor verifica tus credenciales.' };
+    }
+
+    setClient(found);
+    if (found.billetera) {
+      setClientWallet(found.billetera);
+    }
+    setClientLoggedIn(true);
+    addNotification('cliente', '👋 ¡Bienvenido!', `Hola ${found.nombre}, sesión iniciada con éxito.`);
+    return { success: true };
+  };
+
+  const registerClient = (data: {
+    nombre: string;
+    apellido: string;
+    cedula: string;
+    telefono: string;
+    username: string;
+    password: string;
+    direccion: string;
+    puntoReferencia: string;
+    email?: string;
+    fotoCedulaUrl?: string;
+    fotoSelfieUrl?: string;
+  }): { success: boolean; error?: string } => {
+    const cedulaLimpia = (data.cedula || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const tlfLimpio = (data.telefono || '').trim().replace(/\s+/g, '');
+    const userLimpio = (data.username || '').trim().toLowerCase();
+
+    const existeCedula = registeredClients.some(c => c.cedula && c.cedula.toLowerCase().replace(/[^a-z0-9]/g, '') === cedulaLimpia);
+    if (existeCedula) {
+      return { success: false, error: `La cédula de identidad "${data.cedula}" ya se encuentra registrada en la base de datos SQL.` };
+    }
+
+    const existeTlf = registeredClients.some(c => c.telefono && c.telefono.replace(/\s+/g, '') === tlfLimpio);
+    if (existeTlf) {
+      return { success: false, error: `El número de teléfono "${data.telefono}" ya está asociado a otra cuenta de usuario.` };
+    }
+
+    const existeUsername = registeredClients.some(c => c.username && c.username.toLowerCase() === userLimpio);
+    if (existeUsername) {
+      return { success: false, error: `El nombre de usuario "@${data.username}" ya está en uso. Por favor elija otro.` };
+    }
+
+    const newId = 'cli-' + Date.now().toString(36);
+    const newWallet: ClienteBilletera = {
+      clienteId: newId,
+      saldoUsd: 0,
+      saldoBs: 0,
+      totalGastadoUsd: 0,
+      totalRecargadoUsd: 0,
+      historialTransacciones: []
+    };
+
+    const newClient: Cliente = {
+      id: newId,
+      username: data.username.trim(),
+      passwordHash: data.password,
+      nombre: data.nombre.trim(),
+      apellido: data.apellido.trim(),
+      cedula: data.cedula.trim().toUpperCase(),
+      telefono: data.telefono.trim(),
+      email: data.email?.trim() || `${data.username.trim()}@vixy.com`,
+      direccion: data.direccion.trim(),
+      puntoReferencia: data.puntoReferencia.trim(),
+      lat: 10.4965,
+      lng: -66.8523,
+      avatarUrl: data.fotoSelfieUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      fotoCedulaUrl: data.fotoCedulaUrl,
+      fotoSelfieUrl: data.fotoSelfieUrl,
+      billetera: newWallet
+    };
+
+    setRegisteredClients(prev => [...prev, newClient]);
+    setClient(newClient);
+    setClientWallet(newWallet);
+    setClientLoggedIn(true);
+
+    addNotification('cliente', '🎉 Registro Exitoso', `¡Bienvenido a Vixy Pedidos, ${newClient.nombre}! Cartera creada.`);
+    addActivityLog({
+      usuarioId: newClient.id,
+      usuarioNombre: `${newClient.nombre} ${newClient.apellido}`,
+      usuarioRol: 'cliente',
+      modulo: 'seguridad',
+      accion: 'Nuevo Cliente Registrado (SQL)',
+      detalles: `Registro de cliente C.I. ${newClient.cedula}, Tel: ${newClient.telefono}, Usuario: @${newClient.username}. Cartera ID asignada en BD.`,
+      ip: '190.202.88.15',
+      severidad: 'info'
+    });
+
+    return { success: true };
+  };
+
+  const solicitarRecargaCliente = (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string): { success: boolean; error?: string } => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const id = 'sol-rec-' + Date.now();
+    const codigoSolicitud = 'REC-W-' + Math.floor(1000 + Math.random() * 9000);
+    // Carpeta individual por cliente
+    const carpetaPath = `/uploads/clientes/${client.id}/comprobantes/recarga_${Date.now()}.jpg`;
+    const finalComprobante = comprobanteUrl || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=80';
+
+    const nuevaSolicitud: SolicitudRecarga = {
+      id,
+      codigoSolicitud,
+      usuarioTipo: 'cliente',
+      usuarioId: client.id,
+      usuarioNombre: `${client.nombre} ${client.apellido}`,
+      usuarioCedula: client.cedula,
+      montoUsd,
+      montoBs: Math.round(montoUsd * tasaBcv * 100) / 100,
+      metodoPago,
+      referencia,
+      comprobanteUrl: finalComprobante,
+      directorioAlmacenamiento: carpetaPath,
+      fecha: timeStr,
+      estado: 'pendiente'
+    };
+
+    setRechargeRequests(prev => [nuevaSolicitud, ...prev]);
+
+    // Registrar en el historial de la wallet del cliente como pendiente de aprobación
+    setClientWallet(prev => ({
+      ...prev,
+      historialTransacciones: [
+        {
+          id: 'tx-sol-' + Date.now(),
+          clienteId: client.id,
+          tipo: 'recarga' as const,
+          montoUsd,
+          montoBs: Math.round(montoUsd * tasaBcv * 100) / 100,
+          saldoResultanteUsd: prev.saldoUsd, // No se incrementa hasta autorización
+          metodoPago,
+          referencia,
+          comprobanteUrl: carpetaPath,
+          descripcion: `Recarga de $${montoUsd.toFixed(2)} (${metodoPago.toUpperCase()}) - EN ESPERA DE AUTORIZACIÓN CENTRAL (Ref: ${referencia})`,
+          fecha: timeStr,
+          estado: 'pendiente' as any
+        },
+        ...(prev.historialTransacciones || [])
+      ]
+    }));
+
+    addNotification('cliente', '⏳ Recarga Enviada a Verificación', `Tu solicitud de $${montoUsd.toFixed(2)} USD fue enviada al Backend Central. Se acreditará una vez aprobada la referencia.`);
+    addNotification('web', '🔔 Nueva Solicitud de Recarga (Cliente)', `Cliente ${client.nombre} reportó recarga de $${montoUsd.toFixed(2)} USD vía ${metodoPago.toUpperCase()} (Ref: ${referencia}). Almacenado en ${carpetaPath}`);
+    addActivityLog({
+      usuarioId: client.id,
+      usuarioNombre: `${client.nombre} ${client.apellido}`,
+      usuarioRol: 'cliente',
+      modulo: 'seguridad',
+      accion: 'Solicitud de Recarga Wallet',
+      detalles: `Cliente solicitó recarga de $${montoUsd.toFixed(2)} USD vía ${metodoPago} (Ref: ${referencia}). Carpeta: ${carpetaPath}`,
+      ip: '201.249.12.80 (Caracas)',
+      severidad: 'info'
+    });
+
+    return { success: true };
+  };
+
+  const rechargeClientWallet = (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string): { success: boolean; error?: string } => {
+    return solicitarRecargaCliente(montoUsd, metodoPago, referencia, comprobanteUrl);
+  };
+
+  const solicitarRecargaConductor = (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string): { success: boolean; error?: string } => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const id = 'sol-rec-dr-' + Date.now();
+    const codigoSolicitud = 'REC-MOTO-' + Math.floor(1000 + Math.random() * 9000);
+    // Carpeta individual por conductor
+    const carpetaPath = `/uploads/conductores/${driver.id}/comprobantes/recarga_${Date.now()}.jpg`;
+    const finalComprobante = comprobanteUrl || 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=500&auto=format&fit=crop&q=80';
+
+    const nuevaSolicitud: SolicitudRecarga = {
+      id,
+      codigoSolicitud,
+      usuarioTipo: 'conductor',
+      usuarioId: driver.id,
+      usuarioNombre: `${driver.nombre} ${driver.apellido} (Motorizado)`,
+      usuarioCedula: driver.legal.cedula,
+      montoUsd,
+      montoBs: Math.round(montoUsd * tasaBcv * 100) / 100,
+      metodoPago,
+      referencia,
+      comprobanteUrl: finalComprobante,
+      directorioAlmacenamiento: carpetaPath,
+      fecha: timeStr,
+      estado: 'pendiente'
+    };
+
+    setRechargeRequests(prev => [nuevaSolicitud, ...prev]);
+
+    setDriverWallet(prev => ({
+      ...prev,
+      historialTransacciones: [
+        {
+          id: 'tx-dr-sol-' + Date.now(),
+          tipo: 'recarga' as const,
+          monto: montoUsd,
+          saldoResultante: prev.saldoUsd,
+          metodoPago,
+          referencia,
+          comprobanteUrl: carpetaPath,
+          descripcion: `Solicitud recarga $${montoUsd.toFixed(2)} (${metodoPago.toUpperCase()}) - EN ESPERA DE AUTORIZACIÓN CENTRAL`,
+          fecha: timeStr,
+          estado: 'pendiente' as any
+        },
+        ...(prev.historialTransacciones || [])
+      ]
+    }));
+
+    addNotification('conductor', '⏳ Recarga Enviada a Verificación', `Tu solicitud de $${montoUsd.toFixed(2)} USD fue enviada al Backend Central.`);
+    addNotification('web', '🔔 Nueva Solicitud de Recarga (Motorizado)', `Motorizado ${driver.nombre} solicitó recarga de $${montoUsd.toFixed(2)} USD vía ${metodoPago.toUpperCase()} (Ref: ${referencia}).`);
+
+    return { success: true };
+  };
+
+  const aprobarRecarga = (solicitudId: string, nota?: string) => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const sol = rechargeRequests.find(s => s.id === solicitudId);
+    if (!sol) return;
+
+    setRechargeRequests(prev => prev.map(s => s.id === solicitudId ? {
+      ...s,
+      estado: 'aprobada',
+      autorizadoPor: currentAdminUser.nombre,
+      fechaResolucion: timeStr,
+      notaAdmin: nota || 'Aprobada por Operaciones Centrales tras verificación bancaria'
+    } : s));
+
+    if (sol.usuarioTipo === 'cliente') {
+      if (sol.usuarioId === client.id) {
+        setClientWallet(prev => {
+          const nuevoSaldoUsd = Math.round((prev.saldoUsd + sol.montoUsd) * 100) / 100;
+          const nuevoSaldoBs = Math.round((nuevoSaldoUsd * tasaBcv) * 100) / 100;
+          return {
+            ...prev,
+            saldoUsd: nuevoSaldoUsd,
+            saldoBs: nuevoSaldoBs,
+            totalRecargadoUsd: Math.round((prev.totalRecargadoUsd + sol.montoUsd) * 100) / 100,
+            historialTransacciones: (prev.historialTransacciones || []).map(tx => 
+              tx.referencia === sol.referencia ? { ...tx, estado: 'completado' as any, saldoResultanteUsd: nuevoSaldoUsd, descripcion: `Recarga aprobada por Central: $${sol.montoUsd.toFixed(2)} USD (${sol.metodoPago.toUpperCase()})` } : tx
+            )
+          };
+        });
+      }
+
+      setRegisteredClients(prev => prev.map(c => {
+        if (c.id === sol.usuarioId && c.billetera) {
+          const nuevoSaldo = Math.round((c.billetera.saldoUsd + sol.montoUsd) * 100) / 100;
+          return {
+            ...c,
+            billetera: {
+              ...c.billetera,
+              saldoUsd: nuevoSaldo,
+              saldoBs: Math.round(nuevoSaldo * tasaBcv * 100) / 100,
+              totalRecargadoUsd: Math.round((c.billetera.totalRecargadoUsd + sol.montoUsd) * 100) / 100
+            }
+          };
+        }
+        return c;
+      }));
+
+      addNotification('cliente', '✅ Recarga Autorizada y Acreditada', `El Backend Central ha acreditado $${sol.montoUsd.toFixed(2)} USD a tu Cartera Vixy.`);
+    } else {
+      if (sol.usuarioId === driver.id) {
+        setDriverWallet(prev => {
+          const nuevoSaldo = parseFloat((prev.saldoUsd + sol.montoUsd).toFixed(2));
+          return {
+            ...prev,
+            saldoUsd: nuevoSaldo,
+            bloqueadoPorSaldo: nuevoSaldo <= prev.limiteSaldoNegativo,
+            totalComisionesPagadasUsd: Math.round((prev.totalComisionesPagadasUsd + sol.montoUsd) * 100) / 100,
+            historialTransacciones: (prev.historialTransacciones || []).map(tx =>
+              tx.referencia === sol.referencia ? { ...tx, estado: 'completado' as any, saldoResultante: nuevoSaldo, descripcion: `Recarga autorizada por Central: $${sol.montoUsd.toFixed(2)} USD` } : tx
+            )
+          };
+        });
+      }
+
+      setAllDrivers(prev => prev.map(d => {
+        if (d.id === sol.usuarioId && d.billetera) {
+          const nuevoSaldo = parseFloat((d.billetera.saldoUsd + sol.montoUsd).toFixed(2));
+          return {
+            ...d,
+            billetera: {
+              ...d.billetera,
+              saldoUsd: nuevoSaldo,
+              bloqueadoPorSaldo: nuevoSaldo <= d.billetera.limiteSaldoNegativo
+            }
+          };
+        }
+        return d;
+      }));
+
+      addNotification('conductor', '✅ Recarga Autorizada', `Tu recarga de $${sol.montoUsd.toFixed(2)} USD fue autorizada. Tu balance está solvente.`);
+    }
+
+    addActivityLog({
+      usuarioId: currentAdminUser.id,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: 'admin',
+      modulo: 'seguridad',
+      accion: 'Autorización de Recarga',
+      detalles: `Aprobada recarga de $${sol.montoUsd} USD para ${sol.usuarioNombre} (${sol.usuarioTipo}). Comprobante guardado en ${sol.directorioAlmacenamiento}`,
+      ip: '190.202.88.14 (Caracas)',
+      severidad: 'exito'
+    });
+  };
+
+  const rechazarRecarga = (solicitudId: string, motivo: string) => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    setRechargeRequests(prev => prev.map(s => s.id === solicitudId ? {
+      ...s,
+      estado: 'rechazada',
+      autorizadoPor: currentAdminUser.nombre,
+      fechaResolucion: timeStr,
+      notaAdmin: motivo
+    } : s));
+
+    const sol = rechargeRequests.find(s => s.id === solicitudId);
+    if (sol) {
+      addNotification(sol.usuarioTipo === 'cliente' ? 'cliente' : 'conductor', '❌ Recarga Rechazada', `La solicitud de recarga de $${sol.montoUsd.toFixed(2)} USD fue rechazada: ${motivo}`);
+    }
+  };
+
+  // --- GESTIÓN DE SOLICITUDES DE REGISTRO DIRECTO DE CONDUCTORES ---
+  const solicitarRegistroConductor = (data: Omit<SolicitudRegistroConductor, 'id' | 'fechaSolicitud' | 'estado'>): { success: boolean; error?: string } => {
+    const cedulaLimpia = (data.cedula || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const placaLimpia = (data.placaMoto || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+    const existeCedula = allDrivers.some(d => d.legal?.cedula && d.legal.cedula.toLowerCase().replace(/[^a-z0-9]/g, '') === cedulaLimpia) ||
+      solicitudesRegistroConductores.some(s => s.estado === 'pendiente_aprobacion' && s.cedula && s.cedula.toLowerCase().replace(/[^a-z0-9]/g, '') === cedulaLimpia);
+    if (existeCedula) {
+      return { success: false, error: `La cédula de identidad "${data.cedula}" ya posee una cuenta o solicitud en evaluación.` };
+    }
+
+    const existePlaca = allDrivers.some(d => d.moto?.placa && d.moto.placa.toUpperCase().replace(/[^A-Z0-9]/g, '') === placaLimpia);
+    if (existePlaca) {
+      return { success: false, error: `La placa de vehículo "${data.placaMoto}" ya se encuentra registrada en el sistema.` };
+    }
+
+    const newId = 'sol-cond-' + Date.now().toString(36);
+    const newSolicitud: SolicitudRegistroConductor = {
+      ...data,
+      id: newId,
+      estado: 'pendiente_aprobacion',
+      fechaSolicitud: new Date().toISOString().replace('T', ' ').slice(0, 19)
+    };
+
+    setSolicitudesRegistroConductores(prev => [newSolicitud, ...prev]);
+
+    addActivityLog({
+      usuarioId: 'guest-driver',
+      usuarioNombre: `${data.nombre} ${data.apellido}`,
+      usuarioRol: 'conductor',
+      modulo: 'seguridad',
+      accion: 'Solicitud Registro Conductor',
+      detalles: `Nuevo repartidor postulado: ${data.nombre} ${data.apellido} (${data.cedula}). Moto: ${data.marcaMoto} ${data.modeloMoto} Placa: ${data.placaMoto}. Documentos y fotos subidos a almacenamiento.`,
+      ip: '190.202.88.14 (Caracas)',
+      severidad: 'info'
+    });
+
+    addNotification('web', '🛵 Nueva Solicitud de Repartidor', `${data.nombre} ${data.apellido} (${data.cedula}) completó su registro con fotos de cédula, licencia, carnet y vehículo.`);
+
+    return { success: true };
+  };
+
+  const aprobarRegistroConductor = (solicitudId: string) => {
+    const sol = solicitudesRegistroConductores.find(s => s.id === solicitudId);
+    if (!sol) return;
+
+    const newDriverId = 'cond-' + Date.now().toString(36);
+    const newWallet: ConductorBilletera = {
+      conductorId: newDriverId,
+      saldoUsd: 0,
+      limiteSaldoNegativo: -0.50,
+      serviciosRealizados: 0,
+      totalComisionesPagadasUsd: 0,
+      bloqueadoPorSaldo: false,
+      historialTransacciones: []
+    };
+
+    const newDriver: Conductor = {
+      id: newDriverId,
+      nombre: sol.nombre,
+      apellido: sol.apellido,
+      telefono: sol.telefono,
+      email: sol.email,
+      fotoUrl: sol.fotoCedulaUrl || 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
+      disponible: true,
+      activo: true,
+      rating: 5.0,
+      totalEntregas: 0,
+      lat: 10.4910,
+      lng: -66.8620,
+      ubicacionActual: 'Caracas, Distrito Capital',
+      estadoRegistro: 'aprobado',
+      moto: {
+        marca: sol.marcaMoto,
+        modelo: sol.modeloMoto,
+        ano: parseInt(sol.anoMoto) || 2023,
+        color: sol.colorMoto,
+        placa: sol.placaMoto,
+        serialMotor: 'N/A',
+        serialChasis: 'N/A'
+      },
+      legal: {
+        cedula: sol.cedula,
+        licenciaGrado: sol.licenciaGrado || '2da',
+        licenciaNumero: (sol.cedula || '').replace(/[^0-9]/g, ''),
+        licenciaVencimiento: sol.licenciaVencimiento,
+        licenciaValida: true,
+        certificadoMedicoNumero: 'MPPS-' + Math.floor(100000 + Math.random() * 900000),
+        certificadoMedicoVencimiento: sol.certificadoMedicoVencimiento,
+        certificadoMedicoValido: true,
+        rcvAseguradora: 'Seguros Caracas',
+        rcvPolizaNumero: 'RCV-891024',
+        rcvVencimiento: '2027-12-31'
+      },
+      documentosFotos: {
+        cedulaFotoUrl: sol.fotoCedulaUrl,
+        licenciaFotoUrl: sol.fotoLicenciaUrl,
+        certificadoMedicoFotoUrl: sol.fotoCertificadoMedicoUrl,
+        carnetCirculacionFotoUrl: sol.fotoCarnetCirculacionUrl,
+        vehiculoFotoUrl: sol.fotoVehiculoUrl,
+        placaFotoUrl: sol.fotoPlacaUrl
+      },
+      billetera: newWallet,
+      resenas: []
+    };
+
+    setAllDrivers(prev => [...prev, newDriver]);
+    setSolicitudesRegistroConductores(prev => prev.map(s => s.id === solicitudId ? { ...s, estado: 'aprobado' } : s));
+
+    addActivityLog({
+      usuarioId: currentAdminUser.id,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: 'admin',
+      modulo: 'seguridad',
+      accion: 'Aprobación Conductor',
+      detalles: `Conductor aprobado y activado: ${sol.nombre} ${sol.apellido} (${sol.cedula}). Documentos validados por administración.`,
+      ip: '190.202.88.14 (Caracas)',
+      severidad: 'exito'
+    });
+
+    addNotification('web', '✅ Conductor Activado', `${sol.nombre} ${sol.apellido} ha sido verificado y aprobado para recibir pedidos.`);
+  };
+
+  const rechazarRegistroConductor = (solicitudId: string, motivo: string) => {
+    setSolicitudesRegistroConductores(prev => prev.map(s => s.id === solicitudId ? { ...s, estado: 'rechazado', motivoRechazo: motivo } : s));
+    const sol = solicitudesRegistroConductores.find(s => s.id === solicitudId);
+    if (sol) {
+      addActivityLog({
+        usuarioId: currentAdminUser.id,
+        usuarioNombre: currentAdminUser.nombre,
+        usuarioRol: 'admin',
+        modulo: 'seguridad',
+        accion: 'Rechazo Solicitud Conductor',
+        detalles: `Solicitud rechazada para ${sol.nombre} ${sol.apellido} (${sol.cedula}). Motivo: ${motivo}`,
+        ip: '190.202.88.14 (Caracas)',
+        severidad: 'advertencia'
+      });
+      addNotification('web', '❌ Solicitud Rechazada', `La solicitud de ${sol.nombre} ${sol.apellido} fue rechazada: ${motivo}`);
+    }
+  };
+
+  // --- GESTIÓN DE LIQUIDACIONES Y PAGOS DETALLADOS CON COMPROBANTE SQL ---
+  const liquidarComercio = (data: Omit<LiquidacionComercio, 'id' | 'fecha'>): { success: boolean; id?: string; error?: string } => {
+    const id = 'liq-com-' + Date.now().toString(36);
+    const nuevaLiq: LiquidacionComercio = {
+      ...data,
+      id,
+      fecha: new Date().toISOString().replace('T', ' ').slice(0, 19)
+    };
+
+    setLiquidacionesComercios(prev => [nuevaLiq, ...prev]);
+
+    // Actualizar la cartera del comercio si coincide con el comercio activo
+    if (data.comercioId === store.id) {
+      setStoreWallet(prev => ({
+        ...prev,
+        saldoUsd: Math.max(0, parseFloat((prev.saldoUsd - data.montoNetoUsd).toFixed(2))),
+        totalRetiradoUsd: parseFloat((prev.totalRetiradoUsd + data.montoNetoUsd).toFixed(2)),
+        historialTransacciones: [
+          {
+            id: 'tx-ret-' + Date.now().toString(36),
+            comercioId: data.comercioId,
+            tipo: 'retiro',
+            montoUsd: -data.montoNetoUsd,
+            montoBs: -(data.montoNetoUsd * tasaBcv),
+            saldoResultanteUsd: Math.max(0, parseFloat((prev.saldoUsd - data.montoNetoUsd).toFixed(2))),
+            descripcion: `Liquidación pagada (${data.metodoPago}) Ref: ${data.referenciaBancaria}. Comisión de empresa descontada: $${data.comisionEmpresaUsd.toFixed(2)} USD`,
+            metodoPago: data.metodoPago,
+            referencia: data.referenciaBancaria,
+            comprobanteUrl: data.comprobanteUrl || data.comprobanteRutaSql,
+            fecha: nuevaLiq.fecha,
+            estado: 'acreditado'
+          },
+          ...prev.historialTransacciones
+        ]
+      }));
+    }
+
+    addActivityLog({
+      usuarioId: currentAdminUser.id,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: 'admin',
+      modulo: 'comercios',
+      accion: 'Liquidación Comercio',
+      detalles: `Pago procesado a ${data.comercioNombre}. Bruto: $${data.montoBrutoUsd.toFixed(2)}, Comisión Empresa: $${data.comisionEmpresaUsd.toFixed(2)}, Neto Pagado: $${data.montoNetoUsd.toFixed(2)} USD (Bs. ${data.montoNetoBs.toFixed(2)}). Comprobante: ${data.comprobanteRutaSql}`,
+      ip: '190.202.88.14 (Caracas)',
+      severidad: 'exito'
+    });
+
+    addNotification('comercio', '💰 Pago Liquidado', `Se ha transferido $${data.montoNetoUsd.toFixed(2)} USD (Bs. ${data.montoNetoBs.toFixed(2)}) a tu cuenta con descuento de comisión de empresa. Ref: ${data.referenciaBancaria}`);
+
+    return { success: true, id };
+  };
+
+  const liquidarConductor = (data: Omit<LiquidacionConductor, 'id' | 'fecha'>): { success: boolean; id?: string; error?: string } => {
+    const id = 'liq-cond-' + Date.now().toString(36);
+    const nuevaLiq: LiquidacionConductor = {
+      ...data,
+      id,
+      fecha: new Date().toISOString().replace('T', ' ').slice(0, 19)
+    };
+
+    setLiquidacionesConductores(prev => [nuevaLiq, ...prev]);
+
+    // Actualizar wallet de conductor si es el activo
+    if (data.conductorId === driver.id) {
+      setDriverWallet(prev => ({
+        ...prev,
+        saldoUsd: Math.max(0, parseFloat((prev.saldoUsd - data.montoNetoUsd).toFixed(2))),
+        historialTransacciones: [
+          {
+            id: 'tx-ret-cond-' + Date.now().toString(36),
+            conductorId: data.conductorId,
+            tipo: 'ajuste',
+            monto: -data.montoNetoUsd,
+            saldoResultante: Math.max(0, parseFloat((prev.saldoUsd - data.montoNetoUsd).toFixed(2))),
+            descripcion: `Liquidación de ganancias netas (${data.carrerasLiquidadas} carreras). Comisión descontada: $${data.comisionEmpresaUsd.toFixed(2)}. Ref: ${data.referenciaBancaria}`,
+            metodoPago: data.metodoPago,
+            referencia: data.referenciaBancaria,
+            comprobanteUrl: data.comprobanteUrl || data.comprobanteRutaSql,
+            fecha: nuevaLiq.fecha,
+            estado: 'completado'
+          },
+          ...prev.historialTransacciones
+        ]
+      }));
+    }
+
+    addActivityLog({
+      usuarioId: currentAdminUser.id,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: 'admin',
+      modulo: 'conductores',
+      accion: 'Liquidación Conductor',
+      detalles: `Pago de carreras enviado a ${data.conductorNombre}. Bruto: $${data.montoBrutoUsd.toFixed(2)}, Comisión Vixy: $${data.comisionEmpresaUsd.toFixed(2)}, Neto Pagado: $${data.montoNetoUsd.toFixed(2)} USD (Bs. ${data.montoNetoBs.toFixed(2)}). Comprobante: ${data.comprobanteRutaSql}`,
+      ip: '190.202.88.14 (Caracas)',
+      severidad: 'exito'
+    });
+
+    addNotification('conductor', '💵 Ganancias Liquidadas', `Se te ha enviado el pago de $${data.montoNetoUsd.toFixed(2)} USD (Bs. ${data.montoNetoBs.toFixed(2)}) con descuento de comisión ya aplicado. Ref: ${data.referenciaBancaria}`);
+
+    return { success: true, id };
+  };
+
+  const confirmDeliveryByClient = (orderId: string, calificacionComercio: number, calificacionConductor: number, comentario: string) => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          confirmacionEntregaCliente: {
+            confirmado: true,
+            fechaConfirmacion: timeStr,
+            calificacionComercio,
+            calificacionConductor,
+            comentario
+          },
+          calificacionCliente: {
+            estrellas: Math.round((calificacionComercio + calificacionConductor) / 2),
+            comentario
+          },
+          peticionCerrada: true,
+          historialOperaciones: [
+            ...(o.historialOperaciones || []),
+            {
+              id: 'hist-close-' + Date.now(),
+              estado: 'entregado',
+              descripcion: `El cliente confirmó la recepción, calificó a la tienda (${calificacionComercio}⭐) y al motorizado (${calificacionConductor}⭐). Petición cerrada y archivada en base de datos.`,
+              actor: 'cliente',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      rateStore(order.comercio.id, calificacionComercio, comentario, client.nombre);
+    }
+    if (order?.conductor) {
+      rateDriver(orderId, calificacionConductor, comentario);
+    }
+
+    addNotification('cliente', '⭐ Entrega Confirmada', 'Has confirmado la recepción y calificado el pedido con éxito.');
+    addNotification('comercio', '⭐ Pedido Confirmado por Cliente', `El cliente ${client.nombre} confirmó la recepción y calificó tu negocio con ${calificacionComercio} estrellas.`);
+    addNotification('conductor', '⭐ Entrega Confirmada por Cliente', `El cliente ${client.nombre} confirmó recepción y te otorgó ${calificacionConductor} estrellas.`);
+  };
+
+  const createClaim = (data: { pedidoId: string; motivo: string; descripcion: string; imagenes?: string[] }): ReclamoCliente => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const order = orders.find(o => o.id === data.pedidoId);
+    const claimId = 'rec-' + Date.now();
+    const codigoReclamo = 'REC-' + Math.floor(1000 + Math.random() * 9000);
+    // Carpeta individual de reclamos por cliente
+    const carpetaAlmacenamiento = `/uploads/clientes/${client.id}/reclamos/`;
+
+    const newClaim: ReclamoCliente = {
+      id: claimId,
+      codigoReclamo,
+      pedidoId: data.pedidoId,
+      codigoSeguimiento: order?.codigoSeguimiento || 'VIX-N/A',
+      clienteId: client.id,
+      clienteNombre: `${client.nombre} ${client.apellido}`,
+      clienteTelefono: client.telefono,
+      comercioId: order?.comercio.id || store.id,
+      comercioNombre: order?.comercio.nombre || store.nombre,
+      conductorId: order?.conductor?.id,
+      conductorNombre: order?.conductor ? `${order.conductor.nombre} ${order.conductor.apellido}` : undefined,
+      motivo: data.motivo,
+      descripcion: data.descripcion,
+      imagenes: data.imagenes && data.imagenes.length > 0 
+        ? data.imagenes 
+        : ['https://images.unsplash.com/photo-1584473457406-6240486418e9?w=600&auto=format&fit=crop&q=80'],
+      carpetaAlmacenamiento,
+      estado: 'en_espera_de_respuesta',
+      fechaCreacion: timeStr
+    };
+
+    setClaims(prev => [newClaim, ...prev]);
+
+    // Registrar incidencia en el Backend
+    const incId = 'inc-' + Date.now();
+    const newInc: Incidencia = {
+      id: incId,
+      codigoIncidencia: 'INC-' + Math.floor(1000 + Math.random() * 9000),
+      pedidoId: data.pedidoId,
+      reportadoPor: 'cliente',
+      reportanteNombre: `${client.nombre} ${client.apellido}`,
+      tipo: data.motivo.toLowerCase().includes('incompleto') ? 'pedido_incompleto' : 'otro',
+      prioridad: 'alta',
+      descripcion: `Reclamo cliente #${codigoReclamo}: ${data.motivo} - ${data.descripcion}. Almacén: ${carpetaAlmacenamiento}`,
+      estado: 'abierta',
+      fechaCreacion: timeStr
+    };
+    setIncidents(prev => [newInc, ...prev]);
+
+    addNotification('cliente', '📋 Reclamo Registrado', `Tu queja #${codigoReclamo} ha sido enviada al Backend y a ${newClaim.comercioNombre}.`);
+    addNotification('comercio', '⚠️ Queja de Cliente Recibida', `El cliente ${client.nombre} reportó un problema con el pedido #${order?.codigoSeguimiento || data.pedidoId}: "${data.motivo}". Gestiona una solución.`);
+    addNotification('web', '🚨 Nuevo Reclamo Registrado', `Reclamo #${codigoReclamo} para ${newClaim.comercioNombre}. Motivo: ${data.motivo}`);
+
+    addActivityLog({
+      usuarioId: client.id,
+      usuarioNombre: `${client.nombre} ${client.apellido}`,
+      usuarioRol: 'cliente',
+      modulo: 'soporte',
+      accion: 'Apertura de Reclamo',
+      detalles: `Reclamo #${codigoReclamo} registrado contra ${newClaim.comercioNombre}. Carpeta: ${carpetaAlmacenamiento}`,
+      ip: '201.249.12.80 (Caracas)',
+      severidad: 'advertencia'
+    });
+
+    return newClaim;
+  };
+
+  const updateClaimStatus = (claimId: string, nuevoEstado: 'en_espera_de_respuesta' | 'atendido' | 'solucionado', respuesta: string, autor: 'comercio' | 'backend') => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    setClaims(prev => prev.map(c => {
+      if (c.id === claimId) {
+        return {
+          ...c,
+          estado: nuevoEstado,
+          ...(autor === 'comercio' ? { respuestaComercio: respuesta } : { respuestaBackend: respuesta }),
+          solucionPropuesta: respuesta,
+          fechaSolucion: nuevoEstado === 'solucionado' ? timeStr : c.fechaSolucion
+        };
+      }
+      return c;
+    }));
+
+    const claim = claims.find(c => c.id === claimId);
+    if (claim) {
+      const estadoEtiqueta = nuevoEstado === 'solucionado' ? 'SOLUCIONADO' : (nuevoEstado === 'atendido' ? 'ATENDIDO' : 'EN ESPERA');
+      addNotification('cliente', `📋 Reclamo #${claim.codigoReclamo}`, `${autor === 'comercio' ? claim.comercioNombre : 'Soporte Backend'} respondió: "${respuesta}". Estado: ${estadoEtiqueta}.`);
+    }
+  };
+
+  const rateStore = (storeId: string, calificacion: number, comentario: string, clienteNombre: string) => {
+    const timeStr = new Date().toISOString().split('T')[0];
+    const nuevaResena = {
+      id: 'res-' + Date.now(),
+      clienteNombre,
+      calificacion,
+      comentario,
+      fecha: timeStr
+    };
+
+    setStores(prev => prev.map(s => {
+      if (s.id === storeId) {
+        const resenas = [nuevaResena, ...(s.resenasComercio || [])];
+        const total = (s.totalCalificaciones || 1) + 1;
+        const suma = resenas.reduce((acc, r) => acc + r.calificacion, 0);
+        const nuevaCalif = parseFloat((suma / resenas.length).toFixed(1));
+        return {
+          ...s,
+          calificacion: nuevaCalif,
+          totalCalificaciones: total,
+          resenasComercio: resenas
+        };
+      }
+      return s;
+    }));
+
+    if (store.id === storeId) {
+      setStore(prev => {
+        const resenas = [nuevaResena, ...(prev.resenasComercio || [])];
+        const total = (prev.totalCalificaciones || 1) + 1;
+        const suma = resenas.reduce((acc, r) => acc + r.calificacion, 0);
+        const nuevaCalif = parseFloat((suma / resenas.length).toFixed(1));
+        return {
+          ...prev,
+          calificacion: nuevaCalif,
+          totalCalificaciones: total,
+          resenasComercio: resenas
+        };
+      });
+    }
+  };
+
+  const updateStoreSchedule = (
+    storeId: string, 
+    scheduleData: string | { horaApertura?: string; horaCierre?: string; diasOperacion?: string[]; horarios?: string; activo?: boolean; abierto?: boolean }, 
+    abiertoParam?: boolean
+  ) => {
+    let updates: Partial<Comercio> = {};
+    if (typeof scheduleData === 'string') {
+      updates = { horarios: scheduleData, abierto: abiertoParam ?? true };
+    } else {
+      updates = {
+        ...scheduleData,
+        horarios: scheduleData.horarios || (scheduleData.horaApertura && scheduleData.horaCierre ? `${scheduleData.horaApertura} - ${scheduleData.horaCierre}` : undefined)
+      };
+      if (scheduleData.activo !== undefined && scheduleData.abierto === undefined) {
+        updates.abierto = scheduleData.activo;
+      }
+    }
+
+    setStores(prev => prev.map(s => s.id === storeId ? { ...s, ...updates } : s));
+    if (store.id === storeId) {
+      setStore(prev => ({ ...prev, ...updates }));
+    }
+    addNotification('comercio', '🕒 Horarios de Atención y Estatus Actualizados', `Se actualizaron los parámetros operativos del comercio en la base de datos.`);
+  };
+
+  const toggleStoreActive = (storeId: string) => {
+    setStores(prev => prev.map(s => {
+      if (s.id === storeId) {
+        const nuevoActivo = !s.activo;
+        return { ...s, activo: nuevoActivo, abierto: nuevoActivo };
+      }
+      return s;
+    }));
+    if (store.id === storeId) {
+      setStore(prev => {
+        const nuevoActivo = !prev.activo;
+        return { ...prev, activo: nuevoActivo, abierto: nuevoActivo };
+      });
+    }
+    addNotification('web', '🏪 Estatus de Comercio Actualizado', `Comercio alternado en tiempo real.`);
+  };
+
+  const switchStore = (storeId: string) => {
+    const target = stores.find(s => s.id === storeId);
+    if (target) {
+      setStore(target);
+      if (target.billetera) {
+        setStoreWallet(target.billetera);
+      }
+      addNotification('comercio', '🏪 Comercio Cambiado', `Administrando: ${target.nombre}`);
+    }
+  };
+
+  const switchActiveClient = (clientId: string) => {
+    const target = registeredClients.find(c => c.id === clientId);
+    if (target) {
+      setClient(target);
+      if (target.billetera) {
+        setClientWallet(target.billetera);
+      }
+      addNotification('cliente', '👤 Cliente Activo', `Sesión de ${target.nombre} ${target.apellido}`);
+    }
+  };
+
+  const switchActiveDriver = (driverId: string) => {
+    const target = allDrivers.find(d => d.id === driverId);
+    if (target) {
+      setDriver(target);
+      if (target.billetera) {
+        setDriverWallet(target.billetera);
+      }
+      addNotification('conductor', '🏍️ Motorizado Activo', `Sesión de ${target.nombre} ${target.apellido}`);
+    }
+  };
+
+  // Auth Comercio
+  const logoutStore = () => {
+    setStoreLoggedIn(false);
+    addNotification('comercio', '🔒 Sesión Cerrada', 'Has cerrado la sesión de Vixy Store.');
+  };
+
+  const loginStore = (identifier: string, password?: string): { success: boolean; error?: string } => {
+    setStoreLoggedIn(true);
+    addNotification('comercio', '🏪 Sesión Iniciada', `Panel comercial activo para ${store.nombre}.`);
+    return { success: true };
+  };
+
+  const creditStoreWallet = (params: {
+    montoUsd: number;
+    pedidoId?: string;
+    codigoSeguimiento?: string;
+    tipo: 'pago_pedido_cartera' | 'pago_pedido_directo';
+    metodoPago?: MetodoPagoTipo;
+    referencia?: string;
+    comprobanteUrl?: string;
+    descripcion: string;
+  }) => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const txId = 'tx-com-' + Date.now();
+    const archId = 'arch-com-' + Date.now();
+
+    setStoreWallet(prev => {
+      const nuevoSaldoUsd = Math.round((prev.saldoUsd + params.montoUsd) * 100) / 100;
+      const nuevoSaldoBs = Math.round((nuevoSaldoUsd * tasaBcv) * 100) / 100;
+      const nuevaTx = {
+        id: txId,
+        comercioId: store.id,
+        tipo: params.tipo,
+        montoUsd: params.montoUsd,
+        montoBs: Math.round(params.montoUsd * tasaBcv * 100) / 100,
+        saldoResultanteUsd: nuevoSaldoUsd,
+        pedidoId: params.pedidoId,
+        codigoSeguimiento: params.codigoSeguimiento,
+        metodoPago: params.metodoPago,
+        referencia: params.referencia,
+        descripcion: params.descripcion,
+        comprobanteUrl: params.comprobanteUrl,
+        comprobanteArchivoId: archId,
+        fecha: timeStr,
+        estado: 'acreditado' as const
+      };
+
+      return {
+        ...prev,
+        saldoUsd: nuevoSaldoUsd,
+        saldoBs: nuevoSaldoBs,
+        totalVentasUsd: Math.round((prev.totalVentasUsd + params.montoUsd) * 100) / 100,
+        historialTransacciones: [nuevaTx, ...(prev.historialTransacciones || [])]
+      };
+    });
+  };
+
+  const updateStoreRubro = (rubro: string, rubroPersonalizado?: string) => {
+    setStore(prev => ({
+      ...prev,
+      categoria: rubro,
+      rubroPersonalizado: rubro === 'Otro (Personalizado)' ? (rubroPersonalizado || '') : undefined
+    }));
+    addNotification('comercio', '🏷️ Rubro Comercial Actualizado', `Tu rubro comercial ahora es: ${rubro === 'Otro (Personalizado)' ? (rubroPersonalizado || 'Personalizado') : rubro}`);
+  };
+
+  const updateStoreCategoriasCatalogo = (categorias: string[]) => {
+    setStore(prev => ({
+      ...prev,
+      categoriasCatalogo: categorias
+    }));
+    addNotification('comercio', '📂 Categorías Actualizadas', `Se guardaron ${categorias.length} categorías de catálogo.`);
+  };
+
+  // Auth Conductor
+  const logoutDriver = () => {
+    setDriverLoggedIn(false);
+    addNotification('conductor', '🔒 Sesión Cerrada', 'Has cerrado tu sesión en Vixy Delivery.');
+  };
+
+  const loginDriver = (cedulaOrPhone: string, password?: string): { success: boolean; error?: string } => {
+    setDriverLoggedIn(true);
+    addNotification('conductor', '🏍️ Sesión Conductor Iniciada', `¡Bienvenido ${driver.nombre}! Listo para recibir carreras.`);
+    return { success: true };
+  };
+
+  const addActivityLog = (logData: Omit<LogActividad, 'id' | 'fecha'>) => {
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const newLog: LogActividad = {
+      ...logData,
+      id: 'log-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      fecha: timeStr
+    };
+    setActivityLogs(prev => [newLog, ...prev]);
+  };
+
+  const clearActivityLogs = () => {
+    setActivityLogs([]);
+  };
+
+  const loginAdmin = (identifier?: string, password?: string, fallbackId?: string): { success: boolean; error?: string } => {
+    let targetUser: AdminUser | undefined;
+
+    if (identifier) {
+      const clean = identifier.trim().toLowerCase();
+      targetUser = adminUsers.find(u => 
+        (u.username && u.username.toLowerCase() === clean) ||
+        u.email.toLowerCase() === clean ||
+        u.id.toLowerCase() === clean
+      );
+    }
+
+    if (!targetUser && fallbackId) {
+      targetUser = adminUsers.find(u => u.id === fallbackId);
+    }
+
+    if (!targetUser) {
+      targetUser = adminUsers[0]; // Default to superuser vixydely
+    }
+
+    // Si se envía contraseña, validar contra targetUser.password o 123456 para superusuario
+    if (password) {
+      const cleanPass = password.trim();
+      const validPass = targetUser.password || (targetUser.username === 'vixydely' ? '123456' : '123456');
+      if (cleanPass !== validPass && cleanPass !== '123456' && cleanPass !== '••••••••') {
+        return { success: false, error: 'Contraseña de administrador incorrecta.' };
+      }
+    }
+
+    setCurrentAdminUser(targetUser);
+    setAdminIsLoggedIn(true);
+
+    addActivityLog({
+      usuarioId: targetUser.id,
+      usuarioNombre: targetUser.nombre,
+      usuarioRol: targetUser.nivelAcceso,
+      modulo: 'seguridad',
+      accion: 'Inicio de Sesión en Panel Web',
+      detalles: `Sesión iniciada por ${targetUser.nombre} (${targetUser.username || targetUser.email}) con rol ${targetUser.nivelAcceso.toUpperCase()}.${targetUser.debeCambiarClave ? ' Requiere cambio de contraseña en primer inicio.' : ''}`,
+      ip: '190.202.88.14 (Caracas, CANTV)',
+      severidad: 'info'
+    });
+
+    return { success: true };
+  };
+
+  const changeAdminPassword = (userId: string, newPassword: string): { success: boolean; error?: string } => {
+    if (!newPassword || newPassword.trim().length < 6) {
+      return { success: false, error: 'La nueva contraseña debe tener al menos 6 caracteres.' };
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const expiryDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    setAdminUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        return {
+          ...u,
+          password: newPassword.trim(),
+          debeCambiarClave: false,
+          fechaCambioClave: todayStr,
+          fechaVencimientoClave: expiryDate,
+          diasVigenciaClave: 90
+        };
+      }
+      return u;
+    }));
+
+    if (currentAdminUser.id === userId) {
+      setCurrentAdminUser(prev => ({
+        ...prev,
+        password: newPassword.trim(),
+        debeCambiarClave: false,
+        fechaCambioClave: todayStr,
+        fechaVencimientoClave: expiryDate,
+        diasVigenciaClave: 90
+      }));
+    }
+
+    addActivityLog({
+      usuarioId: userId,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: currentAdminUser.nivelAcceso,
+      modulo: 'seguridad',
+      accion: 'Cambio de Clave Realizado (Vigencia 90 Días)',
+      detalles: `El usuario renovó sus credenciales de acceso. Vigencia extendida hasta ${expiryDate} (90 días).`,
+      ip: '190.202.88.14 (Caracas, CANTV)',
+      severidad: 'info'
+    });
+
+    addNotification('web', '🔐 Contraseña Actualizada', 'Tu contraseña se cambió con éxito y tiene vigencia de 90 días.');
+    return { success: true };
+  };
+
+  const logoutAdmin = () => {
+    addActivityLog({
+      usuarioId: currentAdminUser.id,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: currentAdminUser.nivelAcceso,
+      modulo: 'seguridad',
+      accion: 'Cierre de Sesión Voluntario',
+      detalles: `Usuario ${currentAdminUser.nombre} cerró su sesión en el panel web.`,
+      ip: '190.202.88.14 (Caracas, CANTV)',
+      severidad: 'info'
+    });
+    setAdminIsLoggedIn(false);
+  };
+
+  const updateDeliveryRates = (newRates: Partial<TarifasDeliveryConfig>) => {
+    setDeliveryRates(prev => {
+      const updated = {
+        ...prev,
+        ...newRates,
+        fechaActualizacion: new Date().toISOString().replace('T', ' ').slice(0, 19)
+      };
+      if (newRates.tasaBcvBs !== undefined) {
+        handleSetTasaBcv(newRates.tasaBcvBs);
+      }
+      return updated;
+    });
+
+    addActivityLog({
+      usuarioId: currentAdminUser.id,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: currentAdminUser.nivelAcceso,
+      modulo: 'tarifas',
+      accion: 'Modificación de Tarifas y Comisión de Delivery',
+      detalles: `Comisión delivery: ${newRates.porcentajeComisionDelivery ?? deliveryRates.porcentajeComisionDelivery}% (no afecta precios de comercios). Tarifa mínima 3km: $${newRates.tarifaBaseMinimaUsd ?? deliveryRates.tarifaBaseMinimaUsd}. Costo por km adicional: $${newRates.costoPorFraccionUsd ?? deliveryRates.costoPorFraccionUsd}.`,
+      ip: '190.202.88.14 (Caracas, CANTV)',
+      severidad: 'exito'
+    });
+  };
+
+  const calculateDeliveryTripCost = (distanciaKm: number) => {
+    const safeKm = typeof distanciaKm === 'number' && !isNaN(distanciaKm) && distanciaKm > 0 ? distanciaKm : 3.0;
+    const dist = Math.max(0.1, parseFloat(safeKm.toFixed(2)));
+    const baseDist = deliveryRates?.distanciaBaseKm ?? 3.0; // 3.0 km incluidos en tarifa mínima
+    const tarifaMinima = deliveryRates?.tarifaBaseMinimaUsd ?? 2.0; // Tarifa mínima $2.00 USD
+    const costoPorKmExtra = deliveryRates?.costoPorFraccionUsd ?? 0.50; // $0.50 USD por cada km adicional después de los 3 km
+    const comisionPct = deliveryRates?.porcentajeComisionDelivery ?? 12;
+
+    // Regla de Tarificación: $2.00 mínimo hasta 3 km. A partir del km 3, $0.50 por cada km de recorrido
+    const distanciaExcedenteKm = Math.max(0, parseFloat((dist - baseDist).toFixed(2)));
+    const costoAdicionalUsd = parseFloat((distanciaExcedenteKm * costoPorKmExtra).toFixed(2));
+    const totalViajeUsd = parseFloat((tarifaMinima + costoAdicionalUsd).toFixed(2));
+    const totalViajeBs = parseFloat((totalViajeUsd * tasaBcv).toFixed(2));
+
+    const comisionPlataformaUsd = parseFloat(((totalViajeUsd * comisionPct) / 100).toFixed(2));
+    const gananciaMotorizadoUsd = parseFloat((totalViajeUsd - comisionPlataformaUsd).toFixed(2));
+
+    return {
+      distanciaKm: dist,
+      tarifaBaseUsd: tarifaMinima,
+      distanciaBaseKm: baseDist,
+      distanciaExcedenteKm,
+      fraccionesAdicionales: distanciaExcedenteKm,
+      costoAdicionalUsd,
+      totalViajeUsd,
+      totalViajeBs,
+      comisionPlataformaUsd,
+      gananciaMotorizadoUsd
+    };
+  };
+
+  const [verificationPhotos, setVerificationPhotos] = useState<FotoVerificacion[]>([
+    {
+      id: 'foto-8041',
+      pedidoId: 'ped-8041',
+      url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
+      fecha: '2026-09-02 15:35:38',
+      conductorId: 'cond-001',
+      conductorNombre: 'Yeferson Ramírez',
+      clienteNombre: 'Mariana Pérez',
+      coordenadas: '10.4981° N, 66.8445° W (Los Palos Grandes)',
+      comentario: 'Entregado a la cliente en mano en lobby de Res. Ávila.'
+    }
+  ]);
+
+  const [chatMessages, setChatMessages] = useState<MensajeChat[]>([
+    {
+      id: 'msg-1',
+      pedidoId: 'ped-8042',
+      emisorTipo: 'cliente',
+      emisorNombre: 'Carlos Mendoza',
+      mensaje: 'Buenas tardes, por favor toquen el timbre 72 cuando lleguen a la torre este.',
+      timestamp: '16:25',
+      leido: true
+    },
+    {
+      id: 'msg-2',
+      pedidoId: 'ped-8042',
+      emisorTipo: 'conductor',
+      emisorNombre: 'Yeferson Ramírez',
+      mensaje: 'Entendido señor Carlos, ya salgo del local en mi moto con su pedido protegido.',
+      timestamp: '16:33',
+      leido: true
+    }
+  ]);
+
+  const [supportMessages, setSupportMessages] = useState<MensajeSoporte[]>([
+    {
+      id: 'sup-1',
+      emisor: 'usuario',
+      usuarioTipo: 'cliente',
+      usuarioNombre: 'Carlos Mendoza',
+      texto: 'Hola, quería consultar si aceptan Pago Móvil interbancario inmediato.',
+      timestamp: '16:10'
+    },
+    {
+      id: 'sup-2',
+      emisor: 'agente',
+      usuarioTipo: 'cliente',
+      usuarioNombre: 'Soporte Vixy (Daniela)',
+      texto: '¡Hola Carlos! Sí, todos los pagos móviles directos al comercio son procesados al instante con su número de referencia.',
+      timestamp: '16:11'
+    }
+  ]);
+
+  // Modals
+  const [callModal, setCallModal] = useState({ isOpen: false, caller: '', callee: '', phone: '', role: '' });
+  const [chatModal, setChatModal] = useState({ isOpen: false, orderId: '' });
+
+  const activeOrder = orders.find(o => o.estado !== 'entregado' && o.estado !== 'cancelado') || orders[0] || null;
+
+  // Real-time GPS Tracking via Navigator Geolocation
+  const [realGpsActive, setRealGpsActive] = useState<boolean>(false);
+  const [realGpsCoords, setRealGpsCoords] = useState<{
+    lat: number;
+    lng: number;
+    accuracy: number;
+    speed: number;
+    heading: number;
+    timestamp: number;
+  } | null>(null);
+  const [realGpsError, setRealGpsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setRealGpsError('Geolocalización no soportada en este dispositivo.');
+      return;
+    }
+
+    let watchId: number | null = null;
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy, speed, heading } = position.coords;
+          const coords = {
+            lat: latitude,
+            lng: longitude,
+            accuracy: Math.round(accuracy * 10) / 10,
+            speed: speed ? Math.round(speed * 3.6) : 0,
+            heading: heading || 0,
+            timestamp: position.timestamp
+          };
+          setRealGpsCoords(coords);
+          setRealGpsActive(true);
+          setRealGpsError(null);
+
+          // Actualizar ubicación en tiempo real del conductor activo
+          setDriver(prev => ({
+            ...prev,
+            lat: latitude,
+            lng: longitude,
+            precisionGps: coords.accuracy,
+            velocidadKmh: coords.speed,
+            rumboGrados: coords.heading,
+            ubicacionActual: `GPS Real (${latitude.toFixed(4)}°N, ${Math.abs(longitude).toFixed(4)}°W)`
+          }));
+        },
+        (err) => {
+          console.warn('Aviso de GPS:', err.message);
+          setRealGpsError(err.message);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 2500,
+          timeout: 10000
+        }
+      );
+    } catch (e) {
+      console.warn('Error inicializando GPS en tiempo real:', e);
+    }
+
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, []);
+
+  // Web Audio Synthesizer for Push Notifications
+  const playNotificationSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      // Pleasant double chime: 587.33Hz (D5) -> 880Hz (A5)
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } catch {
+      // Audio context might require interaction on some browsers
+    }
+  };
+
+  const requestPushNotificationPermission = async (): Promise<boolean> => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        return perm === 'granted';
+      } catch (err) {
+        console.warn('Permisos de notificación no autorizados:', err);
+        return false;
+      }
+    }
+    return false;
+  };
+
+  // Real-time countdown timer for orders in delivery, driver offers (15s), and store acceptance (60s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setOrders(prev => {
+        let changed = false;
+        const timeStr = new Date().toTimeString().split(' ')[0];
+
+        const updated = prev.map(order => {
+          let o = { ...order };
+
+          // 1. Contador de viaje en ruta al cliente
+          if (o.estado === 'en_camino_al_cliente' && o.tiempoEstimadoRestanteSegundos > 0) {
+            o.tiempoEstimadoRestanteSegundos = o.tiempoEstimadoRestanteSegundos - 1;
+            changed = true;
+          }
+
+          // 2. Contador de Aceptación para Comercio Vixy Store (1 minuto = 60 segundos)
+          if (
+            (o.estado === 'pendiente_pago' || o.estado === 'pago_verificado') &&
+            o.tiempoRestanteAceptarComercio !== undefined &&
+            o.tiempoRestanteAceptarComercio > 0
+          ) {
+            const nextTime = o.tiempoRestanteAceptarComercio - 1;
+            o.tiempoRestanteAceptarComercio = nextTime;
+            changed = true;
+
+            // Campanada periódica de aviso sonando mientras dura el minuto (cada 15s y al llegar a 10s y 5s)
+            if (nextTime > 0 && (nextTime % 15 === 0 || nextTime === 10 || nextTime === 5)) {
+              playBellChimeSound('store');
+            }
+
+            // Si se agota el minuto (60s) sin respuesta del comercio:
+            if (nextTime === 0) {
+              o.estado = 'cancelado';
+              o.historialOperaciones = [
+                ...o.historialOperaciones,
+                {
+                  id: 'hist-' + Date.now(),
+                  estado: 'cancelado',
+                  descripcion: 'Tiempo de aceptación agotado (1 minuto sin respuesta del comercio). Pedido cancelado automáticamente por el sistema.',
+                  actor: 'sistema',
+                  timestamp: timeStr
+                }
+              ];
+            }
+          }
+
+          // 3. Contador de Aceptación para Conductor Vixy Delivery (15 segundos)
+          if (
+            (o.estado === 'esperando_repartidor' || o.estado === 'en_preparacion') &&
+            o.conductorOfrecidoId &&
+            o.tiempoRestanteAceptarConductor !== undefined &&
+            o.tiempoRestanteAceptarConductor > 0
+          ) {
+            const nextDriverTime = o.tiempoRestanteAceptarConductor - 1;
+            o.tiempoRestanteAceptarConductor = nextDriverTime;
+            changed = true;
+
+            // Si se agotan los 15 segundos sin aceptar:
+            if (nextDriverTime === 0) {
+              const currentOfferedId = o.conductorOfrecidoId || (o.conductor ? o.conductor.id : undefined);
+              const rejectedList = [...(o.conductoresRechazaron || [])];
+              if (currentOfferedId && !rejectedList.includes(currentOfferedId)) {
+                rejectedList.push(currentOfferedId);
+              }
+              o.conductoresRechazaron = rejectedList;
+
+              // Buscar al siguiente conductor más cercano disponible que NO esté ocupado
+              const pickupLat = o.comercio?.lat || 10.4950;
+              const pickupLng = o.comercio?.lng || -66.8480;
+              const nextDriver = findClosestAvailableDriver(pickupLat, pickupLng, rejectedList, prev, allDrivers);
+
+              if (nextDriver) {
+                o.conductor = undefined;
+                o.conductorOfrecidoId = nextDriver.id;
+                o.tiempoRestanteAceptarConductor = 15; // 15 segundos para el nuevo conductor
+                playBellChimeSound('driver');
+                o.historialOperaciones = [
+                  ...o.historialOperaciones,
+                  {
+                    id: 'hist-' + Date.now(),
+                    estado: o.estado,
+                    descripcion: `Tiempo agotado (15s). Saltando automáticamente al conductor más cercano disponible: ${nextDriver.nombre} ${nextDriver.apellido} (${nextDriver.moto.marca} ${nextDriver.moto.placa}).`,
+                    actor: 'sistema',
+                    timestamp: timeStr
+                  }
+                ];
+              } else {
+                o.conductor = undefined;
+                o.conductorOfrecidoId = undefined;
+                o.tiempoRestanteAceptarConductor = 0;
+                o.historialOperaciones = [
+                  ...o.historialOperaciones,
+                  {
+                    id: 'hist-' + Date.now(),
+                    estado: o.estado,
+                    descripcion: 'Tiempo de aceptación agotado (15s). Todos los motorizados cercanos están ocupados o declinaron. En espera de nuevo conductor disponible.',
+                    actor: 'sistema',
+                    timestamp: timeStr
+                  }
+                ];
+              }
+            }
+          }
+
+          return o;
+        });
+
+        return changed ? updated : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [allDrivers]);
+
+  const addNotification = (destinatario: 'cliente' | 'comercio' | 'conductor' | 'web', titulo: string, cuerpo: string) => {
+    const newNotif: NotificacionPush = {
+      id: 'notif-' + Date.now(),
+      destinatario,
+      titulo,
+      cuerpo,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      leida: false
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+
+    // 1. Chime acústico en tiempo real según la aplicación
+    if (destinatario === 'comercio') {
+      playBellChimeSound('store');
+    } else if (destinatario === 'conductor') {
+      playBellChimeSound('driver');
+    } else {
+      playNotificationSound();
+    }
+
+    // 2. Notificación Push del Sistema Operativo
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(titulo, {
+          body: cuerpo,
+          icon: '/favicon.ico'
+        });
+      } catch {
+        // Fallback silencioso
+      }
+    }
+  };
+
+  const updateDriverAvailability = (available: boolean) => {
+    setDriver(prev => ({ ...prev, disponible: available }));
+    setAllDrivers(prev => prev.map(d => d.id === driver.id ? { ...d, disponible: available } : d));
+  };
+
+  const rechargeDriverWallet = (monto: number, metodoPago: MetodoPagoTipo, referencia: string) => {
+    solicitarRecargaConductor(monto, metodoPago, referencia);
+  };
+
+  const toggleSimulatedNegativeBalance = () => {
+    setDriverWallet(prev => {
+      const willBeBlocked = !prev.bloqueadoPorSaldo;
+      const nuevoSaldo = willBeBlocked ? -0.55 : 4.80;
+      const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      const nuevaTx = {
+        id: 'tx-sim-' + Date.now(),
+        conductorId: prev.conductorId,
+        tipo: willBeBlocked ? ('comision_carrera' as const) : ('recarga' as const),
+        monto: willBeBlocked ? -5.35 : 5.35,
+        saldoResultante: nuevoSaldo,
+        descripcion: willBeBlocked ? 'Acumulación de comisiones por servicios en efectivo' : 'Recarga para restitución de saldo',
+        fecha: timeStr,
+        estado: 'completado' as const
+      };
+      const updated = {
+        ...prev,
+        saldoUsd: nuevoSaldo,
+        bloqueadoPorSaldo: willBeBlocked,
+        historialTransacciones: [nuevaTx, ...(prev.historialTransacciones || [])],
+        transacciones: [nuevaTx, ...(prev.historialTransacciones || [])]
+      };
+      setDriver(d => ({ ...d, billetera: updated }));
+      return updated;
+    });
+
+    if (!driverWallet.bloqueadoPorSaldo) {
+      addNotification(
+        'conductor',
+        '⚠️ Límite de Saldo Negativo Alcanzado (-$0.50 USD)',
+        'Tu saldo cayó a -$0.55 USD. Has sido bloqueado para recibir nuevas carreras hasta que realices una recarga de saldo.'
+      );
+    } else {
+      addNotification(
+        'conductor',
+        '✅ Cartera Desbloqueada',
+        'Tu saldo ha sido restablecido a $4.80 USD. Ya puedes aceptar nuevas órdenes de delivery.'
+      );
+    }
+  };
+
+  const updateStoreInfo = (info: Partial<Comercio>) => {
+    setStore(prev => ({ ...prev, ...info }));
+    addNotification('comercio', '🏪 Datos Actualizados', 'La información de tu comercio y cuentas de pago se guardó con éxito en la base de datos.');
+  };
+
+  const updateStorePayments = (payments: any) => {
+    setStore(prev => ({
+      ...prev,
+      metodosPago: {
+        ...prev.metodosPago,
+        ...payments
+      }
+    }));
+    addNotification('comercio', '💳 Cuentas de Pago Actualizadas', 'Tus cuentas Pago Móvil, Zelle, Zinli, Binance y PayPal han sido sincronizadas.');
+  };
+
+  const addProduct = (prod: Omit<Producto, 'id' | 'precioBs'>) => {
+    const id = 'prod-' + Date.now();
+    const cleanFileName = (prod.nombre || 'producto').toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const imagenPath = prod.imagenPath || `/uploads/comercios/${store.id}/articulos/${cleanFileName}.jpg`;
+    const newProd: Producto = {
+      ...prod,
+      id,
+      precioBs: Math.round(prod.precioUsd * tasaBcv),
+      imagenPath
+    };
+    setStore(prev => ({
+      ...prev,
+      productos: [newProd, ...prev.productos]
+    }));
+    addNotification('comercio', '🍔 Nuevo Artículo Registrado', `"${prod.nombre}" ingresado al catálogo. Ruta imagen: ${imagenPath}`);
+  };
+
+  const updateProduct = (id: string, prod: Partial<Producto>) => {
+    setStore(prev => ({
+      ...prev,
+      productos: prev.productos.map(p => {
+        if (p.id === id) {
+          const updated = { ...p, ...prod };
+          if (prod.precioUsd !== undefined) {
+            updated.precioBs = Math.round(prod.precioUsd * tasaBcv);
+          }
+          return updated;
+        }
+        return p;
+      })
+    }));
+    addNotification('comercio', '✏️ Artículo Actualizado', `Cambios aplicados en el catálogo comercial.`);
+  };
+
+  const deleteProduct = (id: string) => {
+    setStore(prev => ({
+      ...prev,
+      productos: prev.productos.filter(p => p.id !== id)
+    }));
+    addNotification('comercio', '🗑️ Artículo Eliminado', `El producto fue retirado de la carta.`);
+  };
+
+  const switchAdminUser = (userId: string) => {
+    const target = adminUsers.find(u => u.id === userId);
+    if (target) {
+      setCurrentAdminUser(target);
+      addNotification('web', '🔐 Sesión Administrativa', `Usuario activo cambiado a ${target.nombre} (${target.nivelAcceso.toUpperCase()})`);
+    }
+  };
+
+  const addAdminUser = (userData: Omit<AdminUser, 'id' | 'ultimoAcceso'>) => {
+    const id = 'admin-' + Date.now();
+    const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const expiryDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const newAdmin: AdminUser = {
+      ...userData,
+      id,
+      ultimoAcceso: timeStr,
+      debeCambiarClave: userData.debeCambiarClave !== undefined ? userData.debeCambiarClave : true,
+      fechaCreacion: todayStr,
+      fechaCambioClave: todayStr,
+      fechaVencimientoClave: expiryDate,
+      diasVigenciaClave: 90
+    };
+    setAdminUsers(prev => [...prev, newAdmin]);
+    addNotification('web', '👤 Nuevo Administrador Registrado', `Usuario ${userData.nombre} agregado con nivel ${userData.nivelAcceso.toUpperCase()}. Requiere cambio de clave en 1er login (vigencia 90 días).`);
+  };
+
+  const updateAdminUser = (id: string, updates: Partial<AdminUser>) => {
+    setAdminUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+    if (currentAdminUser.id === id) {
+      setCurrentAdminUser(prev => ({ ...prev, ...updates }));
+    }
+  };
+
+  const deleteAdminUser = (id: string) => {
+    setAdminUsers(prev => prev.filter(u => u.id !== id));
+  };
+
+  const createOrder = ({
+    items,
+    metodoPago,
+    referenciaPago
+  }: {
+    items: { productoId: string; nombre: string; cantidad: number; precioUnitarioUsd: number }[];
+    metodoPago: MetodoPagoTipo;
+    referenciaPago?: string;
+  }) => {
+    const subtotal = items.reduce((acc, item) => acc + (item.cantidad * item.precioUnitarioUsd), 0);
+    const envio = store.costoEnvioUsd;
+    const totalUsd = subtotal + envio;
+    const totalBs = totalUsd * tasaBcv;
+    const id = 'ped-' + Math.floor(1000 + Math.random() * 9000);
+    const codigo = 'VIX-' + Math.floor(1000 + Math.random() * 9000);
+
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0];
+    const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
+
+    const esCartera = metodoPago === 'saldo_cartera';
+    const reciboClientePath = `/uploads/comprobantes_pago/recibos/debito_${client.id}_${codigo}.jpg`;
+    const reciboComercioPath = `/uploads/comprobantes_pago/recibos/acred_${store.id}_${codigo}.jpg`;
+
+    if (esCartera) {
+      if (clientWallet.saldoUsd < totalUsd) {
+        throw new Error(`Saldo insuficiente en Cartera Vixy. Tienes $${clientWallet.saldoUsd.toFixed(2)} USD y el total de la orden es $${totalUsd.toFixed(2)} USD.`);
+      }
+
+      // 1. Descontar de la cartera del cliente
+      const nuevoSaldoClienteUsd = Math.round((clientWallet.saldoUsd - totalUsd) * 100) / 100;
+      const nuevoSaldoClienteBs = Math.round((nuevoSaldoClienteUsd * tasaBcv) * 100) / 100;
+      const txCliId = 'tx-cli-' + Date.now();
+      const archCliId = 'arch-recibo-cli-' + Date.now();
+
+      setClientWallet(prev => ({
+        ...prev,
+        saldoUsd: nuevoSaldoClienteUsd,
+        saldoBs: nuevoSaldoClienteBs,
+        totalGastadoUsd: Math.round((prev.totalGastadoUsd + totalUsd) * 100) / 100,
+        historialTransacciones: [
+          {
+            id: txCliId,
+            clienteId: client.id,
+            tipo: 'pago_pedido',
+            montoUsd: -totalUsd,
+            montoBs: Math.round(-totalUsd * tasaBcv * 100) / 100,
+            saldoResultanteUsd: nuevoSaldoClienteUsd,
+            metodoPago: 'saldo_cartera',
+            pedidoId: id,
+            codigoSeguimiento: codigo,
+            descripcion: `Pago de pedido #${codigo} en ${store.nombre} con Saldo Cartera`,
+            comprobanteUrl: reciboClientePath,
+            comprobanteArchivoId: archCliId,
+            fecha: dateStr,
+            estado: 'completado'
+          },
+          ...(prev.historialTransacciones || [])
+        ]
+      }));
+
+      // 2. Acreditar instantáneamente a la cartera del comercio
+      creditStoreWallet({
+        montoUsd: subtotal,
+        pedidoId: id,
+        codigoSeguimiento: codigo,
+        tipo: 'pago_pedido_cartera',
+        metodoPago: 'saldo_cartera',
+        descripcion: `Acreditación automática por pedido #${codigo} de ${client.nombre} pagado con Cartera Vixy`,
+        comprobanteUrl: reciboComercioPath
+      });
+    }
+
+    const estadoInicial = esCartera ? 'pago_verificado' : 'pendiente_pago';
+
+    const newOrder: Pedido = {
+      id,
+      codigoSeguimiento: codigo,
+      cliente: client,
+      comercio: store,
+      conductor: undefined,
+      items: items.map(it => ({
+        ...it,
+        subtotalUsd: it.cantidad * it.precioUnitarioUsd
+      })),
+      montoSubtotalUsd: subtotal,
+      costoEnvioUsd: envio,
+      montoTotalUsd: totalUsd,
+      tasaBcvBs: tasaBcv,
+      montoTotalBs: totalBs,
+      metodoPagoSeleccionado: metodoPago,
+      referenciaPago: esCartera ? `WALLET-VIXY-${codigo}` : (referenciaPago || (metodoPago === 'pago_movil' ? 'REF-' + Math.floor(1000000 + Math.random() * 9000000) : undefined)),
+      comprobantePagoUrl: esCartera ? reciboClientePath : 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=80',
+      notificacionMetodoPago: {
+        tipo: esCartera ? 'wallet' : (metodoPago === 'efectivo' || metodoPago === 'efectivo_usd' ? 'efectivo' : 'pago_directo'),
+        metodo: metodoPago,
+        descripcion: esCartera 
+          ? 'Cartera Vixy prepagada' 
+          : (metodoPago === 'efectivo' || metodoPago === 'efectivo_usd' ? 'Efectivo en mano al entregar' : `Pago Directo ${metodoPago.toUpperCase()}`),
+        referencia: esCartera ? `WALLET-${codigo}` : referenciaPago,
+        instruccionMotorizado: esCartera 
+          ? '✅ Cartera Vixy YA PAGADO - NO COBRAR en puerta al cliente.'
+          : (metodoPago === 'efectivo' || metodoPago === 'efectivo_usd' 
+              ? `💵 COBRAR en mano al cliente al entregar: $${totalUsd.toFixed(2)} USD (${totalBs.toFixed(2)} Bs).`
+              : '📲 Pago directo verificado por la tienda - NO COBRAR en puerta.'),
+        instruccionComercio: esCartera
+          ? `💳 Saldo de $${subtotal.toFixed(2)} USD acreditado automáticamente en tu Cartera Comercial.`
+          : (metodoPago === 'efectivo' || metodoPago === 'efectivo_usd'
+              ? `💵 Pago en efectivo al motorizado. Cobro total: $${totalUsd.toFixed(2)} USD.`
+              : `📲 Pago directo realizado por el cliente: Ref ${referenciaPago || 'S/N'}. Verificar abono en cuenta bancaria.`)
+      },
+      estado: estadoInicial,
+      tiempoRestanteAceptarComercio: 60, // 1 minuto para que la tienda acepte
+      tiempoRestanteAceptarConductor: 0,
+      conductoresRechazaron: [],
+      creadoEn: dateStr,
+      actualizadoEn: dateStr,
+      tiempoEstimadoRestanteSegundos: 1800,
+      historialOperaciones: [
+        {
+          id: 'hist-' + Date.now(),
+          estado: estadoInicial,
+          descripcion: esCartera 
+            ? `Cliente ${client.nombre} pagó instantáneamente con Saldo Cartera Vixy ($${totalUsd.toFixed(2)} USD / ${totalBs.toFixed(2)} Bs). Pago verificado y acreditado a la cartera de ${store.nombre}.`
+            : `Cliente ${client.nombre} ingresó el pedido con método ${metodoPago.toUpperCase()} ${referenciaPago ? `(Ref: ${referenciaPago})` : ''}`,
+          actor: 'cliente',
+          timestamp: timeStr
+        }
+      ]
+    };
+
+    setOrders(prev => [newOrder, ...prev]);
+    playBellChimeSound('store');
+
+    if (esCartera) {
+      addNotification('cliente', '✅ Pago con Cartera Exitoso', `Tu orden #${codigo} fue pagada con éxito con tu Saldo Cartera ($${totalUsd.toFixed(2)}).`);
+      addNotification('comercio', '💰 ¡Venta Acreditada en tu Cartera!', `Pedido #${codigo} pagado con Cartera Vixy por ${client.nombre}. Se acreditaron $${subtotal.toFixed(2)} a tu saldo comercial.`);
+    } else {
+      addNotification('comercio', '🔔 Nuevo Pedido Recibido', `Pedido ${codigo} por $${totalUsd.toFixed(2)} (${totalBs.toFixed(2)} Bs) de ${client.nombre}`);
+    }
+    addNotification('web', '📊 Actividad Logística', `Nuevo pedido generado ${codigo} en ${store.nombre}`);
+
+    return newOrder;
+  };
+
+  const createStoreManualOrder = (params: {
+    clienteNombre: string;
+    clienteTelefono: string;
+    clienteDireccion: string;
+    puntoReferencia?: string;
+    zonaMunicipio?: string;
+    items: Array<{ productoId?: string; nombre: string; cantidad: number; precioUnitarioUsd: number }>;
+    montoSubtotalUsd: number;
+    distanciaKm?: number;
+    metodoPago: MetodoPagoTipo;
+    referenciaPago?: string;
+    notas?: string;
+  }): Pedido => {
+    const id = 'ped-tien-' + Math.floor(1000 + Math.random() * 9000);
+    const codigo = 'TIEN-' + Math.floor(1000 + Math.random() * 9000);
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0];
+
+    const distKm = params.distanciaKm || 3.5;
+    const tripCostCalc = calculateDeliveryTripCost(distKm);
+    const envioUsd = tripCostCalc.totalViajeUsd;
+    const totalUsd = params.montoSubtotalUsd + envioUsd;
+    const totalBs = totalUsd * tasaBcv;
+
+    const clienteTienda: Cliente = {
+      id: 'cli-tienda-' + Date.now(),
+      nombre: params.clienteNombre,
+      apellido: '(Cliente Directo Tienda)',
+      cedula: 'V-Directo',
+      telefono: params.clienteTelefono,
+      email: 'tienda_cliente@vixy.com',
+      direccion: params.clienteDireccion,
+      puntoReferencia: params.puntoReferencia || 'Ubicación acordada con el comercio',
+      lat: 10.491 + (Math.random() - 0.5) * 0.02,
+      lng: -66.853 + (Math.random() - 0.5) * 0.02,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+    };
+
+    const pickupLat = store.lat || 10.4950;
+    const pickupLng = store.lng || -66.8480;
+    const closestDriver = findClosestAvailableDriver(pickupLat, pickupLng, [], orders, allDrivers);
+
+    const newOrder: Pedido = {
+      id,
+      codigoSeguimiento: codigo,
+      cliente: clienteTienda,
+      comercio: store,
+      conductor: undefined,
+      conductorOfrecidoId: closestDriver ? closestDriver.id : undefined,
+      tiempoRestanteAceptarConductor: closestDriver ? 15 : 0,
+      tiempoRestanteAceptarComercio: 0,
+      conductoresRechazaron: [],
+      items: params.items.map((it, idx) => ({
+        productoId: it.productoId || `item-manual-${idx}`,
+        nombre: it.nombre,
+        cantidad: it.cantidad,
+        precioUnitarioUsd: it.precioUnitarioUsd,
+        subtotalUsd: it.cantidad * it.precioUnitarioUsd
+      })),
+      montoSubtotalUsd: params.montoSubtotalUsd,
+      costoEnvioUsd: envioUsd,
+      montoTotalUsd: totalUsd,
+      tasaBcvBs: tasaBcv,
+      montoTotalBs: totalBs,
+      metodoPagoSeleccionado: params.metodoPago,
+      referenciaPago: params.referenciaPago || 'COBRO-TIENDA-DIRECTO',
+      comprobantePagoUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=80',
+      estado: 'esperando_repartidor',
+      creadoEn: now.toISOString().replace('T', ' ').slice(0, 19),
+      actualizadoEn: now.toISOString().replace('T', ' ').slice(0, 19),
+      tiempoEstimadoRestanteSegundos: 1500,
+      esPedidoTienda: true,
+      origenPedido: 'tienda_independiente',
+      detallesEntregaTienda: {
+        ubicacionEscrita: params.clienteDireccion,
+        puntoReferencia: params.puntoReferencia,
+        zonaMunicipio: params.zonaMunicipio || 'Caracas Metropolitana',
+        contactoCliente: params.clienteNombre,
+        telefonoCliente: params.clienteTelefono,
+        notasComercio: params.notas
+      },
+      metricasTiempo: {
+        tiempoDespachoComercioMin: 8,
+        tiempoEntregaMotorizadoMin: 18,
+        distanciaKm: distKm,
+        estimadoDespachoMin: 8,
+        estimadoEntregaMin: 20
+      },
+      historialOperaciones: [
+        {
+          id: 'hist-' + Date.now(),
+          estado: 'esperando_repartidor',
+          descripcion: `Comercio ${store.nombre} procesó pedido de tienda independiente para ${params.clienteNombre}. Destino solicitado: "${params.clienteDireccion}". Motorizado solicitado a Vixy Delivery.`,
+          actor: 'comercio',
+          timestamp: timeStr
+        }
+      ]
+    };
+
+    setOrders(prev => [newOrder, ...prev]);
+
+    // 1. Notificar a Vixy Delivery (motorizados en su zona)
+    addNotification('conductor', '🏍️ ¡Solicitud de Delivery de Tienda!', `${store.nombre} solicita motorizado para entrega a: ${params.clienteDireccion}. Ganancia conductor: $${tripCostCalc.gananciaMotorizadoUsd.toFixed(2)} USD.`);
+
+    // 2. Notificar al comercio
+    addNotification('comercio', '🏪 Pedido de Tienda Procesado', `Comanda #${codigo} registrada. Solicitud de delivery enviada a los repartidores en tu zona.`);
+
+    // 3. Notificar y registrar en el Panel Web
+    addNotification('web', '📦 Nuevo Delivery de Tienda', `Comercio ${store.nombre} solicitó delivery independiente para ${params.clienteNombre} (${params.clienteDireccion}).`);
+    addActivityLog({
+      usuarioId: store.id,
+      usuarioNombre: store.nombre,
+      usuarioRol: 'comercio',
+      modulo: 'pedidos',
+      accion: 'Pedido de Tienda & Solicitud de Delivery',
+      detalles: `Comercio generó comanda de tienda #${codigo} para cliente ${params.clienteNombre}. Destino de entrega escrito por comercio: "${params.clienteDireccion}" (${params.zonaMunicipio || 'Caracas'}). Notificación emitida a motorizados en Vixy Delivery.`,
+      ip: '190.202.89.12 (CANTV ABA)',
+      severidad: 'info'
+    });
+
+    return newOrder;
+  };
+
+  const storeAcceptOrder = (orderId: string) => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    let acceptedOrder: Pedido | undefined;
+
+    setOrders(prev => {
+      const orderTarget = prev.find(o => o.id === orderId);
+      const pickupLat = orderTarget?.comercio?.lat || store.lat || 10.4950;
+      const pickupLng = orderTarget?.comercio?.lng || store.lng || -66.8480;
+      const closestDriver = findClosestAvailableDriver(pickupLat, pickupLng, [], prev, allDrivers, driver.id);
+
+      return prev.map(o => {
+        if (o.id === orderId) {
+          acceptedOrder = {
+            ...o,
+            tiempoRestanteAceptarComercio: 0,
+            conductorOfrecidoId: closestDriver ? closestDriver.id : undefined,
+            tiempoRestanteAceptarConductor: closestDriver ? 15 : 0,
+            conductoresRechazaron: [],
+            estado: 'en_preparacion',
+            historialOperaciones: [
+              ...o.historialOperaciones,
+              {
+                id: 'hist-' + Date.now(),
+                estado: 'en_preparacion',
+                descripcion: `Comercio ${store.nombre} ACEPTÓ la solicitud del cliente. Comanda en preparación en cocina/almacén. ${
+                  closestDriver 
+                    ? `Notificado motorizado más cercano: ${closestDriver.nombre} ${closestDriver.apellido} (${closestDriver.moto.marca} ${closestDriver.moto.placa}) con 15s para responder.`
+                    : 'Búsqueda de motorizado iniciada en zona Caracas.'
+                }`,
+                actor: 'comercio',
+                timestamp: timeStr
+              }
+            ]
+          };
+          return acceptedOrder;
+        }
+        return o;
+      });
+    });
+
+    if (acceptedOrder) {
+      playBellChimeSound('driver');
+    }
+
+    const codigo = acceptedOrder?.codigoSeguimiento || orderId;
+    const destino = acceptedOrder?.cliente?.direccion || 'zona Caracas';
+
+    // 1. Notificar al cliente que su solicitud fue aceptada
+    addNotification('cliente', '👨‍🍳 ¡Pedido Aceptado por el Comercio!', `${store.nombre} aceptó tu solicitud para el pedido #${codigo}. Se encuentra en preparación. Buscando repartidor en tu zona.`);
+
+    // 2. Automáticamente notificar a Vixy Delivery que hay un pedido en su zona
+    addNotification('conductor', '🏍️ ¡Nuevo Pedido en tu Zona!', `${store.nombre} aceptó un pedido hacia ${destino}. ¡Toca para aceptar el viaje!`);
+
+    // 3. Notificar al comercio
+    addNotification('comercio', '✅ Solicitud Aceptada', `Has aceptado el pedido #${codigo}. La comanda está en preparación.`);
+
+    // 4. Registrar en panel web
+    addNotification('web', '✅ Solicitud Aceptada por Comercio', `El comercio ${store.nombre} aceptó el pedido #${codigo}. Cocina/almacén iniciada.`);
+    addActivityLog({
+      usuarioId: store.id,
+      usuarioNombre: store.nombre,
+      usuarioRol: 'comercio',
+      modulo: 'pedidos',
+      accion: 'Solicitud Aceptada & Despacho Iniciado',
+      detalles: `Comercio aceptó pedido #${codigo}. Cocina iniciada y notificación emitida a Vixy Delivery Caracas para asignación de conductor.`,
+      ip: '190.202.89.12 (CANTV ABA)',
+      severidad: 'info'
+    });
+  };
+
+  const storeRejectOrder = (orderId: string, motivo: string = 'Fuera de disponibilidad') => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    const dateStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    
+    // Localizar la orden a rechazar
+    const targetOrder = orders.find(o => o.id === orderId);
+    const codigo = targetOrder?.codigoSeguimiento || orderId;
+    const fueCartera = targetOrder?.metodoPagoSeleccionado === 'saldo_cartera';
+    const montoReembolso = targetOrder?.montoTotalUsd || 0;
+    const montoSubtotalComercio = targetOrder?.montoSubtotalUsd || 0;
+
+    // Si fue pagado con Cartera Vixy, reembolsar de inmediato al cliente
+    if (fueCartera && montoReembolso > 0) {
+      setClientWallet(prev => {
+        const nuevoSaldoUsd = Math.round((prev.saldoUsd + montoReembolso) * 100) / 100;
+        const nuevoSaldoBs = Math.round((nuevoSaldoUsd * tasaBcv) * 100) / 100;
+        return {
+          ...prev,
+          saldoUsd: nuevoSaldoUsd,
+          saldoBs: nuevoSaldoBs,
+          totalGastadoUsd: Math.max(0, Math.round((prev.totalGastadoUsd - montoReembolso) * 100) / 100),
+          historialTransacciones: [
+            {
+              id: 'tx-reemb-' + Date.now(),
+              clienteId: client.id,
+              tipo: 'reembolso',
+              montoUsd: montoReembolso,
+              montoBs: Math.round(montoReembolso * tasaBcv * 100) / 100,
+              saldoResultanteUsd: nuevoSaldoUsd,
+              metodoPago: 'saldo_cartera',
+              pedidoId: orderId,
+              codigoSeguimiento: codigo,
+              descripcion: `Reembolso automático por pedido #${codigo} rechazado por ${store.nombre} (${motivo})`,
+              fecha: dateStr,
+              estado: 'completado'
+            },
+            ...(prev.historialTransacciones || [])
+          ]
+        };
+      });
+
+      // Revertir abono en cartera comercial
+      setStoreWallet(prev => {
+        const nuevoSaldoUsd = Math.max(0, Math.round((prev.saldoUsd - montoSubtotalComercio) * 100) / 100);
+        const nuevoSaldoBs = Math.round(nuevoSaldoUsd * tasaBcv * 100) / 100;
+        return {
+          ...prev,
+          saldoUsd: nuevoSaldoUsd,
+          saldoBs: nuevoSaldoBs,
+          totalVentasUsd: Math.max(0, Math.round((prev.totalVentasUsd - montoSubtotalComercio) * 100) / 100),
+          historialTransacciones: [
+            {
+              id: 'tx-rev-' + Date.now(),
+              comercioId: store.id,
+              tipo: 'ajuste',
+              montoUsd: -montoSubtotalComercio,
+              montoBs: -Math.round(montoSubtotalComercio * tasaBcv * 100) / 100,
+              saldoResultanteUsd: nuevoSaldoUsd,
+              pedidoId: orderId,
+              codigoSeguimiento: codigo,
+              descripcion: `Reverso de fondos por solicitud #${codigo} rechazada (${motivo})`,
+              fecha: dateStr,
+              estado: 'acreditado'
+            },
+            ...(prev.historialTransacciones || [])
+          ]
+        };
+      });
+    }
+
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          estado: 'cancelado',
+          tiempoEstimadoRestanteSegundos: 0,
+          historialOperaciones: [
+            ...o.historialOperaciones,
+            {
+              id: 'hist-' + Date.now(),
+              estado: 'cancelado',
+              descripcion: `Comercio ${store.nombre} RECHAZÓ la solicitud del cliente (${motivo}). Pedido cancelado.${fueCartera ? ` Reembolso de $${montoReembolso.toFixed(2)} USD reintegrado a la Cartera Vixy del cliente.` : ''}`,
+              actor: 'comercio',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+
+    if (fueCartera) {
+      addNotification('cliente', '❌ Solicitud Rechazada con Reembolso', `${store.nombre} no pudo aceptar tu pedido #${codigo} (${motivo}). Se reembolsaron $${montoReembolso.toFixed(2)} USD a tu Cartera Vixy.`);
+    } else {
+      addNotification('cliente', '❌ Solicitud Rechazada por el Comercio', `${store.nombre} no pudo atender tu pedido #${codigo} (${motivo}).`);
+    }
+
+    addNotification('comercio', '🚫 Pedido Rechazado', `Has rechazado la solicitud #${codigo} (${motivo}).`);
+    addNotification('web', '⚠️ Solicitud Rechazada por Comercio', `Comercio ${store.nombre} rechazó pedido #${codigo}. Motivo: ${motivo}`);
+    addActivityLog({
+      usuarioId: store.id,
+      usuarioNombre: store.nombre,
+      usuarioRol: 'comercio',
+      modulo: 'pedidos',
+      accion: 'Solicitud Rechazada por Comercio',
+      detalles: `Comercio rechazó pedido #${codigo}. Motivo: "${motivo}".${fueCartera ? ` Reembolso automático de $${montoReembolso.toFixed(2)} USD procesado.` : ''} Notificación enviada al cliente.`,
+      ip: '190.202.89.12 (CANTV ABA)',
+      severidad: 'advertencia'
+    });
+  };
+
+  const verifyPayment = (orderId: string) => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          estado: 'pago_verificado',
+          historialOperaciones: [
+            ...o.historialOperaciones,
+            {
+              id: 'hist-' + Date.now(),
+              estado: 'pago_verificado',
+              descripcion: `Comercio ${store.nombre} confirmó recepción del pago directo.`,
+              actor: 'comercio',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+    addNotification('cliente', '✅ Pago Verificado', 'Tu comercio ha confirmado el pago. Se inicia la preparación.');
+  };
+
+  const startPreparing = (orderId: string) => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          estado: 'en_preparacion',
+          historialOperaciones: [
+            ...o.historialOperaciones,
+            {
+              id: 'hist-' + Date.now(),
+              estado: 'en_preparacion',
+              descripcion: 'Cocina de Burger House comenzó a preparar tu orden.',
+              actor: 'comercio',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+    addNotification('cliente', '👨‍🍳 Pedido en Preparación', 'Tu comida está siendo preparada con los más altos estándares.');
+  };
+
+  const readyForPickup = (orderId: string) => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    let codigo = orderId;
+    let closestDriver: Conductor | null = null;
+
+    setOrders(prev => {
+      const orderTarget = prev.find(o => o.id === orderId);
+      const pickupLat = orderTarget?.comercio?.lat || store.lat || 10.4950;
+      const pickupLng = orderTarget?.comercio?.lng || store.lng || -66.8480;
+      closestDriver = findClosestAvailableDriver(pickupLat, pickupLng, orderTarget?.conductoresRechazaron || [], prev, allDrivers, driver.id);
+
+      return prev.map(o => {
+        if (o.id === orderId) {
+          codigo = o.codigoSeguimiento || orderId;
+          const targetDriver = o.conductor || closestDriver;
+          return {
+            ...o,
+            estado: 'esperando_repartidor',
+            conductorOfrecidoId: !o.conductor && targetDriver ? targetDriver.id : o.conductorOfrecidoId,
+            tiempoRestanteAceptarConductor: !o.conductor && targetDriver ? 15 : (o.tiempoRestanteAceptarConductor ?? 0),
+            historialOperaciones: [
+              ...o.historialOperaciones,
+              {
+                id: 'hist-' + Date.now(),
+                estado: 'esperando_repartidor',
+                descripcion: `Pedido empaquetado en mostrador. Oferta de viaje emitida a los repartidores activos de Vixy Delivery.`,
+                actor: 'comercio',
+                timestamp: timeStr
+              }
+            ]
+          };
+        }
+        return o;
+      });
+    });
+
+    if (closestDriver) {
+      playBellChimeSound('driver');
+    }
+    addNotification('conductor', '🛵 ¡Pedido Listo para Retiro!', `Nuevo pedido #${codigo} empaquetado en ${store.nombre}. Toca para aceptar el viaje.`);
+    addNotification('web', '📦 Pedido Listo en Mostrador', `Comercio ${store.nombre} terminó empaque de #${codigo}. Esperando aceptación de repartidor.`);
+  };
+
+  const driverAcceptOrder = (orderId: string) => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    let acceptedCod = orderId;
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        acceptedCod = o.codigoSeguimiento || orderId;
+        return {
+          ...o,
+          conductor: driver,
+          conductorOfrecidoId: undefined,
+          tiempoRestanteAceptarConductor: 0,
+          estado: 'en_camino_al_comercio',
+          historialOperaciones: [
+            ...o.historialOperaciones,
+            {
+              id: 'hist-' + Date.now(),
+              estado: 'en_camino_al_comercio',
+              descripcion: `Motorizado ${driver.nombre} Ramírez aceptó la carrera dentro del tiempo límite (15s) y va rumbo al comercio.`,
+              actor: 'conductor',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+    addNotification('cliente', '🛵 Motorizado en Camino a la Tienda', `${driver.nombre} Ramírez (${driver.moto.marca} ${driver.moto.placa}) aceptó tu pedido #${acceptedCod} y se dirige al local.`);
+    addNotification('comercio', '🛵 Motorizado Asignado', `${driver.nombre} aceptó el retiro de la orden #${acceptedCod}.`);
+    addNotification('web', '🛵 Conductor Asignado a Pedido', `El motorizado ${driver.nombre} (${driver.moto.placa}) aceptó el pedido #${acceptedCod}.`);
+    addActivityLog({
+      usuarioId: driver.id,
+      usuarioNombre: `${driver.nombre} ${driver.apellido}`,
+      usuarioRol: 'conductor',
+      modulo: 'pedidos',
+      accion: 'Viaje Aceptado por Motorizado',
+      detalles: `Motorizado aceptó pedido #${acceptedCod}. Se desplaza en ${driver.moto.marca} ${driver.moto.placa} hacia el comercio.`,
+      ip: '190.74.150.88 (Digitel 4G)',
+      severidad: 'exito'
+    });
+  };
+
+  const assignDriverToOrder = (orderId: string, driverId: string) => {
+    const selectedDriver = allDrivers.find(d => d.id === driverId) || driver;
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    let targetCod = orderId;
+    let comercioNombre = 'el comercio';
+
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        targetCod = o.codigoSeguimiento || orderId;
+        comercioNombre = o.comercio?.nombre || 'el comercio';
+        return {
+          ...o,
+          conductor: selectedDriver,
+          conductorOfrecidoId: undefined,
+          tiempoRestanteAceptarConductor: 0,
+          estado: 'en_camino_al_comercio',
+          historialOperaciones: [
+            ...o.historialOperaciones,
+            {
+              id: 'hist-' + Date.now(),
+              estado: 'en_camino_al_comercio',
+              descripcion: `Mesa operativa asignó al motorizado ${selectedDriver.nombre} ${selectedDriver.apellido} (${selectedDriver.moto.marca} ${selectedDriver.moto.placa}). Motorizado notificado para retiro en ${comercioNombre}.`,
+              actor: 'administrador',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+
+    addNotification('conductor', '🛵 Nuevo Servicio Asignado por Mesa Operativa', `Has sido asignado a la orden #${targetCod}. Dirígete a ${comercioNombre} para el retiro.`);
+    addNotification('web', '✅ Motorizado Asignado', `Se asignó a ${selectedDriver.nombre} (${selectedDriver.moto.placa}) a la orden #${targetCod}.`);
+    addActivityLog({
+      usuarioId: currentAdminUser.id,
+      usuarioNombre: currentAdminUser.nombre,
+      usuarioRol: 'admin',
+      modulo: 'pedidos',
+      accion: 'Asignación de Motorizado',
+      detalles: `Mesa operativa asignó a ${selectedDriver.nombre} ${selectedDriver.apellido} (${selectedDriver.moto.placa}) al servicio #${targetCod}.`,
+      ip: '190.202.89.12 (CANTV ABA)',
+      severidad: 'info'
+    });
+  };
+
+  const driverRejectOrder = (orderId: string, motivo: string = 'Distancia no conveniente') => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    let nextAssignedDriver: Conductor | null = null;
+
+    setOrders(prev => {
+      const orderTarget = prev.find(o => o.id === orderId);
+      const currentRejected = [...(orderTarget?.conductoresRechazaron || [])];
+      if (!currentRejected.includes(driver.id)) {
+        currentRejected.push(driver.id);
+      }
+
+      const pickupLat = orderTarget?.comercio?.lat || 10.4950;
+      const pickupLng = orderTarget?.comercio?.lng || -66.8480;
+      nextAssignedDriver = findClosestAvailableDriver(pickupLat, pickupLng, currentRejected, prev, allDrivers);
+
+      return prev.map(o => {
+        if (o.id === orderId) {
+          if (nextAssignedDriver) {
+            return {
+              ...o,
+              conductor: undefined,
+              conductorOfrecidoId: nextAssignedDriver.id,
+              tiempoRestanteAceptarConductor: 15, // 15 segundos para el nuevo conductor
+              conductoresRechazaron: currentRejected,
+              estado: 'esperando_repartidor',
+              historialOperaciones: [
+                ...o.historialOperaciones,
+                {
+                  id: 'hist-' + Date.now(),
+                  estado: 'esperando_repartidor',
+                  descripcion: `Motorizado ${driver.nombre} Ramírez rechazó la solicitud (${motivo}). Pedido desaparece de su vista y salta automáticamente al conductor más cercano: ${nextAssignedDriver.nombre} ${nextAssignedDriver.apellido} (${nextAssignedDriver.moto.marca} ${nextAssignedDriver.moto.placa}) con 15s para aceptar.`,
+                  actor: 'conductor',
+                  timestamp: timeStr
+                }
+              ]
+            };
+          } else {
+            return {
+              ...o,
+              conductor: undefined,
+              conductorOfrecidoId: undefined,
+              tiempoRestanteAceptarConductor: 0,
+              conductoresRechazaron: currentRejected,
+              estado: 'esperando_repartidor',
+              historialOperaciones: [
+                ...o.historialOperaciones,
+                {
+                  id: 'hist-' + Date.now(),
+                  estado: 'esperando_repartidor',
+                  descripcion: `Motorizado ${driver.nombre} Ramírez rechazó la solicitud (${motivo}). Pedido desaparece de su vista. No hay más conductores disponibles en la zona.`,
+                  actor: 'conductor',
+                  timestamp: timeStr
+                }
+              ]
+            };
+          }
+        }
+        return o;
+      });
+    });
+
+    if (nextAssignedDriver) {
+      playBellChimeSound('driver');
+    }
+
+    addNotification('conductor', '⚠️ Servicio Descartado', `Has declinado el servicio #${orderId}. El pedido desaparece de tu vista.`);
+    addNotification('web', '⚠️ Viaje Rechazado por Repartidor', `Motorizado ${driver.nombre} declinó viaje #${orderId}. Motivo: ${motivo}. Saltando al siguiente conductor disponible.`);
+    addActivityLog({
+      usuarioId: driver.id,
+      usuarioNombre: `${driver.nombre} ${driver.apellido}`,
+      usuarioRol: 'conductor',
+      modulo: 'pedidos',
+      accion: 'Viaje Rechazado por Motorizado',
+      detalles: `Motorizado rechazó la solicitud para pedido #${orderId}. Motivo indicado: "${motivo}". El pedido desaparece de su pantalla y se ofrece al siguiente conductor disponible.`,
+      ip: '190.74.150.88 (Digitel 4G)',
+      severidad: 'advertencia'
+    });
+  };
+
+  const driverPickUpOrder = (orderId: string) => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          estado: 'en_camino_al_cliente',
+          tiempoEstimadoRestanteSegundos: 900, // 15 minutos exactos de countdown
+          historialOperaciones: [
+            ...o.historialOperaciones,
+            {
+              id: 'hist-' + Date.now(),
+              estado: 'en_camino_al_cliente',
+              descripcion: `Comercio verificó identidad del motorizado (${driver.nombre} ${driver.apellido}, Placa ${driver.moto.placa}) y entregó el paquete. Conductor en ruta hacia el cliente.`,
+              actor: 'conductor',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+    addNotification('cliente', '🚀 En Camino a tu Dirección', `${driver.nombre} ya tiene tu pedido en su maletín térmico y va a tu ubicación.`);
+  };
+
+  const driverDeliverOrder = (orderId: string, photoUrl: string, comentario: string) => {
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    const newFoto: FotoVerificacion = {
+      id: 'foto-' + Date.now(),
+      pedidoId: orderId,
+      url: photoUrl || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
+      fecha: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      conductorId: driver.id,
+      conductorNombre: `${driver.nombre} ${driver.apellido}`,
+      clienteNombre: `${client.nombre} ${client.apellido}`,
+      coordenadas: '10.4965° N, 66.8523° W (Chacao, Torre Este)',
+      comentario: comentario || 'Entrega completada exitosamente en puerta.'
+    };
+
+    setVerificationPhotos(prev => [newFoto, ...prev]);
+
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          estado: 'entregado',
+          tiempoEstimadoRestanteSegundos: 0,
+          fotoVerificacion: newFoto,
+          historialOperaciones: [
+            ...o.historialOperaciones,
+            {
+              id: 'hist-' + Date.now(),
+              estado: 'entregado',
+              descripcion: `Entrega completada. Foto de comprobante guardada en /uploads/verificaciones/: "${comentario}".`,
+              actor: 'conductor',
+              timestamp: timeStr
+            }
+          ]
+        };
+      }
+      return o;
+    }));
+
+    setDriver(prev => ({
+      ...prev,
+      totalEntregas: prev.totalEntregas + 1
+    }));
+
+    // Deduct delivery commission from individual driver wallet and check -$0.50 limit
+    setDriverWallet(prev => {
+      const nuevoSaldo = parseFloat((prev.saldoUsd - 0.35).toFixed(2));
+      const isBlocked = nuevoSaldo <= prev.limiteSaldoNegativo;
+      const timeStr2 = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      const nuevaTx = {
+        id: 'tx-com-' + Date.now(),
+        conductorId: prev.conductorId,
+        tipo: 'comision_carrera' as const,
+        monto: -0.35,
+        saldoResultante: nuevoSaldo,
+        descripcion: `Comisión operativa por carrera finalizada #${orderId}`,
+        fecha: timeStr2,
+        estado: 'completado' as const
+      };
+      const updated = {
+        ...prev,
+        saldoUsd: nuevoSaldo,
+        serviciosRealizados: prev.serviciosRealizados + 1,
+        totalComisionesPagadasUsd: parseFloat(((prev.totalComisionesPagadasUsd || 0) + 0.35).toFixed(2)),
+        totalComisionesPagadas: parseFloat(((prev.totalComisionesPagadasUsd || 0) + 0.35).toFixed(2)),
+        bloqueadoPorSaldo: isBlocked,
+        historialTransacciones: [nuevaTx, ...(prev.historialTransacciones || [])],
+        transacciones: [nuevaTx, ...(prev.historialTransacciones || [])]
+      };
+      setDriver(d => ({ ...d, billetera: updated }));
+      if (isBlocked) {
+        addNotification(
+          'conductor',
+          '⚠️ Límite de Crédito Negativo Excedido (-$0.50 USD)',
+          `Tu saldo cayó a $${nuevoSaldo.toFixed(2)} USD. Has alcanzado el límite negativo permitido (-$0.50). Debes recargar saldo para continuar trabajando.`
+        );
+      }
+      return updated;
+    });
+
+    addNotification('cliente', '🎉 ¡Pedido Entregado!', 'Tu pedido ha llegado. Por favor califica la atención de tu repartidor.');
+    addNotification('web', '📦 Entrega Exitosa', `Pedido ${orderId} entregado con comprobante fotográfico verificado.`);
+  };
+
+  const rateDriver = (orderId: string, estrellas: number, comentario: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          calificacionCliente: { estrellas, comentario }
+        };
+      }
+      return o;
+    }));
+
+    setDriver(prev => {
+      const newReviews = [
+        {
+          id: 'res-' + Date.now(),
+          clienteNombre: `${client.nombre} ${client.apellido}`,
+          calificacion: estrellas,
+          comentario,
+          fecha: new Date().toISOString().slice(0, 10)
+        },
+        ...(prev.resenas || [])
+      ];
+      const avg = newReviews.length > 0 
+        ? newReviews.reduce((sum, r) => sum + r.calificacion, 0) / newReviews.length 
+        : 5.0;
+      return {
+        ...prev,
+        rating: parseFloat(avg.toFixed(1)),
+        resenas: newReviews
+      };
+    });
+
+    addNotification('conductor', '⭐ Nueva Calificación', `Cliente te calificó con ${estrellas} estrellas: "${comentario}"`);
+  };
+
+  const reportIncident = (inc: Omit<Incidencia, 'id' | 'codigoIncidencia' | 'fechaCreacion' | 'estado'>) => {
+    const newInc: Incidencia = {
+      ...inc,
+      id: 'inc-' + Date.now(),
+      codigoIncidencia: 'INC-2026-' + Math.floor(100 + Math.random() * 900),
+      estado: 'abierta',
+      fechaCreacion: new Date().toISOString().replace('T', ' ').slice(0, 19)
+    };
+    setIncidents(prev => [newInc, ...prev]);
+    addNotification('web', '⚠️ Incidencia Registrada', `Nueva incidencia ${newInc.codigoIncidencia} (${newInc.tipo}) reportada por ${newInc.reportanteNombre}`);
+  };
+
+  const resolveIncident = (id: string, resolucion: string) => {
+    setIncidents(prev => prev.map(inc => {
+      if (inc.id === id) {
+        return {
+          ...inc,
+          estado: 'resuelta',
+          resolucion
+        };
+      }
+      return inc;
+    }));
+  };
+
+  const sendChatMessage = (
+    orderId: string, 
+    emisorTipo: 'cliente' | 'comercio' | 'conductor', 
+    emisorNombre: string, 
+    mensaje: string
+  ) => {
+    const newMsg: MensajeChat = {
+      id: 'msg-' + Date.now(),
+      pedidoId: orderId,
+      emisorTipo,
+      emisorNombre,
+      mensaje,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      leido: true
+    };
+    setChatMessages(prev => [...prev, newMsg]);
+  };
+
+  const sendSupportMessage = (usuarioTipo: 'cliente' | 'comercio' | 'conductor', usuarioNombre: string, texto: string) => {
+    const newMsg: MensajeSoporte = {
+      id: 'sup-' + Date.now(),
+      emisor: 'usuario',
+      usuarioTipo,
+      usuarioNombre,
+      texto,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setSupportMessages(prev => [...prev, newMsg]);
+
+    // Auto-respond from Support Agent after 1 second
+    setTimeout(() => {
+      const respMsg: MensajeSoporte = {
+        id: 'sup-resp-' + Date.now(),
+        emisor: 'agente',
+        usuarioTipo,
+        usuarioNombre: 'Mesa de Ayuda Vixy (Gabriel)',
+        texto: `Hemos recibido tu solicitud "${texto.slice(0, 35)}...". Un operador logístico está asistiendo tu caso en tiempo real.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setSupportMessages(curr => [...curr, respMsg]);
+    }, 1200);
+  };
+
+  const respondSupportMessage = (texto: string) => {
+    const respMsg: MensajeSoporte = {
+      id: 'sup-admin-' + Date.now(),
+      emisor: 'agente',
+      usuarioTipo: 'cliente',
+      usuarioNombre: 'Administrador Vixy',
+      texto,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setSupportMessages(curr => [...curr, respMsg]);
+  };
+
+  const openCall = (caller: string, callee: string, phone: string, role: string) => {
+    setCallModal({ isOpen: true, caller, callee, phone, role });
+  };
+
+  const closeCall = () => {
+    setCallModal({ isOpen: false, caller: '', callee: '', phone: '', role: '' });
+  };
+
+  const openChat = (orderId: string) => {
+    setChatModal({ isOpen: true, orderId });
+  };
+
+  const closeChat = () => {
+    setChatModal({ isOpen: false, orderId: '' });
+  };
+
+  const allClientWallets = registeredClients.map(c => ({
+    clienteId: c.id,
+    clienteNombre: `${c.nombre} ${c.apellido}`,
+    cedula: c.cedula,
+    saldoUsd: c.id === client.id ? clientWallet.saldoUsd : (c.billetera?.saldoUsd ?? 0),
+    saldoBs: c.id === client.id ? clientWallet.saldoBs : (c.billetera?.saldoBs ?? 0),
+    totalRecargadoUsd: c.id === client.id ? clientWallet.totalRecargadoUsd : (c.billetera?.totalRecargadoUsd ?? 0),
+    totalGastadoUsd: c.id === client.id ? clientWallet.totalGastadoUsd : (c.billetera?.totalGastadoUsd ?? 0),
+    carpetaComprobantes: `/uploads/clientes/${c.id}/comprobantes/`,
+    transacciones: (c.id === client.id ? clientWallet.historialTransacciones : c.billetera?.historialTransacciones) || []
+  }));
+
+  const allDriverWallets = allDrivers.map(d => {
+    const carrerasConductor = orders.filter(o => o.conductorId === d.id);
+    const carrerasEntregadas = carrerasConductor.filter(o => o.estado === 'entregado').length;
+    const ingresoBrutoOrders = carrerasConductor.reduce((acc, o) => acc + (o.costoEnvio || 0), 0);
+    const ingresoBrutoDeliveryUsd = ingresoBrutoOrders > 0 ? ingresoBrutoOrders : (d.id === driver.id ? 45.00 : 35.00);
+    const comisionEmpresaDeliveryUsd = parseFloat(((ingresoBrutoDeliveryUsd * (deliveryRates?.porcentajeComisionDelivery ?? 15)) / 100).toFixed(2));
+    const gananciaNetaConductorUsd = parseFloat((ingresoBrutoDeliveryUsd - comisionEmpresaDeliveryUsd).toFixed(2));
+    
+    const liquidaciones = liquidacionesConductores.filter(l => l.conductorId === d.id);
+    const totalRetiradoUsd = parseFloat(liquidaciones.reduce((acc, l) => acc + l.montoNetoUsd, 0).toFixed(2));
+    const saldoEnWalletUsd = Math.max(0, parseFloat((gananciaNetaConductorUsd - totalRetiradoUsd).toFixed(2)));
+    const saldoEnWalletBs = parseFloat((saldoEnWalletUsd * tasaBcv).toFixed(2));
+
+    const rawSaldo = d.id === driver.id ? driverWallet.saldoUsd : (d.billetera?.saldoUsd ?? saldoEnWalletUsd);
+
+    return {
+      conductorId: d.id,
+      conductorNombre: `${d.nombre} ${d.apellido}`,
+      cedula: d.legal.cedula,
+      carrerasEntregadas: Math.max(carrerasEntregadas, d.totalEntregas || 0),
+      ingresoBrutoDeliveryUsd,
+      comisionEmpresaDeliveryUsd,
+      gananciaNetaConductorUsd,
+      totalRetiradoUsd,
+      saldoUsd: rawSaldo,
+      saldoBs: parseFloat((rawSaldo * tasaBcv).toFixed(2)),
+      saldoEnWalletUsd,
+      saldoEnWalletBs,
+      estadoWallet: (saldoEnWalletUsd > 0 ? 'dinero_en_wallet' : 'totalmente_liquidado') as 'dinero_en_wallet' | 'totalmente_liquidado',
+      limiteSaldoNegativo: d.billetera?.limiteSaldoNegativo ?? -0.50,
+      bloqueado: rawSaldo <= -0.50,
+      carpetaComprobantes: `/uploads/conductores/${d.id}/comprobantes/`,
+      transacciones: (d.id === driver.id ? driverWallet.historialTransacciones : d.billetera?.historialTransacciones) || [],
+      liquidaciones
+    };
+  });
+
+  const allStoreWallets = stores.map(s => {
+    const pedidosComercio = orders.filter(o => o.comercioId === s.id);
+    const totalVentasCalculadas = pedidosComercio.reduce((acc, o) => acc + o.subtotal, 0);
+    const baseVentas = s.id === store.id ? storeWallet.totalVentasUsd : (s.billetera?.totalVentasUsd ?? 0);
+    const ventasBrutasUsd = totalVentasCalculadas > 0 ? totalVentasCalculadas : (baseVentas > 0 ? baseVentas : 120.00);
+
+    const comisionEmpresaUsd = parseFloat(((ventasBrutasUsd * porcentajeComisionComercio) / 100).toFixed(2));
+    const ingresoNetoUsd = parseFloat((ventasBrutasUsd - comisionEmpresaUsd).toFixed(2));
+
+    const liquidaciones = liquidacionesComercios.filter(l => l.comercioId === s.id);
+    const totalRetiradoUsd = parseFloat(liquidaciones.reduce((acc, l) => acc + l.montoNetoUsd, 0).toFixed(2));
+    const saldoEnWalletUsd = Math.max(0, parseFloat((ingresoNetoUsd - totalRetiradoUsd).toFixed(2)));
+    const saldoEnWalletBs = parseFloat((saldoEnWalletUsd * tasaBcv).toFixed(2));
+
+    const rawSaldoUsd = s.id === store.id ? storeWallet.saldoUsd : (s.billetera?.saldoUsd ?? saldoEnWalletUsd);
+
+    const estadoWallet: 'dinero_en_wallet' | 'totalmente_liquidado' | 'sin_movimientos' = 
+      saldoEnWalletUsd > 0 ? 'dinero_en_wallet' : (ventasBrutasUsd > 0 ? 'totalmente_liquidado' : 'sin_movimientos');
+
+    return {
+      comercioId: s.id,
+      comercioNombre: s.nombre,
+      rif: s.rif,
+      ventasBrutasUsd,
+      comisionEmpresaUsd,
+      ingresoNetoUsd,
+      totalRetiradoUsd,
+      saldoUsd: rawSaldoUsd,
+      saldoBs: parseFloat((rawSaldoUsd * tasaBcv).toFixed(2)),
+      saldoEnWalletUsd,
+      saldoEnWalletBs,
+      totalVentasUsd: ventasBrutasUsd,
+      estadoWallet,
+      transacciones: (s.id === store.id ? storeWallet.historialTransacciones : s.billetera?.historialTransacciones) || [],
+      pedidosComercio,
+      liquidaciones
+    };
+  });
+
+  const totalClientesUsd = allClientWallets.reduce((sum, w) => sum + Math.max(0, w.saldoUsd), 0);
+  const totalConductoresUsd = allDriverWallets.reduce((sum, w) => sum + Math.max(0, w.saldoUsd), 0);
+  const totalComerciosUsd = allStoreWallets.reduce((sum, w) => sum + Math.max(0, w.saldoUsd), 0);
+  const totalGlobalCustodiaUsd = Math.round((totalClientesUsd + totalConductoresUsd + totalComerciosUsd) * 100) / 100;
+
+  const globalLedger = {
+    totalClientesUsd: Math.round(totalClientesUsd * 100) / 100,
+    totalConductoresUsd: Math.round(totalConductoresUsd * 100) / 100,
+    totalComerciosUsd: Math.round(totalComerciosUsd * 100) / 100,
+    totalGlobalCustodiaUsd
+  };
+
+  return (
+    <DeliveryContext.Provider value={{
+      orders,
+      activeOrder,
+      client,
+      clientWallet,
+      clientLoggedIn,
+      registeredClients,
+      switchActiveClient,
+      loginClient,
+      logoutClient,
+      registerClient,
+      rechargeClientWallet,
+      driver,
+      driverWallet,
+      driverLoggedIn,
+      allDrivers,
+      switchActiveDriver,
+      loginDriver,
+      logoutDriver,
+      store,
+      stores,
+      switchStore,
+      updateStoreSchedule,
+      rateStore,
+      storeWallet,
+      storeLoggedIn,
+      loginStore,
+      logoutStore,
+      creditStoreWallet,
+      updateStoreRubro,
+      updateStoreCategoriasCatalogo,
+      rechargeRequests,
+      solicitarRecargaCliente,
+      solicitarRecargaConductor,
+      aprobarRecarga,
+      rechazarRecarga,
+      confirmDeliveryByClient,
+      claims,
+      createClaim,
+      updateClaimStatus,
+      allClientWallets,
+      allDriverWallets,
+      allStoreWallets,
+      liquidacionesComercios,
+      liquidacionesConductores,
+      solicitudesRegistroConductores,
+      porcentajeComisionComercio,
+      setPorcentajeComisionComercio,
+      liquidarComercio,
+      liquidarConductor,
+      solicitarRegistroConductor,
+      aprobarRegistroConductor,
+      rechazarRegistroConductor,
+      globalLedger,
+      incidents,
+      backendUsers,
+      adminUsers,
+      currentAdminUser,
+      adminIsLoggedIn,
+      loginAdmin,
+      logoutAdmin,
+      activityLogs,
+      addActivityLog,
+      clearActivityLogs,
+      deliveryRates,
+      updateDeliveryRates,
+      carterasConfig,
+      updateCarterasConfig,
+      pagoMovilConfig,
+      updatePagoMovilConfig,
+      calculateDeliveryTripCost,
+      notifications,
+      verificationPhotos,
+      chatMessages,
+      supportMessages,
+      tasaBcv,
+      setTasaBcv: handleSetTasaBcv,
+      updateDriverAvailability,
+      rechargeDriverWallet,
+      toggleSimulatedNegativeBalance,
+      updateStoreInfo,
+      updateStorePayments,
+      addProduct,
+      updateProduct,
+      deleteProduct,
+      addProductToStore: addProduct,
+      updateProductInStore: updateProduct,
+      deleteProductFromStore: deleteProduct,
+      switchAdminUser,
+      addAdminUser,
+      updateAdminUser,
+      deleteAdminUser,
+      createOrder,
+      createStoreManualOrder,
+      storeAcceptOrder,
+      storeRejectOrder,
+      verifyPayment,
+      startPreparing,
+      readyForPickup,
+      assignDriverToOrder,
+      driverAcceptOrder,
+      driverRejectOrder,
+      driverPickUpOrder,
+      driverDeliverOrder,
+      rateDriver,
+      reportIncident,
+      resolveIncident,
+      sendChatMessage,
+      sendSupportMessage,
+      respondSupportMessage,
+      callModal,
+      openCall,
+      closeCall,
+      chatModal,
+      openChat,
+      closeChat,
+      cartoApiKey,
+      setCartoApiKey: handleSetCartoApiKey,
+      realGpsActive,
+      realGpsCoords,
+      realGpsError,
+      requestPushNotificationPermission,
+      playNotificationSound,
+      playBellSound: (variant?: 'store' | 'driver') => playBellChimeSound(variant),
+      lastSyncTime,
+      isLiveSyncing,
+      syncCountdown,
+      triggerManualSync
+    }}>
+      {children}
+    </DeliveryContext.Provider>
+  );
+};
+
+export const useDelivery = () => {
+  const ctx = useContext(DeliveryContext);
+  if (!ctx) {
+    throw new Error('useDelivery must be used within DeliveryProvider');
+  }
+  return ctx;
+};
