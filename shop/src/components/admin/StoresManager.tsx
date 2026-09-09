@@ -22,7 +22,8 @@ import {
   ShoppingBag,
   UserCheck,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
 import { Comercio } from '../../types/delivery';
@@ -43,11 +44,25 @@ const RUBROS_CATALOGO: RubroOption[] = [
 ];
 
 export const StoresManager: React.FC = () => {
-  const { stores, updateStoreSchedule, toggleStoreActive, approveStore, rejectStore, refreshBackendData, tasaBcv, orders } = useDelivery();
+  const { stores, updateStoreSchedule, toggleStoreActive, approveStore, rejectStore, deleteStore, refreshBackendData, tasaBcv, orders } = useDelivery();
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [inspectingStoreDocs, setInspectingStoreDocs] = useState<Comercio | null>(null);
   const [inspectingDocImage, setInspectingDocImage] = useState<{ title: string; url: string } | null>(null);
+
+  const handleDeleteStore = async (storeId: string, storeNombre: string) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar permanentemente "${storeNombre}" de la base de datos? Esta acción no se puede deshacer.`)) return;
+    setDeletingId(storeId);
+    try {
+      await deleteStore(storeId);
+      if (inspectingStoreDocs && inspectingStoreDocs.id === storeId) {
+        setInspectingStoreDocs(null);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleRejectStore = async (storeId: string) => {
     if (!window.confirm('¿Seguro que deseas rechazar el registro de este comercio?')) return;
@@ -252,6 +267,7 @@ export const StoresManager: React.FC = () => {
             const storeOrders = orders.filter(o => o.comercio.id === item.id);
             const totalFacturadoUsd = storeOrders.reduce((sum, o) => sum + o.montoSubtotalUsd, 0);
             const isCurrentlyActive = item.activo !== false;
+            const isValidated = item.validado === true || item.status === 'aprobado' || item.origen_bd === 'delivery';
 
             return (
               <div 
@@ -283,17 +299,17 @@ export const StoresManager: React.FC = () => {
                       <h3 className="text-sm font-bold text-neutral-900 dark:text-white truncate">
                         {item.nombre}
                       </h3>
-                      {item.status === 'pendiente' ? (
+                      {!isValidated ? (
                         <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" /> Pendiente Aprobación
+                          <AlertCircle className="w-3 h-3" /> Pendiente Validación
                         </span>
                       ) : isCurrentlyActive ? (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
-                          Activo
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Validado • Activo
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400 text-[10px] font-bold">
-                          Inactivo / En Pausa
+                          Validado • Pausado
                         </span>
                       )}
                     </div>
@@ -370,14 +386,14 @@ export const StoresManager: React.FC = () => {
                     <span>Expediente</span>
                   </button>
 
-                  {item.status === 'pendiente' && (
+                  {!isValidated ? (
                     <>
                       <button
                         type="button"
                         onClick={() => handleApproveStore(item.id)}
                         disabled={approvingId === item.id}
                         className="px-3 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        title="Aprobar y verificar registro de comercio"
+                        title="Validar comercio y migrar a c2861522_vixy_dl"
                       >
                         {approvingId === item.id ? (
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -389,10 +405,10 @@ export const StoresManager: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => handleRejectStore(item.id)}
+                        onClick={() => handleRejectStore(item.id, item.nombre)}
                         disabled={rejectingId === item.id}
                         className="px-3 py-2 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        title="Rechazar solicitud de comercio"
+                        title="Rechazar solicitud (se removerá de la lista)"
                       >
                         {rejectingId === item.id ? (
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -402,31 +418,48 @@ export const StoresManager: React.FC = () => {
                         <span>Rechazar</span>
                       </button>
                     </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openScheduleModal(item)}
+                        className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-neutral-200 dark:border-neutral-700"
+                        title="Configurar horario de apertura y días de servicio"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Horario</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleStoreActive(item.id)}
+                        title={isCurrentlyActive ? 'Pausar o desactivar comercio' : 'Activar comercio'}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border ${
+                          isCurrentlyActive
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                            : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:text-neutral-800'
+                        }`}
+                      >
+                        <Power className="w-3.5 h-3.5" />
+                        <span>{isCurrentlyActive ? 'Activo' : 'Inactivo'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStore(item.id, item.nombre)}
+                        disabled={deletingId === item.id}
+                        title="Eliminar comercio validado de c2861522_vixy_dl"
+                        className="px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 disabled:opacity-50"
+                      >
+                        {deletingId === item.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>Eliminar</span>
+                      </button>
+                    </>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={() => openScheduleModal(item)}
-                    className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-neutral-200 dark:border-neutral-700"
-                    title="Configurar horario de apertura y días de servicio"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Horario</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => toggleStoreActive(item.id)}
-                    title={isCurrentlyActive ? 'Pausar o desactivar comercio' : 'Activar comercio'}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border ${
-                      isCurrentlyActive
-                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
-                        : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:text-neutral-800'
-                    }`}
-                  >
-                    <Power className="w-3.5 h-3.5" />
-                    <span>{isCurrentlyActive ? 'Activo' : 'Inactivo'}</span>
-                  </button>
                 </div>
               </div>
             );

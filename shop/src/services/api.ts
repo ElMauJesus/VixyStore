@@ -169,6 +169,12 @@ class ApiService {
     return this.updateComercio(id, {}, 'rechazar_comercio');
   }
 
+  public async deleteComercio(id: string) {
+    return this.request<{ success: boolean; mensaje: string }>(`/comercios.php?id=${encodeURIComponent(id)}&action=eliminar_comercio`, {
+      method: 'POST'
+    });
+  }
+
   // --- CONDUCTORES / DELIVERYS ---
   public async getConductores(params?: boolean | { disponibles?: boolean }) {
     let soloDisponibles = false;

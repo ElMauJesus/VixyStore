@@ -26,6 +26,14 @@ Options -Indexes
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^api/(.*)$ store/api/$1 [L,QSA]
 
+    # Reescritura para assets estaticos compartidos de Store (evita duplicar 15MB en disco)
+    RewriteCond %{REQUEST_URI} ^/store/(banners|logo|payment-icons|qr|cards)/(.*)$ [NC]
+    RewriteRule ^store/(banners|logo|payment-icons|qr|cards)/(.*)$ $1/$2 [L]
+
+    # Reescritura transparente de /panel-admin/ a /panel/ (evita duplicar 21MB en disco)
+    RewriteCond %{REQUEST_URI} ^/panel-admin/(.*)$ [NC]
+    RewriteRule ^panel-admin/(.*)$ panel/$1 [L]
+
     # Si el archivo fisico existe, servirlo directamente
     RewriteCond %{REQUEST_FILENAME} -f
     RewriteRule ^ - [L]
@@ -49,12 +57,6 @@ Options -Indexes
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^panel/(.*)$ /panel/index.html [L]
-
-    # Rutas dinamicas de Panel Admin (/panel-admin/...)
-    RewriteCond %{REQUEST_URI} ^/panel-admin/ [NC]
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^panel-admin/(.*)$ /panel-admin/index.html [L]
 
     # Rutas dinamicas de Store (/store/...)
     RewriteCond %{REQUEST_URI} ^/store/ [NC]

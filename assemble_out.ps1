@@ -9,17 +9,12 @@ $dirs = @(
     "out/store",
     "out/store/api",
     "out/store/_next",
-    "out/store/banners",
-    "out/store/logo",
-    "out/store/payment-icons",
-    "out/store/qr",
     "out/shop",
     "out/shop/backend",
     "out/registro-comercios",
     "out/registro-comercios/api",
     "out/registro-delivery",
     "out/panel",
-    "out/panel-admin",
     "out/api",
     "out/banners",
     "out/logo",
@@ -126,31 +121,40 @@ if (Test-Path "out/shop/assets/aistudio") {
     Remove-Item -Path "out/shop/assets/aistudio" -Recurse -Force
 }
 
-# 7b. Copiar Panel Web Administrativo a out/panel y out/panel-admin
+# 7b. Copiar Panel Web Administrativo exclusivamente a out/panel
+#     (la regla en .htaccess reescribe /panel-admin/ a /panel/ internamente sin duplicar 21MB)
+if (Test-Path "out/panel-admin") {
+    Remove-Item -Path "out/panel-admin" -Recurse -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path "out/panel") {
+    Remove-Item -Path "out/panel" -Recurse -Force -ErrorAction SilentlyContinue
+}
 if (Test-Path "panel-admin") {
-    if (-not (Test-Path "out/panel-admin")) { New-Item -ItemType Directory -Path "out/panel-admin" -Force | Out-Null }
-    if (-not (Test-Path "out/panel")) { New-Item -ItemType Directory -Path "out/panel" -Force | Out-Null }
-    Copy-Item -Path "panel-admin/*" -Destination "out/panel-admin" -Recurse -Force
+    New-Item -ItemType Directory -Path "out/panel" -Force | Out-Null
     Copy-Item -Path "panel-admin/*" -Destination "out/panel" -Recurse -Force
-    Write-Host "[OK] Panel Web Administrativo instalado en out/panel y out/panel-admin"
+    Write-Host "[OK] Panel Web Administrativo instalado en out/panel (reescritura transparente lista)"
 }
 
 # 8. Copiar backend de Registro de Comercios a out/registro-comercios/api
 Copy-Item -Path "registro-comercios/api/*" -Destination "out/registro-comercios/api" -Recurse -Force
 Copy-Item -Path "database/actualizar_comercios_independientes.sql" -Destination "out/registro-comercios" -Force -ErrorAction SilentlyContinue
 
-# 9. Copiar assets multimedia compartidos a raíz Y a out/store/ para evitar 404
+# 9. Copiar assets multimedia a la raiz
+#    (la regla en .htaccess reescribe /store/(banners|logo|payment-icons|qr|cards)/ a /(banners|...)/ sin duplicar 15MB)
 Copy-Item -Path "public/banners/*" -Destination "out/banners" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "public/logo/*" -Destination "out/logo" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "public/payment-icons/*" -Destination "out/payment-icons" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "public/qr/*" -Destination "out/qr" -Recurse -Force -ErrorAction SilentlyContinue
 
-Copy-Item -Path "public/banners/*" -Destination "out/store/banners" -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item -Path "public/logo/*" -Destination "out/store/logo" -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item -Path "public/payment-icons/*" -Destination "out/store/payment-icons" -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item -Path "public/qr/*" -Destination "out/store/qr" -Recurse -Force -ErrorAction SilentlyContinue
+# Limpiar carpetas multimedia duplicadas en out/store si existen de ensamblados anteriores
+$storeDups = @("banners", "logo", "payment-icons", "qr", "cards")
+foreach ($sd in $storeDups) {
+    if (Test-Path "out/store/$sd") {
+        Remove-Item -Path "out/store/$sd" -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
-# 9. Copiar carpeta de cards optimizadas (WebP + PNG) a out/cards/
+# 9b. Copiar carpeta de cards optimizadas (WebP + PNG) a out/cards/
 Copy-Item -Path "public/cards/*" -Destination "out/cards" -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "[OK] Carpeta /cards/ (WebP optimizadas) instalada en out/cards/"
 

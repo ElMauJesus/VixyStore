@@ -18,7 +18,11 @@ $action = $_GET['action'] ?? null;
 // Función para normalizar comercio a estructura uniforme
 function normalizarComercio($c, $origen = 'delivery') {
     $rif = $c['rif_cedula_juridica'] ?? ($c['rif'] ?? '');
-    $nombre = $c['nombre_comercial'] ?? ($c['nombre'] ?? 'Comercio Sin Nombre');
+    
+    // Si viene de 'regist', la columna es 'nombre_comercial'.
+    // Si viene de 'delivery' (vixy_dl), la columna es 'nombre'.
+    $nombre = !empty($c['nombre_comercial']) ? $c['nombre_comercial'] : (!empty($c['nombre']) ? $c['nombre'] : 'Comercio');
+
     $email = $c['email'] ?? '';
     $idKey = !empty($c['codigo_comercio']) ? $c['codigo_comercio'] : (!empty($c['id']) ? (string)$c['id'] : 'com-' . md5($rif . $email));
     
@@ -40,8 +44,15 @@ function normalizarComercio($c, $origen = 'delivery') {
     }
 
     $horarioTxt = $c['horarios_atencion'] ?? ($c['horarios_texto'] ?? '08:00 AM - 10:00 PM');
-    $status = $c['status'] ?? ($c['activo'] ? 'aprobado' : 'pendiente');
-    $activo = isset($c['activo']) ? (bool)$c['activo'] : ($status === 'aprobado');
+    if ($origen === 'delivery') {
+        $status = 'aprobado';
+        $validado = true;
+        $activo = isset($c['activo']) ? (bool)$c['activo'] : true;
+    } else {
+        $status = $c['status'] ?? 'pendiente';
+        $validado = ($status === 'aprobado');
+        $activo = ($status === 'aprobado');
+    }
     $abiertoManual = isset($c['abierto_manual']) ? (bool)$c['abierto_manual'] : true;
 
     return [
@@ -49,8 +60,10 @@ function normalizarComercio($c, $origen = 'delivery') {
         'db_id' => $c['id'] ?? null,
         'origen_bd' => $origen,
         'codigo_comercio' => $c['codigo_comercio'] ?? $idKey,
+        'codigoComercio' => $c['codigo_comercio'] ?? $idKey,
         'nombre' => $nombre,
         'nombre_comercial' => $nombre,
+        'nombreComercial' => $nombre,
         'nombre_representante' => $c['nombre_representante'] ?? '',
         'cedula_representante' => $c['cedula_representante'] ?? '',
         'rif' => $rif,
@@ -71,9 +84,10 @@ function normalizarComercio($c, $origen = 'delivery') {
         'horarioApertura' => $horarioTxt,
         'logo_url' => $c['foto_comercio_url'] ?? ($c['logo_url'] ?? '/banners/banner_comercios.jpg'),
         'logoUrl' => $c['foto_comercio_url'] ?? ($c['logo_url'] ?? '/banners/banner_comercios.jpg'),
-        'banner_url' => $c['banner_url'] ?? ($c['foto_comercio_url'] ?? '/banners/banner_comercios.jpg'),
-        'bannerUrl' => $c['banner_url'] ?? ($c['foto_comercio_url'] ?? '/banners/banner_comercios.jpg'),
+        'banner_url' => $c['portada_url'] ?? ($c['foto_comercio_url'] ?? ($c['logo_url'] ?? '/banners/banner_comercios.jpg')),
+        'bannerUrl' => $c['portada_url'] ?? ($c['foto_comercio_url'] ?? ($c['logo_url'] ?? '/banners/banner_comercios.jpg')),
         'status' => $status,
+        'validado' => $validado,
         'activo' => $activo,
         'abierto' => $activo && $abiertoManual,
         'abierto_manual' => $abiertoManual,
@@ -103,10 +117,10 @@ if ($method === 'GET') {
         // 2. Si no está en delivery, buscar en c2861522_regist
         if (!$found && $pdoRegist) {
             try {
-                $stR = $pdoRegist->prepare("SELECT * FROM comercios WHERE id = :id OR codigo_comercio = :id2 OR rif_cedula_juridica = :id3 OR email = :id4 LIMIT 1");
-                $stR->execute(['id' => $id, 'id2' => $id, 'id3' => $id, 'id4' => $id]);
-                $rowR = $stR->fetch();
-                if ($rowR) $found = normalizarComercio($rowR, 'regist');
+                $stR = $pdoRegist->prepare("SELECT * FROM comercios WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3 LIMIT 1");
+                $stR->execute(['id' => $id, 'id2' => $id, 'id3' => $id]);
+                $row = $stR->fetch();
+                if ($row) $found = normalizarComercio($row, 'regist');
             } catch (Exception $e) {}
         }
 
@@ -114,7 +128,7 @@ if ($method === 'GET') {
             Database::jsonResponse(['error' => true, 'mensaje' => 'Comercio no encontrado'], 404);
         }
 
-        // Cargar productos del catálogo si existen
+        // Obtener productos si es de delivery
         try {
             $stP = $pdo->prepare("SELECT * FROM productos WHERE comercio_id = :cid AND disponible = 1");
             $stP->execute(['cid' => $found['id']]);
@@ -129,22 +143,7 @@ if ($method === 'GET') {
     // Listado general de comercios
     $comerciosMap = [];
 
-    // 1. Cargar comercios registrados desde c2861522_regist
-    if ($pdoRegist) {
-        try {
-            $stR = $pdoRegist->query("SELECT * FROM comercios ORDER BY created_at DESC");
-            $registrados = $stR->fetchAll();
-            foreach ($registrados as $r) {
-                $norm = normalizarComercio($r, 'regist');
-                $key = !empty($norm['rif']) ? $norm['rif'] : $norm['id'];
-                $comerciosMap[$key] = $norm;
-            }
-        } catch (Exception $e) {
-            error_log("Error cargando de c2861522_regist: " . $e->getMessage());
-        }
-    }
-
-    // 2. Cargar comercios de c2861522_vixy_dl (sobreescriben o complementan)
+    // 1. Cargar comercios validados de c2861522_vixy_dl (todos los que están aquí son validados)
     try {
         $stD = $pdo->query("SELECT * FROM comercios ORDER BY calificacion DESC");
         $deliveryStores = $stD->fetchAll();
@@ -155,6 +154,24 @@ if ($method === 'GET') {
         }
     } catch (Exception $e) {
         error_log("Error cargando de c2861522_vixy_dl: " . $e->getMessage());
+    }
+
+    // 2. Cargar comercios registrados desde c2861522_regist (SOLO status = 'pendiente')
+    // Los que ya fueron validados (están en delivery) o fueron rechazados, NO se muestran como pendientes
+    if ($pdoRegist) {
+        try {
+            $stR = $pdoRegist->query("SELECT * FROM comercios WHERE status = 'pendiente' ORDER BY created_at DESC");
+            $registrados = $stR->fetchAll();
+            foreach ($registrados as $r) {
+                $norm = normalizarComercio($r, 'regist');
+                $key = !empty($norm['rif']) ? $norm['rif'] : $norm['id'];
+                if (!isset($comerciosMap[$key])) {
+                    $comerciosMap[$key] = $norm;
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Error cargando de c2861522_regist: " . $e->getMessage());
+        }
     }
 
     $comercios = array_values($comerciosMap);
@@ -229,27 +246,116 @@ if ($method === 'PUT' && $id) {
         Database::jsonResponse(['success' => true, 'mensaje' => 'Disponibilidad del comercio actualizada']);
     }
 
-    // 2. Acción: aprobar_comercio (Aprobación desde panel de administración)
+    // 2. Acción: aprobar_comercio (Aprobación y migración física a c2861522_vixy_dl)
     if ($action === 'aprobar_comercio' || $action === 'aprobar') {
-        // Actualizar en c2861522_regist (fuente principal)
+        $regData = null;
         if ($pdoRegist) {
             try {
-                $stR = $pdoRegist->prepare("UPDATE comercios SET status = 'aprobado' WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR email = :id3 OR id = :id4");
-                $stR->execute(['id' => $id, 'id2' => $id, 'id3' => $id, 'id4' => $id]);
+                $stR = $pdoRegist->prepare("SELECT * FROM comercios WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3 LIMIT 1");
+                $stR->execute(['id' => $id, 'id2' => $id, 'id3' => $id]);
+                $regData = $stR->fetch();
+
+                // Actualizar status en c2861522_regist a 'aprobado'
+                $updR = $pdoRegist->prepare("UPDATE comercios SET status = 'aprobado' WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3");
+                $updR->execute(['id' => $id, 'id2' => $id, 'id3' => $id]);
             } catch (Exception $e) {
                 error_log('Error aprobando en regist: ' . $e->getMessage());
             }
         }
-        // Actualizar en c2861522_vixy_dl
+
+        // Consultar si ya existe en vixy_dl
+        $existingDl = null;
         try {
-            $st = $pdo->prepare("UPDATE comercios SET activo = 1, abierto_manual = 1 WHERE id = :id OR rif = :id2 OR email = :id3");
-            $st->execute(['id' => $id, 'id2' => $id, 'id3' => $id]);
+            $stCheck = $pdo->prepare("SELECT * FROM comercios WHERE id = :id OR rif = :id2 LIMIT 1");
+            $stCheck->execute(['id' => $id, 'id2' => $id]);
+            $existingDl = $stCheck->fetch();
         } catch (Exception $e) {}
 
-        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio aprobado y verificado exitosamente']);
+        // Migrar e insertar en c2861522_vixy_dl (Base de datos de comercios validados)
+        try {
+            // El nombre_comercial de regist va al nombre de vixy_dl
+            $nombre = '';
+            if ($existingDl && !empty($existingDl['nombre'])) {
+                $nombre = $existingDl['nombre'];
+            } elseif ($regData && !empty($regData['nombre_comercial'])) {
+                $nombre = $regData['nombre_comercial'];
+            } elseif (!empty($data['nombreComercial'])) {
+                $nombre = $data['nombreComercial'];
+            } elseif (!empty($data['nombre'])) {
+                $nombre = $data['nombre'];
+            } else {
+                $nombre = 'Comercio';
+            }
+
+            $rif = !empty($existingDl['rif']) ? $existingDl['rif'] : (!empty($regData['rif_cedula_juridica']) ? trim($regData['rif_cedula_juridica']) : (!empty($data['rif']) ? trim($data['rif']) : ('J-' . rand(10000000, 99999999) . '-0')));
+            $email = !empty($existingDl['email']) ? $existingDl['email'] : (!empty($regData['email']) ? $regData['email'] : ($data['email'] ?? ($id . '@vixy.com')));
+            $telefono = !empty($existingDl['telefono']) ? $existingDl['telefono'] : (!empty($regData['telefono_comercio']) ? $regData['telefono_comercio'] : ($data['telefono'] ?? '+58 000-0000000'));
+            $direccion = !empty($existingDl['direccion']) ? $existingDl['direccion'] : (!empty($regData['direccion_negocio']) ? $regData['direccion_negocio'] : ($data['direccion'] ?? 'Caracas, Venezuela'));
+            $foto = !empty($existingDl['logo_url']) ? $existingDl['logo_url'] : (!empty($regData['foto_comercio_url']) ? $regData['foto_comercio_url'] : ($data['logoUrl'] ?? ($data['logo_url'] ?? '/banners/banner_comercios.jpg')));
+            $pwdHash = !empty($existingDl['password_hash']) ? $existingDl['password_hash'] : ($regData['password_hash'] ?? password_hash('123456', PASSWORD_BCRYPT));
+            $storeId = !empty($existingDl['id']) ? $existingDl['id'] : (!empty($regData['codigo_comercio']) ? $regData['codigo_comercio'] : (string)$id);
+
+            // Parsear coordenadas GPS si existen
+            $lat = 10.48801100;
+            $lng = -66.85334100;
+            if (!empty($regData['ubicacion_gps'])) {
+                $coords = explode(',', $regData['ubicacion_gps']);
+                if (count($coords) >= 2) {
+                    $lat = floatval(trim($coords[0]));
+                    $lng = floatval(trim($coords[1]));
+                }
+            }
+
+            // Mapear categoría a los valores permitidos del enum
+            $cat = strtolower($regData['categoria_negocio'] ?? ($data['categoria'] ?? ($existingDl['categoria_principal'] ?? '')));
+            $catPrincipal = 'comida_rapida';
+            if (strpos($cat, 'restaurante') !== false) $catPrincipal = 'restaurantes';
+            else if (strpos($cat, 'super') !== false || strpos($cat, 'vivere') !== false || strpos($cat, 'bodega') !== false || strpos($cat, 'farmacia') !== false) $catPrincipal = 'supermercados';
+            else if (strpos($cat, 'ferreter') !== false || strpos($cat, 'repuesto') !== false) $catPrincipal = 'ferreteria';
+            else if (strpos($cat, 'hogar') !== false) $catPrincipal = 'hogar';
+
+            $stIns = $pdo->prepare("INSERT INTO comercios (
+                id, nombre, rif, categoria_principal, logo_url, portada_url,
+                direccion, latitud, longitud, telefono, email, password_hash,
+                hora_apertura, hora_cierre, activo, abierto_manual,
+                tiempo_estimado_min, tiempo_estimado_max, calificacion, total_calificaciones
+            ) VALUES (
+                :id, :nombre, :rif, :categoria_principal, :logo_url, :portada_url,
+                :direccion, :latitud, :longitud, :telefono, :email, :password_hash,
+                '08:00:00', '22:00:00', 1, 1,
+                20, 40, 5.00, 0
+            ) ON DUPLICATE KEY UPDATE
+                nombre = VALUES(nombre),
+                categoria_principal = VALUES(categoria_principal),
+                direccion = VALUES(direccion),
+                latitud = VALUES(latitud),
+                longitud = VALUES(longitud),
+                telefono = VALUES(telefono),
+                activo = 1,
+                abierto_manual = 1");
+            
+            $stIns->execute([
+                'id' => $storeId,
+                'nombre' => $nombre,
+                'rif' => $rif,
+                'categoria_principal' => $catPrincipal,
+                'logo_url' => $foto,
+                'portada_url' => $foto,
+                'direccion' => $direccion,
+                'latitud' => $lat,
+                'longitud' => $lng,
+                'telefono' => $telefono,
+                'email' => $email,
+                'password_hash' => $pwdHash
+            ]);
+        } catch (Exception $e) {
+            error_log('Error migrando comercio a c2861522_vixy_dl: ' . $e->getMessage());
+        }
+
+        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio validado y migrado a c2861522_vixy_dl exitosamente']);
     }
 
-    // 2.1 Acción: rechazar_comercio (Rechazo desde panel de administración)
+    // 2.1 Acción: rechazar_comercio (Rechazo de comercio no validado)
     if ($action === 'rechazar_comercio' || $action === 'rechazar') {
         if ($pdoRegist) {
             try {
@@ -258,11 +364,32 @@ if ($method === 'PUT' && $id) {
             } catch (Exception $e) {}
         }
         try {
-            $st = $pdo->prepare("UPDATE comercios SET activo = 0, abierto_manual = 0 WHERE id = :id OR rif = :id2");
+            $st = $pdo->prepare("DELETE FROM comercios WHERE id = :id OR rif = :id2");
             $st->execute(['id' => $id, 'id2' => $id]);
         } catch (Exception $e) {}
 
-        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio rechazado']);
+        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio rechazado y removido']);
+    }
+
+    // 2.2 Acción: eliminar_comercio (Eliminación de comercio validado en c2861522_vixy_dl)
+    if ($action === 'eliminar_comercio' || $action === 'eliminar' || $method === 'DELETE') {
+        try {
+            // Eliminar productos asociados primero
+            $stP = $pdo->prepare("DELETE FROM productos WHERE comercio_id = :id");
+            $stP->execute(['id' => $id]);
+
+            $st = $pdo->prepare("DELETE FROM comercios WHERE id = :id OR rif = :id2");
+            $st->execute(['id' => $id, 'id2' => $id]);
+        } catch (Exception $e) {}
+
+        if ($pdoRegist) {
+            try {
+                $stR = $pdoRegist->prepare("UPDATE comercios SET status = 'rechazado' WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3");
+                $stR->execute(['id' => $id, 'id2' => $id, 'id3' => $id]);
+            } catch (Exception $e) {}
+        }
+
+        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio eliminado exitosamente de c2861522_vixy_dl']);
     }
 
     // 3. Actualización de datos generales y horarios
