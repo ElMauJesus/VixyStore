@@ -1,142 +1,135 @@
 <?php
 /**
- * Listado de productos
- * Vixy Store Backend API
+ * Vixy Delivery Platform - API de Productos y Catálogos por Comercio
+ * Consultas SQL Individuales por Item y Almacenamiento de Imágenes
  */
 
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth_middleware.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
+$pdo = Database::getConnection();
+$method = $_SERVER['REQUEST_METHOD'];
+$id = $_GET['id'] ?? null;
+$comercioId = $_GET['comercio_id'] ?? null;
 
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(["success" => false, "message" => "Método no permitido"]);
-    exit;
-}
+// -----------------------------------------------------------------------------
+// GET: CONSULTAR PRODUCTOS POR COMERCIO O ITEM INDIVIDUAL
+// -----------------------------------------------------------------------------
+if ($method === 'GET') {
+    if ($id) {
+        $stmt = $pdo->prepare("SELECT p.*, c.nombre as comercio_nombre FROM productos_catalogo p JOIN comercios c ON p.comercio_id = c.id WHERE p.id = :id LIMIT 1");
+        $stmt->execute(['id' => $id]);
+        $producto = $stmt->fetch();
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/security.php';
-
-$pdo = getDbConnection();
-if (!$pdo) {
-    http_response_code(500);
-    echo json_encode(["success" => false, "message" => "Error de conexión"]);
-    exit;
-}
-
-// Parámetros opcionales
-$categoria = isset($_GET['categoria']) ? (int)$_GET['categoria'] : null;
-$busqueda = isset($_GET['busqueda']) ? sanitize_input($_GET['busqueda']) : '';
-$pagina = isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
-$orden = isset($_GET['orden']) ? sanitize_input($_GET['orden']) : 'recientes';
-
-// Validar página
-if ($pagina < 1) $pagina = 1;
-
-// Límite por página
-$porPagina = 12;
-$offset = ($pagina - 1) * $porPagina;
-
-// Construir query base
-$sql = "SELECT 
-            p.id, p.sku, p.name, p.slug, p.description,
-            p.price, p.stock_quantity,
-            c.name as categoria_nombre, c.slug as categoria_slug,
-            pi.image_url as imagen_principal
-        FROM products p
-        INNER JOIN categories c ON p.category_id = c.id
-        LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = 1
-        WHERE p.is_active = 1";
-
-$params = [];
-
-// Filtrar por categoría
-if ($categoria) {
-    $sql .= " AND p.category_id = :categoria";
-    $params['categoria'] = $categoria;
-}
-
-// Búsqueda
-if (!empty($busqueda)) {
-    $sql .= " AND (p.name LIKE :busqueda OR p.sku LIKE :busqueda OR p.description LIKE :busqueda)";
-    $params['busqueda'] = "%$busqueda%";
-}
-
-// Ordenar
-switch ($orden) {
-    case 'precio_asc':
-        $sql .= " ORDER BY p.price ASC";
-        break;
-    case 'precio_desc':
-        $sql .= " ORDER BY p.price DESC";
-        break;
-    case 'nombre':
-        $sql .= " ORDER BY p.name ASC";
-        break;
-    case 'stock':
-        $sql .= " ORDER BY p.stock_quantity DESC";
-        break;
-    default:
-        $sql .= " ORDER BY p.created_at DESC";
-}
-
-// Paginación
-$sql .= " LIMIT :limit OFFSET :offset";
-
-try {
-    $stmt = $pdo->prepare($sql);
-    
-    foreach ($params as $key => $value) {
-        $stmt->bindValue(":$key", $value);
+        if (!$producto) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'Producto no encontrado'], 404);
+        }
+        $producto['disponible'] = (bool)$producto['disponible'];
+        Database::jsonResponse(['success' => true, 'producto' => $producto]);
     }
-    
-    $stmt->bindValue(':limit', $porPagina, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    $stmt->execute();
-    
-    $productos = $stmt->fetchAll();
-    
-    // Contar total de productos para paginación
-    $countSql = "SELECT COUNT(*) as total FROM products p WHERE p.is_active = 1";
-    $countParams = [];
-    
-    if ($categoria) {
-        $countSql .= " AND p.category_id = :categoria";
-        $countParams['categoria'] = $categoria;
+
+    if ($comercioId) {
+        $stmt = $pdo->prepare("SELECT * FROM productos_catalogo WHERE comercio_id = :cid ORDER BY categoria ASC, nombre ASC");
+        $stmt->execute(['cid' => $comercioId]);
+        $productos = $stmt->fetchAll();
+        foreach ($productos as &$p) {
+            $p['disponible'] = (bool)$p['disponible'];
+        }
+        Database::jsonResponse(['success' => true, 'total' => count($productos), 'productos' => $productos]);
     }
-    
-    if (!empty($busqueda)) {
-        $countSql .= " AND (p.name LIKE :busqueda OR p.sku LIKE :busqueda)";
-        $countParams['busqueda'] = "%$busqueda%";
+
+    // Listar todos con búsqueda opcional
+    $query = $_GET['q'] ?? '';
+    if ($query) {
+        $stmt = $pdo->prepare("SELECT p.*, c.nombre as comercio_nombre FROM productos_catalogo p JOIN comercios c ON p.comercio_id = c.id WHERE p.nombre LIKE :q OR p.descripcion LIKE :q2 LIMIT 50");
+        $stmt->execute(['q' => "%$query%", 'q2' => "%$query%"]);
+        Database::jsonResponse(['success' => true, 'productos' => $stmt->fetchAll()]);
     }
-    
-    $stmtCount = $pdo->prepare($countSql);
-    foreach ($countParams as $key => $value) {
-        $stmtCount->bindValue(":$key", $value);
+
+    Database::jsonResponse(['error' => true, 'mensaje' => 'Debe especificar id o comercio_id'], 400);
+}
+
+// -----------------------------------------------------------------------------
+// POST: CREAR PRODUCTO CON IMAGEN
+// -----------------------------------------------------------------------------
+if ($method === 'POST') {
+    AuthMiddleware::requireAuth(['super_admin', 'operador', 'comercio']);
+    $data = Database::getJsonInput();
+
+    if (empty($data['comercio_id']) || empty($data['nombre']) || !isset($data['precio_usd'])) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Faltan campos obligatorios: comercio_id, nombre, precio_usd'], 400);
     }
-    $stmtCount->execute();
-    $total = (int)$stmtCount->fetch()['total'];
-    
-    echo json_encode([
-        "success" => true,
-        "message" => "Productos obtenidos",
-        "data" => $productos,
-        "paginacion" => [
-            "pagina_actual" => $pagina,
-            "por_pagina" => $porPagina,
-            "total_productos" => $total,
-            "total_paginas" => ceil($total / $porPagina)
-        ]
+
+    $newId = 'prod-' . uniqid();
+    $tasaBcv = 68.50; // Tasa referencial o parámetro
+    $precioUsd = (float)$data['precio_usd'];
+    $precioBs = $precioUsd * $tasaBcv;
+
+    $stmt = $pdo->prepare("
+        INSERT INTO productos_catalogo (
+            id, comercio_id, nombre, descripcion, precio_usd, precio_bs, 
+            categoria, imagen_url, disponible
+        ) VALUES (
+            :id, :cid, :nombre, :desc, :pusd, :pbs, 
+            :cat, :img, :disp
+        )
+    ");
+
+    $stmt->execute([
+        'id' => $newId,
+        'cid' => $data['comercio_id'],
+        'nombre' => $data['nombre'],
+        'desc' => $data['descripcion'] ?? '',
+        'pusd' => $precioUsd,
+        'pbs' => $precioBs,
+        'cat' => $data['categoria'] ?? 'General',
+        'img' => $data['imagen_url'] ?? '/uploads/productos/default.jpg',
+        'disp' => isset($data['disponible']) ? (int)$data['disponible'] : 1
     ]);
-    
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(["success" => false, "message" => "Error al obtener productos"]);
+
+    Database::jsonResponse(['success' => true, 'mensaje' => 'Producto agregado con éxito', 'id' => $newId], 201);
 }
-?>
+
+// -----------------------------------------------------------------------------
+// PUT: ACTUALIZAR PRODUCTO (PRECIO, IMAGEN, DISPONIBILIDAD)
+// -----------------------------------------------------------------------------
+if ($method === 'PUT' && $id) {
+    AuthMiddleware::requireAuth(['super_admin', 'operador', 'comercio']);
+    $data = Database::getJsonInput();
+
+    $fields = [];
+    $params = ['id' => $id];
+
+    if (isset($data['nombre'])) { $fields[] = "nombre = :nombre"; $params['nombre'] = $data['nombre']; }
+    if (isset($data['descripcion'])) { $fields[] = "descripcion = :desc"; $params['desc'] = $data['descripcion']; }
+    if (isset($data['precio_usd'])) { 
+        $fields[] = "precio_usd = :pusd, precio_bs = :pbs"; 
+        $params['pusd'] = (float)$data['precio_usd'];
+        $params['pbs'] = (float)$data['precio_usd'] * 68.50;
+    }
+    if (isset($data['categoria'])) { $fields[] = "categoria = :cat"; $params['cat'] = $data['categoria']; }
+    if (isset($data['imagen_url'])) { $fields[] = "imagen_url = :img"; $params['img'] = $data['imagen_url']; }
+    if (isset($data['disponible'])) { $fields[] = "disponible = :disp"; $params['disp'] = (int)$data['disponible']; }
+
+    if (empty($fields)) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Sin campos a modificar'], 400);
+    }
+
+    $sql = "UPDATE productos_catalogo SET " . implode(', ', $fields) . " WHERE id = :id";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    Database::jsonResponse(['success' => true, 'mensaje' => 'Producto actualizado']);
+}
+
+// -----------------------------------------------------------------------------
+// DELETE: ELIMINAR PRODUCTO
+// -----------------------------------------------------------------------------
+if ($method === 'DELETE' && $id) {
+    AuthMiddleware::requireAuth(['super_admin', 'operador', 'comercio']);
+    $stmt = $pdo->prepare("DELETE FROM productos_catalogo WHERE id = :id");
+    $stmt->execute(['id' => $id]);
+    Database::jsonResponse(['success' => true, 'mensaje' => 'Producto eliminado']);
+}
+
+Database::jsonResponse(['error' => true, 'mensaje' => 'Método no soportado'], 405);

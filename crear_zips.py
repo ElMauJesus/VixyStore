@@ -39,6 +39,7 @@ if __name__ == "__main__":
         "vixy_delivery.zip",
         "vixy_delivery_api.zip",
         "vixy_comercio.zip",
+        "vixy_completo.zip",
     ]
     for z in zips_a_eliminar:
         if os.path.exists(z):

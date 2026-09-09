@@ -18,6 +18,8 @@ $dirs = @(
     "out/registro-comercios",
     "out/registro-comercios/api",
     "out/registro-delivery",
+    "out/panel",
+    "out/panel-admin",
     "out/api",
     "out/banners",
     "out/logo",
@@ -122,6 +124,15 @@ Copy-Item -Path "database/migracion_claves_y_conductores.sql" -Destination "out/
 
 if (Test-Path "out/shop/assets/aistudio") {
     Remove-Item -Path "out/shop/assets/aistudio" -Recurse -Force
+}
+
+# 7b. Copiar Panel Web Administrativo a out/panel y out/panel-admin
+if (Test-Path "panel-admin") {
+    if (-not (Test-Path "out/panel-admin")) { New-Item -ItemType Directory -Path "out/panel-admin" -Force | Out-Null }
+    if (-not (Test-Path "out/panel")) { New-Item -ItemType Directory -Path "out/panel" -Force | Out-Null }
+    Copy-Item -Path "panel-admin/*" -Destination "out/panel-admin" -Recurse -Force
+    Copy-Item -Path "panel-admin/*" -Destination "out/panel" -Recurse -Force
+    Write-Host "[OK] Panel Web Administrativo instalado en out/panel y out/panel-admin"
 }
 
 # 8. Copiar backend de Registro de Comercios a out/registro-comercios/api

@@ -11,6 +11,26 @@ require_once __DIR__ . '/config/auth_middleware.php';
 $pdo = Database::getConnection();
 $action = $_GET['action'] ?? 'login';
 
+// Health check / Ping de conexión para APK y pruebas del servidor
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($action === 'login' || $action === 'ping' || $action === 'check' || $action === 'status')) {
+    Database::jsonResponse([
+        'ok' => true,
+        'success' => true,
+        'status' => 'online',
+        'servicio' => 'Vixy Auth API',
+        'mensaje' => 'Servicio de autenticación Vixy activo y conectado'
+    ]);
+}
+
+if ($action === 'ping' || $action === 'check') {
+    Database::jsonResponse([
+        'ok' => true,
+        'success' => true,
+        'status' => 'online',
+        'servicio' => 'Vixy Auth API'
+    ]);
+}
+
 // -----------------------------------------------------------------------------
 // ACCIÓN: LOGIN (ADMIN, CLIENTE, COMERCIO, CONDUCTOR)
 // -----------------------------------------------------------------------------

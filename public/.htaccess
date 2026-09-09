@@ -44,6 +44,18 @@ Options -Indexes
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^shop/(.*)$ /shop/index.html [L]
 
+    # Rutas dinamicas de Panel Web (/panel/...)
+    RewriteCond %{REQUEST_URI} ^/panel/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^panel/(.*)$ /panel/index.html [L]
+
+    # Rutas dinamicas de Panel Admin (/panel-admin/...)
+    RewriteCond %{REQUEST_URI} ^/panel-admin/ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^panel-admin/(.*)$ /panel-admin/index.html [L]
+
     # Rutas dinamicas de Store (/store/...)
     RewriteCond %{REQUEST_URI} ^/store/ [NC]
     RewriteCond %{REQUEST_FILENAME} !-f
