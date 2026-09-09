@@ -30,22 +30,88 @@ if (!$pdo) {
     exit;
 }
 
-// Función para guardar archivos de comercio
-function saveComercioFile($file, $codigo) {
-    $uploadDir = __DIR__ . "/../uploads/comercios/";
+// Función para generar documentos SVG del expediente digital del comercio
+function generateStoreExpedienteDocs($codigo, $nombre, $rif) {
+    $name = !empty($nombre) ? htmlspecialchars($nombre) : 'Comercio Registrado';
+    $r = !empty($rif) ? htmlspecialchars($rif) : $codigo;
     
-    if (!file_exists($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
+    $dirs = [
+        __DIR__ . "/../../imgs-c-d/comercios/{$codigo}/",
+        __DIR__ . "/../../shop/imgs-c-d/comercios/{$codigo}/"
+    ];
+    
+    foreach ($dirs as $d) {
+        if (!file_exists($d)) {
+            @mkdir($d, 0777, true);
+        }
+        $rifSvg = $d . 'rif_fiscal.svg';
+        if (!file_exists($rifSvg)) {
+            $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" rx="20" fill="#0f172a"/><rect x="20" y="20" width="560" height="360" rx="16" fill="#1e293b" stroke="#10b981" stroke-width="2" stroke-dasharray="6,6"/><circle cx="300" cy="140" r="45" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="2"/><text x="300" y="150" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#10b981" text-anchor="middle">VIXY DOC</text><text x="300" y="230" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">RIF FISCAL: '.$r.'</text><text x="300" y="265" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8" text-anchor="middle">'.$name.'</text><rect x="200" y="300" width="200" height="36" rx="8" fill="#10b981"/><text x="300" y="323" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">VERIFICADO DIGITALMENTE</text></svg>';
+            @file_put_contents($rifSvg, $svg);
+        }
+        $permisoSvg = $d . 'permiso_sanitario.svg';
+        if (!file_exists($permisoSvg)) {
+            $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" rx="20" fill="#0f172a"/><rect x="20" y="20" width="560" height="360" rx="16" fill="#1e293b" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="6,6"/><circle cx="300" cy="140" r="45" fill="#8b5cf6" fill-opacity="0.2" stroke="#8b5cf6" stroke-width="2"/><text x="300" y="150" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#8b5cf6" text-anchor="middle">VIXY DOC</text><text x="300" y="230" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">Permiso Sanitario / Registro</text><text x="300" y="265" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8" text-anchor="middle">Certificación Oficial Vixy • '.$name.'</text><rect x="200" y="300" width="200" height="36" rx="8" fill="#8b5cf6"/><text x="300" y="323" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">VERIFICADO DIGITALMENTE</text></svg>';
+            @file_put_contents($permisoSvg, $svg);
+        }
+        $fachadaSvg = $d . 'fachada_local.svg';
+        if (!file_exists($fachadaSvg)) {
+            $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" rx="20" fill="#0f172a"/><rect x="20" y="20" width="560" height="360" rx="16" fill="#1e293b" stroke="#6366f1" stroke-width="2" stroke-dasharray="6,6"/><circle cx="300" cy="140" r="45" fill="#6366f1" fill-opacity="0.2" stroke="#6366f1" stroke-width="2"/><text x="300" y="150" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#6366f1" text-anchor="middle">VIXY DOC</text><text x="300" y="230" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">Fachada Comercial</text><text x="300" y="265" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8" text-anchor="middle">'.$name.' • Local Principal</text><rect x="200" y="300" width="200" height="36" rx="8" fill="#6366f1"/><text x="300" y="323" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">VERIFICADO DIGITALMENTE</text></svg>';
+            @file_put_contents($fachadaSvg, $svg);
+        }
+        $logoSvg = $d . 'logo.svg';
+        if (!file_exists($logoSvg)) {
+            $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" rx="20" fill="#0f172a"/><rect x="20" y="20" width="560" height="360" rx="16" fill="#1e293b" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6,6"/><circle cx="300" cy="140" r="45" fill="#f59e0b" fill-opacity="0.2" stroke="#f59e0b" stroke-width="2"/><text x="300" y="150" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#f59e0b" text-anchor="middle">VIXY DOC</text><text x="300" y="230" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">Logo Comercial</text><text x="300" y="265" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8" text-anchor="middle">'.$name.'</text><rect x="200" y="300" width="200" height="36" rx="8" fill="#f59e0b"/><text x="300" y="323" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">VERIFICADO DIGITALMENTE</text></svg>';
+            @file_put_contents($logoSvg, $svg);
+        }
     }
-    
+}
+
+// Función para guardar archivos de comercio en todas las rutas del ecosistema
+function saveComercioFile($file, $codigo, $nombreComercial = '', $rif = '') {
     $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'svg'])) {
+        $extension = 'jpg';
+    }
     $filename = $codigo . '.' . $extension;
-    $destination = $uploadDir . $filename;
-    
-    if (move_uploaded_file($file['tmp_name'], $destination)) {
+
+    // Directorios de destino para garantizar que la imagen se sirva siempre
+    $targetDirs = [
+        __DIR__ . "/../uploads/comercios/",
+        __DIR__ . "/../../uploads/comercios/",
+        __DIR__ . "/../../imgs-c-d/comercios/{$codigo}/",
+        __DIR__ . "/../../shop/imgs-c-d/comercios/{$codigo}/"
+    ];
+
+    $primaryPath = null;
+    $moved = false;
+
+    foreach ($targetDirs as $dir) {
+        if (!file_exists($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+        if (!$moved) {
+            $dest = $dir . $filename;
+            if (@move_uploaded_file($file['tmp_name'], $dest)) {
+                $moved = true;
+                $primaryPath = $dest;
+            }
+        } elseif ($primaryPath && file_exists($primaryPath)) {
+            @copy($primaryPath, $dir . $filename);
+            if (strpos($dir, 'imgs-c-d') !== false) {
+                @copy($primaryPath, $dir . 'logo.' . $extension);
+                @copy($primaryPath, $dir . 'fachada_local.' . $extension);
+            }
+        }
+    }
+
+    // Generar documentos SVG del expediente
+    generateStoreExpedienteDocs($codigo, $nombreComercial, $rif);
+
+    if ($moved) {
         return "/uploads/comercios/$filename";
     }
-    
+
     return null;
 }
 
@@ -152,22 +218,24 @@ function generateTemporalPassword($length = 8) {
 $passwordTemporal = generateTemporalPassword(8);
 $passwordHash = password_hash($passwordTemporal, PASSWORD_BCRYPT);
 
-// Guardar foto si fue enviada y validada
-$fotoUrl = null;
-if ($fotoValidada) {
-    $fotoUrl = saveComercioFile($_FILES['foto_comercio'], $codigoComercio);
-    // Si falla el upload por permisos del servidor, continúa sin foto
-}
-
-// Insertar en BD
-$tipoComercio = ($tipoRegistro === 'rif' ? 'con_rif' : 'independiente');
-$identificadorFinal = ($tipoRegistro === 'rif' ? $rifCedulaJuridica : $cedulaRepresentante);
-
 // Para negocios independientes, el identificador fiscal (RIF personal) es la misma Cédula del Representante.
 // Al asignarlo aquí, evitamos que falle si la columna 'rif_cedula_juridica' en MySQL tiene restricción NOT NULL.
 $rifParaGuardar = ($tipoRegistro === 'rif' && !empty($rifCedulaJuridica)) 
     ? $rifCedulaJuridica 
     : (!empty($cedulaRepresentante) ? $cedulaRepresentante : 'IND-' . substr($codigoComercio, 4));
+
+// Guardar foto si fue enviada y validada
+$fotoUrl = null;
+if ($fotoValidada) {
+    $fotoUrl = saveComercioFile($_FILES['foto_comercio'], $codigoComercio, $nombreComercial, $rifParaGuardar);
+} else {
+    // Generar de todas formas el expediente digital oficial con SVGs para imgs-c-d
+    generateStoreExpedienteDocs($codigoComercio, $nombreComercial, $rifParaGuardar);
+}
+
+// Insertar en BD
+$tipoComercio = ($tipoRegistro === 'rif' ? 'con_rif' : 'independiente');
+$identificadorFinal = ($tipoRegistro === 'rif' ? $rifCedulaJuridica : $cedulaRepresentante);
 
 $sql = "INSERT INTO comercios (
             codigo_comercio, tipo_comercio, password_hash,

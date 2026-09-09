@@ -234,7 +234,8 @@ export type CategoriaPrincipalComercio = 'hogar' | 'ferreteria' | 'restaurantes'
 export interface Comercio {
   id: string;
   codigoComercio?: string;
-  status?: string;
+  /** 'pendiente' | 'aprobado' | 'rechazado' | 'bloqueado' — base de datos de origen */
+  status?: 'pendiente' | 'aprobado' | 'rechazado' | 'bloqueado' | string;
   nombre: string;
   nombreComercial?: string;
   categoria: string;
@@ -273,8 +274,11 @@ export interface Comercio {
   lng?: number;
   metodosPago?: MetodosPagoDirecto;
   metodosPagoAceptados?: any;
-  productos?: Producto[];
+  productos: Producto[]; // Siempre array (puede estar vacío), nunca undefined
   billetera?: ComercioBilletera;
+  /** true = ya validado y migrado a c2861522_vixy_dl; false/undefined = pendiente en c2861522_regist */
+  validado?: boolean;
+  origen_bd?: 'delivery' | 'regist';
 }
 
 export interface Cliente {

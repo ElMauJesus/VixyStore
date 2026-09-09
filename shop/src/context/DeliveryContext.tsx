@@ -74,6 +74,7 @@ interface DeliveryContextType {
   toggleStoreActive: (storeId: string) => void;
   approveStore: (storeId: string) => Promise<void>;
   rejectStore: (storeId: string) => Promise<void>;
+  deleteStore: (storeId: string) => Promise<void>;
   refreshBackendData: () => Promise<void>;
   resetDemo: () => void;
   rateStore: (storeId: string, calificacion: number, comentario: string, clienteNombre: string) => void;
@@ -287,35 +288,40 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // 2. Comercios reales desde MySQL
       const storesRes = await api.getComercios().catch(() => null);
       if (storesRes?.success && Array.isArray(storesRes.comercios)) {
-        const loadedStores: Comercio[] = storesRes.comercios.map((c: any) => ({
-          id: String(c.id || c.codigo_comercio || ''),
-          codigoComercio: c.codigo_comercio || c.id || '',
-          nombre: c.nombre || c.nombre_comercial || 'Comercio',
-          nombreComercial: c.nombre_comercial || c.nombre || 'Comercio',
-          rif: c.rif || c.rif_cedula_juridica || '',
-          categoria: c.categoria || 'Comercio General',
-          categoriaPrincipal: c.categoria_principal || 'comida_rapida',
+        const loadedStores: Comercio[] = storesRes.comercios.map((c: any) => {
+          const storeName = c.nombre || c.nombre_comercial || c.nombreComercial || 'Comercio';
+
+          return {
+            id: String(c.id || c.codigo_comercio || c.codigoComercio || ''),
+            codigoComercio: c.codigo_comercio || c.codigoComercio || c.id || '',
+            nombre: storeName,
+            nombreComercial: storeName,
+            rif: c.rif || c.rif_cedula_juridica || '',
+            categoria: c.categoria || 'Comercio General',
+            categoriaPrincipal: c.categoria_principal || c.categoriaPrincipal || 'comida_rapida',
           rubroPersonalizado: c.rubro_personalizado || '',
           direccion: c.direccion || '',
           telefono: c.telefono || '',
           email: c.email || '',
-          logoUrl: c.logo_url || '/banners/banner_comercios.jpg',
-          bannerUrl: c.banner_url || '/banners/banner_comercios.jpg',
+          logoUrl: c.logo_url || c.logoUrl || '/banners/banner_comercios.jpg',
+          bannerUrl: c.banner_url || c.bannerUrl || '/banners/banner_comercios.jpg',
           calificacion: Number(c.calificacion || 5.0),
           totalCalificaciones: Number(c.total_calificaciones || 0),
           tiempoEstimadoMin: Number(c.tiempo_estimado_min || 20),
           tiempoEstimadoMax: Number(c.tiempo_estimado_max || 45),
-          costoEnvioUsd: Number(c.costo_envio_base_usd || 2.00),
-          horarioApertura: c.horarios || '08:00 AM - 10:00 PM',
-          horaApertura: c.hora_apertura || '08:00:00',
-          horaCierre: c.hora_cierre || '22:00:00',
-          diasOperacion: Array.isArray(c.dias_operacion) ? c.dias_operacion : ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'],
+          costoEnvioUsd: Number(c.costo_envio_base_usd || c.costoEnvioUsd || 2.00),
+          horarioApertura: c.horarios || c.horarioApertura || '08:00 AM - 10:00 PM',
+          horaApertura: c.hora_apertura || c.horaApertura || '08:00:00',
+          horaCierre: c.hora_cierre || c.horaCierre || '22:00:00',
+          diasOperacion: Array.isArray(c.dias_operacion) ? c.dias_operacion : (Array.isArray(c.diasOperacion) ? c.diasOperacion : ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']),
           activo: c.activo !== false,
           abierto: c.activo !== false && c.abierto_manual !== false,
           abiertoManual: c.abierto_manual !== false,
-          status: c.status || 'aprobado',
-          lat: Number(c.lat || 10.4910),
-          lng: Number(c.lng || -66.8530),
+          status: c.status || (c.origen_bd === 'delivery' ? 'aprobado' : 'pendiente'),
+          validado: c.validado === true || c.status === 'aprobado' || c.origen_bd === 'delivery',
+          origen_bd: c.origen_bd || 'delivery',
+          lat: Number(c.lat || c.latitud || 10.4910),
+          lng: Number(c.lng || c.longitud || -66.8530),
           productos: Array.isArray(c.productos) ? c.productos : [],
           categoriasCatalogo: Array.isArray(c.categorias_catalogo) ? c.categorias_catalogo : [],
           metodosPagoAceptados: c.metodos_pago || {
@@ -327,7 +333,8 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             zinli: { activo: false }
           },
           billetera: c.billetera || DEMO_COMERCIO_BILLETERA
-        }));
+        };
+      });
 
         setStores(loadedStores);
 
@@ -1184,12 +1191,22 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const approveStore = async (storeId: string) => {
     try {
-      await api.updateComercio(storeId, {}, 'aprobar_comercio');
-      setStores(prev => prev.map(s => s.id === storeId ? { ...s, status: 'aprobado', activo: true, abierto: true } : s));
-      if (store.id === storeId) {
-        setStore(prev => ({ ...prev, status: 'aprobado', activo: true, abierto: true }));
+      const currentStore = stores.find(s => s.id === storeId || s.rif === storeId || s.codigoComercio === storeId);
+      await api.updateComercio(storeId, currentStore ? {
+        nombre: currentStore.nombre,
+        nombreComercial: currentStore.nombreComercial || currentStore.nombre,
+        rif: currentStore.rif,
+        direccion: currentStore.direccion,
+        telefono: currentStore.telefono,
+        email: currentStore.email,
+        categoria: currentStore.categoria,
+        logoUrl: currentStore.logoUrl
+      } : {}, 'aprobar_comercio');
+      setStores(prev => prev.map(s => (s.id === storeId || s.rif === storeId || s.codigoComercio === storeId) ? { ...s, validado: true, status: 'aprobado', activo: true, abierto: true, origen_bd: 'delivery' } : s));
+      if (store.id === storeId || store.rif === storeId) {
+        setStore(prev => ({ ...prev, validado: true, status: 'aprobado', activo: true, abierto: true, origen_bd: 'delivery' }));
       }
-      addNotification('web', '✅ Comercio Aprobado', 'Comercio aprobado y activo en la plataforma.');
+      addNotification('web', '✅ Comercio Aprobado', `El comercio "${currentStore?.nombre || storeId}" fue validado y activado correctamente.`);
     } catch (e) {
       console.warn('Error aprobando comercio:', e);
     }
@@ -1198,13 +1215,23 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const rejectStore = async (storeId: string) => {
     try {
       await api.rejectComercio(storeId);
-      setStores(prev => prev.map(s => s.id === storeId ? { ...s, status: 'rechazado', activo: false, abierto: false } : s));
-      if (store.id === storeId) {
+      setStores(prev => prev.filter(s => s.id !== storeId && s.rif !== storeId && s.codigoComercio !== storeId));
+      if (store.id === storeId || store.rif === storeId) {
         setStore(prev => ({ ...prev, status: 'rechazado', activo: false, abierto: false }));
       }
-      addNotification('web', '❌ Comercio Rechazado', 'La afiliación del comercio ha sido rechazada.');
+      addNotification('web', '❌ Solicitud Rechazada', 'El comercio ha sido rechazado y removido de la lista.');
     } catch (e) {
       console.warn('Error rechazando comercio:', e);
+    }
+  };
+
+  const deleteStore = async (storeId: string) => {
+    try {
+      await api.deleteComercio(storeId);
+      setStores(prev => prev.filter(s => s.id !== storeId && s.rif !== storeId && s.codigoComercio !== storeId));
+      addNotification('web', '🗑️ Comercio Eliminado', 'El comercio ha sido eliminado de la base de datos.');
+    } catch (e) {
+      console.warn('Error eliminando comercio:', e);
     }
   };
 
@@ -3024,6 +3051,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       toggleStoreActive,
       approveStore,
       rejectStore,
+      deleteStore,
       refreshBackendData,
       resetDemo: refreshBackendData,
       rateStore,
