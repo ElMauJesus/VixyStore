@@ -22,7 +22,7 @@ export default function RegistroDeliveryLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#0d091e] text-slate-100 selection:bg-purple-500 selection:text-white">
+    <div className="min-h-screen bg-[#FAF9FF] text-slate-900 selection:bg-purple-500 selection:text-white">
       {children}
     </div>
   );
