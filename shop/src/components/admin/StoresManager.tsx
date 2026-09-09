@@ -282,8 +282,22 @@ export const StoresManager: React.FC = () => {
                 <div className="flex items-start sm:items-center gap-3 min-w-0 xl:w-5/12">
                   <div className="relative shrink-0">
                     <img
-                      src={item.logoUrl}
+                      src={item.logoUrl || '/banners/banner_comercios.jpg'}
                       alt={item.nombre}
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.dataset.triedFallback && target.src.includes('/uploads/comercios/')) {
+                          target.dataset.triedFallback = '1';
+                          target.src = target.src.replace('/uploads/comercios/', '/registro-comercios/uploads/comercios/');
+                          return;
+                        }
+                        if (!target.dataset.triedImgs) {
+                          target.dataset.triedImgs = '1';
+                          target.src = `/imgs-c-d/comercios/${item.id}/logo.svg`;
+                          return;
+                        }
+                        target.src = '/banners/banner_comercios.jpg';
+                      }}
                       className="w-13 h-13 rounded-2xl object-cover border border-neutral-200 dark:border-neutral-700 shadow-2xs"
                     />
                     <span 
@@ -594,8 +608,22 @@ export const StoresManager: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
               <div className="flex items-center gap-3">
                 <img
-                  src={inspectingStoreDocs.logoUrl}
+                  src={inspectingStoreDocs.logoUrl || '/banners/banner_comercios.jpg'}
                   alt={inspectingStoreDocs.nombre}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.dataset.triedFallback && target.src.includes('/uploads/comercios/')) {
+                      target.dataset.triedFallback = '1';
+                      target.src = target.src.replace('/uploads/comercios/', '/registro-comercios/uploads/comercios/');
+                      return;
+                    }
+                    if (!target.dataset.triedImgs) {
+                      target.dataset.triedImgs = '1';
+                      target.src = `/imgs-c-d/comercios/${inspectingStoreDocs.id}/logo.svg`;
+                      return;
+                    }
+                    target.src = '/banners/banner_comercios.jpg';
+                  }}
                   className="w-10 h-10 rounded-xl object-cover border border-amber-500"
                 />
                 <div>
@@ -686,7 +714,7 @@ export const StoresManager: React.FC = () => {
                           className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform"
                           onError={(e: any) => {
                             e.target.onerror = null;
-                            e.target.src = inspectingStoreDocs.logoUrl;
+                            e.target.src = inspectingStoreDocs.logoUrl || '/banners/banner_comercios.jpg';
                           }}
                         />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-xs text-white font-bold">

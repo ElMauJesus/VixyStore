@@ -34,6 +34,28 @@ Options -Indexes
     RewriteCond %{REQUEST_URI} ^/panel-admin/(.*)$ [NC]
     RewriteRule ^panel-admin/(.*)$ panel/$1 [L]
 
+    # Reescritura para uploads de comercios y archivos cargados desde formularios
+    # 1. Si se solicita /uploads/comercios/ y existe en registro-comercios/uploads/comercios/
+    RewriteCond %{REQUEST_URI} ^/uploads/comercios/(.*)$ [NC]
+    RewriteCond %{DOCUMENT_ROOT}/registro-comercios/uploads/comercios/$1 -f
+    RewriteRule ^uploads/comercios/(.*)$ registro-comercios/uploads/comercios/$1 [L]
+
+    # 2. Si se solicita /uploads/comercios/ y existe en imgs-c-d/
+    RewriteCond %{REQUEST_URI} ^/uploads/comercios/(.*)$ [NC]
+    RewriteCond %{DOCUMENT_ROOT}/imgs-c-d/comercios/$1 -f
+    RewriteRule ^uploads/comercios/(.*)$ imgs-c-d/comercios/$1 [L]
+
+    # 3. Si se solicita /imgs-c-d/ y no existe en raiz, servir de /shop/imgs-c-d/
+    RewriteCond %{REQUEST_URI} ^/imgs-c-d/(.*)$ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{DOCUMENT_ROOT}/shop/imgs-c-d/$1 -f
+    RewriteRule ^imgs-c-d/(.*)$ shop/imgs-c-d/$1 [L]
+
+    # 4. Respaldo a prueba de 404: Si cualquier imagen solicitada en /uploads/comercios/ no existe, servir banner por defecto (evita icono roto)
+    RewriteCond %{REQUEST_URI} ^/uploads/comercios/(.*)$ [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^uploads/comercios/(.*)$ banners/banner_comercios.jpg [L]
+
     # Si el archivo fisico existe, servirlo directamente
     RewriteCond %{REQUEST_FILENAME} -f
     RewriteRule ^ - [L]

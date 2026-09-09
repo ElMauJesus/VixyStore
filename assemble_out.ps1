@@ -112,8 +112,18 @@ if (Test-Path "out/shop/assets") {
 }
 Copy-Item -Path "shop/dist/*" -Destination "out/shop" -Recurse -Force
 Copy-Item -Path "shop/backend/*" -Destination "out/shop/backend" -Recurse -Force
-Copy-Item -Path "shop/imgs-c-d" -Destination "out/shop/imgs-c-d" -Recurse -Force
-Copy-Item -Path "shop/imgs-c-d" -Destination "out/imgs-c-d" -Recurse -Force
+if (Test-Path "out/shop/imgs-c-d") { Remove-Item -Path "out/shop/imgs-c-d" -Recurse -Force }
+New-Item -ItemType Directory -Path "out/shop/imgs-c-d" -Force | Out-Null
+Copy-Item -Path "shop/imgs-c-d/*" -Destination "out/shop/imgs-c-d" -Recurse -Force
+
+if (Test-Path "out/imgs-c-d") { Remove-Item -Path "out/imgs-c-d" -Recurse -Force }
+New-Item -ItemType Directory -Path "out/imgs-c-d" -Force | Out-Null
+Copy-Item -Path "shop/imgs-c-d/*" -Destination "out/imgs-c-d" -Recurse -Force
+
+if (-not (Test-Path "out/uploads/comercios")) {
+    New-Item -ItemType Directory -Path "out/uploads/comercios" -Force | Out-Null
+}
+
 Copy-Item -Path "database/actualizar_verificacion_cuentas.sql" -Destination "out/shop" -Force
 Copy-Item -Path "database/migracion_claves_y_conductores.sql" -Destination "out/shop" -Force
 
