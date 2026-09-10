@@ -56,8 +56,24 @@ export const RechargesManager: React.FC = () => {
   const [vaultSearch, setVaultSearch] = useState('');
 
   // 30-day validity calculator helper
-  const checkReceiptValidity = (fechaStr: string) => {
-    const receiptDate = new Date(fechaStr.replace(' ', 'T'));
+  const checkReceiptValidity = (fechaStr?: string | null) => {
+    if (!fechaStr) {
+      return {
+        diffDays: 0,
+        remainingDays: 0,
+        isVigente: false,
+        label: 'Sin comprobante'
+      };
+    }
+    const receiptDate = new Date(String(fechaStr).replace(' ', 'T'));
+    if (isNaN(receiptDate.getTime())) {
+      return {
+        diffDays: 0,
+        remainingDays: 0,
+        isVigente: false,
+        label: 'Fecha inválida'
+      };
+    }
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - receiptDate.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -80,9 +96,9 @@ export const RechargesManager: React.FC = () => {
       if (filterStatus !== 'all' && req.estado !== filterStatus) return false;
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
-        const matchName = req.usuarioNombre.toLowerCase().includes(q);
-        const matchRef = req.referencia.toLowerCase().includes(q);
-        const matchId = req.id.toLowerCase().includes(q);
+        const matchName = String(req.usuarioNombre || '').toLowerCase().includes(q);
+        const matchRef = String(req.referencia || '').toLowerCase().includes(q);
+        const matchId = String(req.id || '').toLowerCase().includes(q);
         if (!matchName && !matchRef && !matchId) return false;
       }
       return true;
@@ -110,13 +126,14 @@ export const RechargesManager: React.FC = () => {
 
   // Find the exact driver associated with a recharge request
   const openDriverProfileForRequest = (req: SolicitudRecarga) => {
+    const reqName = String(req.usuarioNombre || '').toLowerCase();
     const foundDriver = allDrivers.find(d => 
       d.id === req.usuarioId || 
-      `${d.nombre} ${d.apellido}`.toLowerCase() === req.usuarioNombre.toLowerCase() ||
-      d.nombre.toLowerCase().includes(req.usuarioNombre.toLowerCase())
+      `${d.nombre} ${d.apellido}`.toLowerCase() === reqName ||
+      d.nombre.toLowerCase().includes(reqName)
     ) || allDrivers[0];
 
-    setInspectingDriver(foundDriver);
+    setInspectingDriver(foundDriver || null);
   };
 
   return (

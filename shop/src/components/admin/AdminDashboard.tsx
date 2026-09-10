@@ -23,7 +23,7 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab }) => {
-  const { orders, driver, store, client, incidents, tasaBcv } = useDelivery();
+  const { orders, driver, store, client, incidents, tasaBcv, allDrivers } = useDelivery();
 
   const totalPedidos = orders.length;
   const pedidosActivos = orders.filter(o => o.estado !== 'entregado' && o.estado !== 'cancelado').length;
@@ -32,6 +32,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
   const totalFacturadoBs = totalFacturadoUsd * tasaBcv;
 
   const activeOrder = orders.find(o => o.estado === 'en_camino_al_cliente') || orders[0];
+  const fleet = allDrivers.filter((c: any) => c.status !== 'rechazado' && c.status !== 'suspendido' && c.status !== 'inactivo');
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-auto">
@@ -391,44 +392,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
               </tr>
             </thead>
             <tbody className="text-xs">
-              <tr className="border-b border-slate-50 dark:border-slate-800/60">
-                <td className="py-2.5 font-bold text-slate-800 dark:text-white flex items-center gap-2 truncate">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="truncate">{driver.nombre} {driver.apellido}</span>
-                </td>
-                <td className="py-2.5 text-slate-600 dark:text-slate-400 font-mono text-xs">
-                  {driver.moto?.marca || 'Bera'} ({driver.moto?.ano || (driver.moto as any)?.anio || '2024'}) • [{driver.moto?.placa || 'S/P'}]
-                </td>
-                <td className="py-2.5 text-right text-emerald-600 dark:text-emerald-400 font-bold font-mono text-[11px] whitespace-nowrap">
-                  CERT-MED ✓
-                </td>
-              </tr>
-
-              <tr className="border-b border-slate-50 dark:border-slate-800/60">
-                <td className="py-2.5 font-bold text-slate-800 dark:text-white flex items-center gap-2 truncate">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="truncate">Luis García</span>
-                </td>
-                <td className="py-2.5 text-slate-600 dark:text-slate-400 font-mono text-xs">
-                  Yamaha DT (2021) • [AG-5511]
-                </td>
-                <td className="py-2.5 text-right text-emerald-600 dark:text-emerald-400 font-bold font-mono text-[11px] whitespace-nowrap">
-                  CERT-MED ✓
-                </td>
-              </tr>
-
-              <tr className="border-b border-slate-50 dark:border-slate-800/60">
-                <td className="py-2.5 font-bold text-slate-800 dark:text-white flex items-center gap-2 truncate">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                  <span className="truncate">Pedro Ruiz</span>
-                </td>
-                <td className="py-2.5 text-slate-600 dark:text-slate-400 font-mono text-xs">
-                  Haojin Águila (2023) • [AJ-9920]
-                </td>
-                <td className="py-2.5 text-right text-amber-600 dark:text-amber-400 font-bold font-mono text-[11px] whitespace-nowrap">
-                  Por Vencer ⚠️
-                </td>
-              </tr>
+              {fleet.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="py-6 text-center text-slate-400 dark:text-slate-500 font-mono text-[11px]">
+                    Sin conductores registrados todavía. Aproba solicitudes desde la ficha de carnet.
+                  </td>
+                </tr>
+              ) : fleet.slice(0, 5).map((c) => (
+                <tr key={c.id} className="border-b border-slate-50 dark:border-slate-800/60">
+                  <td className="py-2.5 font-bold text-slate-800 dark:text-white flex items-center gap-2 truncate">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="truncate">{c.nombre} {c.apellido}</span>
+                  </td>
+                  <td className="py-2.5 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                    {c.moto?.marca || 'Bera'} ({c.moto?.ano || (c.moto as any)?.anio || '2024'}) • [{c.moto?.placa || 'S/P'}]
+                  </td>
+                  <td className="py-2.5 text-right text-emerald-600 dark:text-emerald-400 font-bold font-mono text-[11px] whitespace-nowrap">
+                    CERT-MED ✓
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

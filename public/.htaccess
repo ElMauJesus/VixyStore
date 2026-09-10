@@ -34,6 +34,11 @@ Options -Indexes
     RewriteCond %{REQUEST_URI} ^/panel-admin/(.*)$ [NC]
     RewriteRule ^panel-admin/(.*)$ panel/$1 [L]
 
+    # Reescritura para assets de panel cuando se solicitan directamente
+    RewriteCond %{REQUEST_URI} ^/assets/(.*)$ [NC]
+    RewriteCond %{DOCUMENT_ROOT}/panel/assets/$1 -f
+    RewriteRule ^assets/(.*)$ panel/assets/$1 [L]
+
     # Reescritura para uploads de comercios y archivos cargados desde formularios
     # 1. Si se solicita /uploads/comercios/ y existe en registro-comercios/uploads/comercios/
     RewriteCond %{REQUEST_URI} ^/uploads/comercios/(.*)$ [NC]

@@ -13,116 +13,199 @@ $id = $_GET['id'] ?? null;
 $action = $_GET['action'] ?? null;
 
 // -----------------------------------------------------------------------------
-// GET: PERFIL DEL CONDUCTOR O LISTA DE CONDUCTORES CERCANOS
+// FUNCIÓN NORMALIZADORA — igual patrón que normalizarComercio()
+// vixy_dl  → operativos (status vacío/legacy se asume 'aprobado')
+// regist   → pre-registros (penden del status del registro)
+// -----------------------------------------------------------------------------
+function normalizarConductor($c, $origen = 'delivery') {
+        $ced  = strtoupper(trim($c['cedula'] ?? ''));
+        $code = !empty($c['codigo_conductor'])
+            ? $c['codigo_conductor']
+            : (string)($c['id'] ?? ('DRV-' . md5($ced . ($c['telefono'] ?? ''))));
+
+        $folderPath = "/shop/imgs-c-d/deliverys/{$code}";
+        $avatar     = trim($c['avatar_url'] ?? $c['foto_url'] ?? '');
+        if (empty($avatar)) $avatar = "{$folderPath}/foto_perfil.jpg";
+
+        if ($origen === 'delivery') {
+            // En vixy_dl = operativo. Solo 'rechazado'/'suspendido' no operan;
+            // cualquier otro valor (incl. 'pendiente' legacy del ALTER status) se asume 'aprobado'
+            $storedStatus = strtolower(trim((string)($c['status'] ?? '')));
+            if ($storedStatus === 'rechazado' || $storedStatus === 'suspendido' || $storedStatus === 'inactivo') {
+                $status = $storedStatus;
+            } else {
+                $status = 'aprobado';
+            }
+            $estadoVerif = $status;
+            $disponible  = (bool)($c['disponible'] ?? false);
+        } else {
+            // Solo en regist = pre-registro sin verificar
+            $status      = $c['status'] ?? 'pendiente';
+            $estadoVerif = $c['status'] ?? 'pendiente';
+            $disponible  = false;
+        }
+
+        return [
+            'id'                    => $code,
+            'db_id'                 => $c['id'] ?? null,
+            'origen_bd'             => $origen,
+            'codigo_conductor'      => $code,
+            'codigoConductor'       => $code,
+            'nombre'                => $c['nombre'] ?? 'Conductor',
+            'apellido'              => $c['apellido'] ?? '',
+            'cedula'                => $ced,
+            'telefono'              => $c['telefono'] ?? '',
+            'email'                 => $c['email'] ?? '',
+            'avatar_url'            => $avatar,
+            'foto_url'              => $avatar,
+            'fotoUrl'               => $avatar,
+            'disponible'            => $disponible,
+            'en_carrera'            => (bool)($c['en_carrera'] ?? false),
+            'latitud_actual'        => (float)($c['latitud_actual'] ?? 10.4910),
+            'longitud_actual'       => (float)($c['longitud_actual'] ?? -66.8620),
+            'lat'                   => (float)($c['latitud_actual'] ?? 10.4910),
+            'lng'                   => (float)($c['longitud_actual'] ?? -66.8620),
+            'saldo_billetera_usd'   => (float)($c['saldo_billetera_usd'] ?? 0.00),
+            'limite_saldo_negativo' => (float)($c['limite_saldo_negativo'] ?? -0.50),
+            'bloqueado_por_saldo'   => (bool)($c['bloqueado_por_saldo'] ?? false),
+            'rating'                => (float)($c['rating'] ?? 5.00),
+            'calificacion'          => (float)($c['rating'] ?? 5.00),
+            'total_carreras'        => (int)($c['total_carreras'] ?? 0),
+            'totalViajes'           => (int)($c['total_carreras'] ?? 0),
+            'placa_moto'            => strtoupper($c['placa_moto'] ?? $c['moto_placa'] ?? ''),
+            'marca_moto'            => $c['marca_moto'] ?? $c['moto_marca'] ?? 'Bera',
+            'modelo_moto'           => $c['modelo_moto'] ?? $c['moto_modelo'] ?? 'SBR 150',
+            'ano_moto'              => $c['ano_moto'] ?? $c['moto_ano'] ?? date('Y'),
+            'color_moto'            => $c['color_moto'] ?? $c['moto_color'] ?? '',
+            'licencia_grado'        => $c['licencia_grado'] ?? $c['licencia_conducir'] ?? '2da',
+            'status'                => $status,
+            'estado_verificacion'   => $estadoVerif,
+            'estadoVerificacion'    => $estadoVerif,
+            'validado'              => ($status === 'aprobado'),
+            'carpeta_imagenes'      => !empty($c['carpeta_imagenes']) ? $c['carpeta_imagenes'] : $folderPath,
+            'documentos'            => [
+                'cedula'             => "{$folderPath}/cedula_identidad.jpg",
+                'cedula_reverso'     => "{$folderPath}/cedula_reverso.jpg",
+                'licencia'           => "{$folderPath}/licencia_conducir.jpg",
+                'certificado_medico' => "{$folderPath}/certificado_medico.jpg",
+                'carnet_circulacion' => "{$folderPath}/carnet_circulacion.jpg",
+                'rcv'                => "{$folderPath}/poliza_rcv.jpg",
+                'antecedentes'       => "{$folderPath}/antecedentes.jpg",
+                'foto_perfil'        => "{$folderPath}/foto_perfil.jpg"
+            ]
+        ];
+    }
+
+    // -----------------------------------------------------------------------------
+// GET: PERFIL DEL CONDUCTOR O LISTA DE CONDUCTORES - DUAL DB (vixy_dl + regist)
+// vixy_dl  → operativos aprobados (status vacío/legacy se asume 'aprobado')
+// regist   → pendientes/aprobados sin migrar; los rechazados NO aparecen
 // -----------------------------------------------------------------------------
 if ($method === 'GET') {
     if ($id) {
-        $stmt = $pdo->prepare("SELECT id, nombre, apellido, cedula, telefono, email, avatar_url, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo, rating, total_carreras FROM conductores WHERE id = :id LIMIT 1");
-        $stmt->execute(['id' => $id]);
-        $driver = $stmt->fetch();
+        // 1. Buscar en c2861522_vixy_dl (conductores operativos)
+        $driver = null;
+        try {
+            $stmt = $pdo->prepare("SELECT id, nombre, apellido, cedula, telefono, email, foto_url, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo, rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto, licencia_grado, status, carpeta_imagenes, fecha_aprobacion FROM conductores WHERE id = :id OR cedula = :id2 LIMIT 1");
+            $stmt->execute(['id' => $id, 'id2' => $id]);
+            $row = $stmt->fetch();
+            if ($row) $driver = normalizarConductor($row, 'delivery');
+        } catch (Exception $e) {}
+
+        // 2. Fallback: buscar en c2861522_regist (pre-registros)
+        if (!$driver) {
+            $pdoRegist = Database::getRegistConnection();
+            if ($pdoRegist) {
+                try {
+                    $stmtR = $pdoRegist->prepare("SELECT * FROM conductores WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3 LIMIT 1");
+                    $stmtR->execute(['id' => $id, 'id2' => $id, 'id3' => $id]);
+                    $row = $stmtR->fetch();
+                    if ($row) {
+                        $code = !empty($row['codigo_conductor']) ? $row['codigo_conductor'] : ('DRV-' . $row['id']);
+                        $row['codigo_conductor'] = $code;
+                        $row['avatar_url']       = $row['foto_url'] ?? '';
+                        $row['placa_moto']       = $row['moto_placa'] ?? '';
+                        $row['marca_moto']       = $row['moto_marca'] ?? 'Bera';
+                        $row['modelo_moto']      = $row['moto_modelo'] ?? 'SBR 150';
+                        $row['ano_moto']         = $row['moto_ano'] ?? date('Y');
+                        $row['color_moto']       = $row['moto_color'] ?? '';
+                        $row['licencia_grado']   = $row['licencia_conducir'] ?? '2da';
+                        $driver = normalizarConductor($row, 'regist');
+                    }
+                } catch (Exception $e) {}
+            }
+        }
 
         if (!$driver) {
             Database::jsonResponse(['error' => true, 'mensaje' => 'Conductor no encontrado'], 404);
         }
 
-        $driver['disponible'] = (bool)$driver['disponible'];
-        $driver['en_carrera'] = (bool)$driver['en_carrera'];
-        $driver['bloqueado_por_saldo'] = (bool)$driver['bloqueado_por_saldo'];
-        $driver['saldo_billetera_usd'] = (float)$driver['saldo_billetera_usd'];
-
         Database::jsonResponse(['success' => true, 'conductor' => $driver]);
     }
 
-    // Listar conductores para mapa de administración, verificación o asignación
+    // Paso 1: vixy_dl — operativos aprobados (status vacío/legacy = aprobado)
     $soloDisponibles = isset($_GET['disponibles']) && $_GET['disponibles'] !== 'false' && $_GET['disponibles'] !== '0';
-    $sql = "SELECT id, nombre, apellido, cedula, telefono, email, avatar_url, foto_url, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo, rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto, licencia_grado, status, estado_verificacion, carpeta_imagenes FROM conductores WHERE 1=1";
-    
-    if ($soloDisponibles) {
-        $sql .= " AND disponible = 1 AND bloqueado_por_saldo = 0";
-    }
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute();
-    $conductoresDl = $stmt->fetchAll();
-
-    // Mapear por cédula para unificar con regist
     $conductoresMap = [];
-    foreach ($conductoresDl as $d) {
-        $ced = strtoupper(trim($d['cedula'] ?? ''));
-        $code = $d['id'];
-        $folderPath = "/shop/imgs-c-d/deliverys/{$code}";
-        $d['carpeta_imagenes'] = $d['carpeta_imagenes'] ?: $folderPath;
-        $d['documentos'] = [
-            'cedula' => "{$folderPath}/cedula_identidad.svg",
-            'licencia' => "{$folderPath}/licencia_conducir.svg",
-            'certificado_medico' => "{$folderPath}/certificado_medico.svg",
-            'carnet_circulacion' => "{$folderPath}/carnet_circulacion.svg",
-            'rcv' => "{$folderPath}/poliza_rcv.svg",
-            'foto_perfil' => "{$folderPath}/foto_perfil.svg"
-        ];
-        $conductoresMap[$ced ?: $code] = $d;
+    try {
+        $sql = "SELECT id, nombre, apellido, cedula, telefono, email, foto_url, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo, rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto, licencia_grado, status, carpeta_imagenes, fecha_aprobacion FROM conductores WHERE status IS NULL OR status NOT IN ('rechazado','suspendido','inactivo')";
+        if ($soloDisponibles) {
+            $sql .= " AND disponible = 1 AND bloqueado_por_saldo = 0";
+        }
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute();
+        $conductoresDl = $stmt->fetchAll();
+
+        foreach ($conductoresDl as $d) {
+            $normalized = normalizarConductor($d, 'delivery');
+            $key = $normalized['cedula'] ?: $normalized['id'];
+            $conductoresMap[$key] = $normalized;
+        }
+    } catch (Exception $e) {
+        error_log('Error cargando conductores de vixy_dl: ' . $e->getMessage());
     }
 
-    // Consultar también c2861522_regist.conductores
+    // Paso 2: regist — solo pendientes/aprobados sin migrar; los rechazados NO aparecen
+    // Si la cédula ya existe en vixy_dl → mantener el de vixy_dl (aprobado), NO sobreescribir
     $pdoRegist = Database::getRegistConnection();
     if ($pdoRegist) {
         try {
-            $stmtR = $pdoRegist->prepare("SELECT * FROM conductores ORDER BY id DESC");
+            $stmtR = $pdoRegist->prepare("SELECT * FROM conductores WHERE status != 'rechazado' ORDER BY id DESC");
             $stmtR->execute();
             $conductoresRegist = $stmtR->fetchAll();
 
             foreach ($conductoresRegist as $r) {
-                $ced = strtoupper(trim($r['cedula'] ?? ''));
-                $code = $r['codigo_conductor'] ?? ('DRV-' . $r['id']);
-                $folderPath = "/shop/imgs-c-d/deliverys/{$code}";
+                $ced  = strtoupper(trim($r['cedula'] ?? ''));
+                $code = !empty($r['codigo_conductor']) ? $r['codigo_conductor'] : ('DRV-' . $r['id']);
 
                 if (isset($conductoresMap[$ced])) {
-                    // Actualizar status desde regist si es más reciente
-                    $conductoresMap[$ced]['status'] = $r['status'] ?? $conductoresMap[$ced]['status'];
-                    $conductoresMap[$ced]['codigo_conductor'] = $code;
+                    // Ya existe en vixy_dl (aprobado) — solo completar codigo si falta
+                    if (empty($conductoresMap[$ced]['codigo_conductor'])) {
+                        $conductoresMap[$ced]['codigo_conductor'] = $code;
+                        $conductoresMap[$ced]['codigoConductor']  = $code;
+                    }
+                    // status 'aprobado' de vixy_dl se mantiene — NO se sobreescribe con regist
                 } else {
-                    $conductoresMap[$ced ?: $code] = [
-                        'id' => $code,
+                    // Solo en regist → normalizar con el status del registro
+                    $normalized = normalizarConductor(array_merge($r, [
                         'codigo_conductor' => $code,
-                        'nombre' => $r['nombre'] ?? 'Conductor',
-                        'apellido' => $r['apellido'] ?? '',
-                        'cedula' => $r['cedula'] ?? '',
-                        'telefono' => $r['telefono'] ?? '',
-                        'email' => $r['email'] ?? '',
-                        'avatar_url' => $r['foto_url'] ?: "{$folderPath}/foto_perfil.svg",
-                        'foto_url' => $r['foto_url'] ?: "{$folderPath}/foto_perfil.svg",
-                        'disponible' => false,
-                        'en_carrera' => false,
-                        'latitud_actual' => 10.49100000,
-                        'longitud_actual' => -66.86200000,
-                        'saldo_billetera_usd' => 0.00,
-                        'limite_saldo_negativo' => -0.50,
-                        'bloqueado_por_saldo' => 0,
-                        'rating' => 5.00,
-                        'total_carreras' => 0,
-                        'placa_moto' => $r['moto_placa'] ?? '',
-                        'marca_moto' => $r['moto_marca'] ?? 'Bera',
-                        'modelo_moto' => $r['moto_modelo'] ?? 'SBR 150',
-                        'ano_moto' => $r['moto_ano'] ?? '2024',
-                        'licencia_grado' => $r['licencia_conducir'] ?? '2da',
-                        'status' => $r['status'] ?? 'pendiente',
-                        'estado_verificacion' => $r['status'] ?? 'pendiente',
-                        'carpeta_imagenes' => $folderPath,
-                        'documentos' => [
-                            'cedula' => "{$folderPath}/cedula_identidad.svg",
-                            'licencia' => "{$folderPath}/licencia_conducir.svg",
-                            'certificado_medico' => "{$folderPath}/certificado_medico.svg",
-                            'carnet_circulacion' => "{$folderPath}/carnet_circulacion.svg",
-                            'rcv' => "{$folderPath}/poliza_rcv.svg",
-                            'foto_perfil' => "{$folderPath}/foto_perfil.svg"
-                        ]
-                    ];
+                        'avatar_url'       => $r['foto_url'] ?? '',
+                        'placa_moto'       => $r['moto_placa'] ?? '',
+                        'marca_moto'       => $r['moto_marca'] ?? 'Bera',
+                        'modelo_moto'      => $r['moto_modelo'] ?? 'SBR 150',
+                        'ano_moto'         => $r['moto_ano'] ?? date('Y'),
+                        'color_moto'       => $r['moto_color'] ?? '',
+                        'licencia_grado'   => $r['licencia_conducir'] ?? '2da',
+                    ]), 'regist');
+                    $key = $normalized['cedula'] ?: $normalized['id'];
+                    $conductoresMap[$key] = $normalized;
                 }
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+            error_log('Error cargando conductores de regist: ' . $e->getMessage());
+        }
     }
 
-    Database::jsonResponse(['success' => true, 'conductores' => array_values($conductoresMap)]);
+    Database::jsonResponse(['success' => true, 'total' => count($conductoresMap), 'conductores' => array_values($conductoresMap)]);
 }
 
 // -----------------------------------------------------------------------------
@@ -344,38 +427,127 @@ if ($method === 'PUT' && $action === 'disponibilidad') {
 
 // -----------------------------------------------------------------------------
 // PUT: APROBAR / VERIFICAR CONDUCTOR DESDE EL ADMIN PANEL
+// (Marca aprobado en c2861522_regist Y migra/actualiza el conductor en c2861522_vixy_dl)
 // -----------------------------------------------------------------------------
 if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aprobar')) {
-    AuthMiddleware::requireAuth(['super_admin', 'operador']);
+    AuthMiddleware::requireAdmin(['super_admin', 'operador']);
     $driverId = $_GET['id'] ?? null;
     if (!$driverId) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'ID de conductor requerido'], 400);
     }
 
+    // 1. Marcar aprobado en c2861522_regist
+    $regData = null;
     $pdoRegist = Database::getRegistConnection();
     if ($pdoRegist) {
         try {
-            $stR = $pdoRegist->prepare("UPDATE conductores SET status = 'aprobado' WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3");
+            $stR = $pdoRegist->prepare("SELECT * FROM conductores WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3 LIMIT 1");
             $stR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
-        } catch (Exception $e) {}
+            $regData = $stR->fetch();
+
+            $updR = $pdoRegist->prepare("UPDATE conductores SET status = 'aprobado', fecha_aprobacion = NOW() WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3");
+            $updR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+        } catch (Exception $e) {
+            error_log('Error aprobando conductor en regist: ' . $e->getMessage());
+        }
     }
 
+    // 2. Verificar si ya existe en c2861522_vixy_dl (por cédula o teléfono)
+    $existingDl = null;
     try {
-        $st = $pdo->prepare("UPDATE conductores SET status = 'aprobado', estado_verificacion = 'aprobado', disponible = 1 WHERE id = :id OR cedula = :id2");
-        $st->execute(['id' => $driverId, 'id2' => $driverId]);
+        $stCheck = $pdo->prepare("SELECT * FROM conductores WHERE cedula = :c OR telefono = :t LIMIT 1");
+        $stCheck->execute(['c' => $regData['cedula'] ?? $driverId, 't' => $regData['telefono'] ?? $driverId]);
+        $existingDl = $stCheck->fetch();
     } catch (Exception $e) {}
+
+    if (!$regData && !$existingDl) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Conductor no encontrado en ninguna base de datos'], 404);
+    }
+
+    // 3. Migrar e insertar en c2861522_vixy_dl (conductores operativos validados)
+    try {
+        $cedula       = !empty($existingDl['cedula']) ? $existingDl['cedula'] : trim($regData['cedula'] ?? '');
+        $telefono     = !empty($existingDl['telefono']) ? $existingDl['telefono'] : ($regData['telefono'] ?? $driverId);
+        $email        = !empty($existingDl['email']) ? $existingDl['email'] : ($regData['email'] ?? ('driver_' . preg_replace('/[^0-9]/', '', $cedula) . '@vixy.com'));
+        $nombre       = !empty($existingDl['nombre']) ? $existingDl['nombre'] : ($regData['nombre'] ?? 'Conductor');
+        $apellido     = !empty($existingDl['apellido']) ? $existingDl['apellido'] : ($regData['apellido'] ?? '');
+        $pwdHash      = !empty($existingDl['password_hash']) ? $existingDl['password_hash'] : ($regData['password_hash'] ?? password_hash('123456', PASSWORD_BCRYPT));
+        $foto         = !empty($existingDl['foto_url']) ? $existingDl['foto_url'] : ($regData['foto_url'] ?? '');
+        $direccion    = !empty($existingDl['direccion']) ? $existingDl['direccion'] : ($regData['direccion'] ?? '');
+        $conductorId  = !empty($existingDl['id']) ? $existingDl['id'] : (!empty($regData['codigo_conductor']) ? $regData['codigo_conductor'] : ('DRV-' . preg_replace('/[^A-Za-z0-9]/', '', $cedula)));
+        $placa        = strtoupper(!empty($existingDl['placa_moto']) ? $existingDl['placa_moto'] : ($regData['moto_placa'] ?? ''));
+        $marca        = !empty($existingDl['marca_moto']) ? $existingDl['marca_moto'] : ($regData['moto_marca'] ?? 'Bera');
+        $modelo       = !empty($existingDl['modelo_moto']) ? $existingDl['modelo_moto'] : ($regData['moto_modelo'] ?? 'SBR 150');
+        $ano          = !empty($existingDl['ano_moto']) ? $existingDl['ano_moto'] : ($regData['moto_ano'] ?? date('Y'));
+        $licencia     = !empty($existingDl['licencia_grado']) ? $existingDl['licencia_grado'] : ($regData['licencia_conducir'] ?? '2da');
+        $carpetaImgs  = !empty($existingDl['carpeta_imagenes']) ? $existingDl['carpeta_imagenes'] : ($regData['carpeta_imagenes'] ?? "/shop/imgs-c-d/deliverys/{$conductorId}");
+
+        $stIns = $pdo->prepare("INSERT INTO conductores (
+            id, nombre, apellido, cedula, telefono, telefono_adicional, email, password_hash,
+            foto_url, direccion, punto_referencia, tipo_vehiculo, disponible, en_carrera,
+            latitud_actual, longitud_actual, placa_moto, marca_moto, modelo_moto, ano_moto,
+            licencia_grado, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo,
+            rating, total_carreras, status, carpeta_imagenes, fecha_aprobacion
+        ) VALUES (
+            :id, :nombre, :apellido, :cedula, :telefono, :telefono_adicional, :email, :phash,
+            :foto, :direccion, :punto_ref, 'moto', 1, 0,
+            10.49100000, -66.86200000, :placa, :marca, :modelo, :ano,
+            :licencia, 0.00, -0.50, 0,
+            5.00, 0, 'aprobado', :carpeta, NOW()
+        ) ON DUPLICATE KEY UPDATE
+            nombre = VALUES(nombre),
+            apellido = VALUES(apellido),
+            telefono = VALUES(telefono),
+            email = VALUES(email),
+            password_hash = VALUES(password_hash),
+            foto_url = VALUES(foto_url),
+            direccion = VALUES(direccion),
+            placa_moto = VALUES(placa_moto),
+            marca_moto = VALUES(marca_moto),
+            modelo_moto = VALUES(modelo_moto),
+            ano_moto = VALUES(ano_moto),
+            licencia_grado = VALUES(licencia_grado),
+            carpeta_imagenes = VALUES(carpeta_imagenes),
+            status = 'aprobado',
+            disponible = 1,
+            bloqueado_por_saldo = 0,
+            fecha_aprobacion = NOW()");
+
+        $stIns->execute([
+            'id'                  => $conductorId,
+            'nombre'              => $nombre,
+            'apellido'            => $apellido,
+            'cedula'              => $cedula,
+            'telefono'            => $telefono,
+            'telefono_adicional'  => $existingDl['telefono_adicional'] ?? ($regData['telefono_adicional'] ?? null),
+            'email'               => $email,
+            'phash'               => $pwdHash,
+            'foto'                => $foto,
+            'direccion'           => $direccion,
+            'punto_ref'           => $existingDl['punto_referencia'] ?? ($regData['punto_referencia'] ?? null),
+            'placa'               => $placa,
+            'marca'               => $marca,
+            'modelo'              => $modelo,
+            'ano'                 => $ano,
+            'licencia'            => $licencia,
+            'carpeta'             => $carpetaImgs
+        ]);
+    } catch (Exception $e) {
+        error_log('Error migrando conductor a c2861522_vixy_dl: ' . $e->getMessage());
+    }
 
     Database::jsonResponse([
         'success' => true,
-        'mensaje' => 'Conductor aprobado y verificado exitosamente. Ahora puede iniciar sesión y recibir viajes.'
+        'mensaje' => 'Conductor aprobado, verificado y migrado a la base operativa (vixy_dl). Ahora puede iniciar sesión y recibir viajes.'
     ]);
 }
 
 // -----------------------------------------------------------------------------
 // PUT: RECHAZAR CONDUCTOR DESDE EL ADMIN PANEL
+// (Marca rechazado en c2861522_regist y desactiva en c2861522_vixy_dl si existiera)
 // -----------------------------------------------------------------------------
 if ($method === 'PUT' && ($action === 'rechazar_conductor' || $action === 'rechazar')) {
-    AuthMiddleware::requireAuth(['super_admin', 'operador']);
+    AuthMiddleware::requireAdmin(['super_admin', 'operador']);
     $driverId = $_GET['id'] ?? null;
     if (!$driverId) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'ID de conductor requerido'], 400);
@@ -390,13 +562,13 @@ if ($method === 'PUT' && ($action === 'rechazar_conductor' || $action === 'recha
     }
 
     try {
-        $st = $pdo->prepare("UPDATE conductores SET status = 'rechazado', estado_verificacion = 'rechazado', disponible = 0 WHERE id = :id OR cedula = :id2");
+        $st = $pdo->prepare("UPDATE conductores SET status = 'rechazado', disponible = 0 WHERE id = :id OR cedula = :id2");
         $st->execute(['id' => $driverId, 'id2' => $driverId]);
     } catch (Exception $e) {}
 
     Database::jsonResponse([
         'success' => true,
-        'mensaje' => 'Conductor rechazado.'
+        'mensaje' => 'Conductor rechazado. Ya no aparecerá en la lista de repartidores.'
     ]);
 }
 

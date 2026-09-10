@@ -505,7 +505,7 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // B. Fallback: buscar en c2861522_vixy_dl.conductores
-    $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, disponible, saldo_billetera_usd, bloqueado_por_saldo, password_hash, status, estado_verificacion FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
+    $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, disponible, saldo_billetera_usd, bloqueado_por_saldo, password_hash, status FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
     $stmtDriver->execute(['id1' => $identifier, 'id2' => $identifier, 'id3' => $identifier]);
     $driver = $stmtDriver->fetch();
 
@@ -514,8 +514,9 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($validDriverPass) {
             // Validar estado de verificación en tabla delivery
-            $drvStatus = strtolower(trim($driver['status'] ?? ($driver['estado_verificacion'] ?? '')));
-            if ($drvStatus !== '' && $drvStatus !== 'aprobado') {
+            // Bloquea solo lo rechazado/suspendido; 'pendiente' legacy se asume operativo
+            $drvStatus = strtolower(trim($driver['status'] ?? ''));
+            if (in_array($drvStatus, ['rechazado', 'suspendido', 'inactivo'], true)) {
                 Database::jsonResponse([
                     'error' => true,
                     'no_verificado' => true,

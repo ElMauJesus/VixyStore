@@ -30,7 +30,8 @@ import {
   List,
   UserCheck,
   Zap,
-  Filter
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
 import { Conductor } from '../../types/delivery';
@@ -144,8 +145,24 @@ export const DriversManager: React.FC = () => {
   };
 
   // Compute 30-day validity rule for payment receipts
-  const checkReceiptValidity = (fechaStr: string) => {
-    const receiptDate = new Date(fechaStr.replace(' ', 'T'));
+  const checkReceiptValidity = (fechaStr?: string) => {
+    if (!fechaStr) {
+      return {
+        diffDays: 0,
+        remainingDays: 0,
+        isVigente: false,
+        statusLabel: 'Sin comprobante'
+      };
+    }
+    const receiptDate = new Date(String(fechaStr).replace(' ', 'T'));
+    if (isNaN(receiptDate.getTime())) {
+      return {
+        diffDays: 0,
+        remainingDays: 0,
+        isVigente: false,
+        statusLabel: 'Fecha inválida'
+      };
+    }
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - receiptDate.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -162,115 +179,74 @@ export const DriversManager: React.FC = () => {
     };
   };
 
-  // Dynamic trips breakdown applying the exact formula:
-  // Tarifa mínima $2.00 USD (cubre hasta 3.0 km) + $0.50 USD por cada km adicional después de los 3 km
+  // Trips tomados SOLO de pedidos reales del conductor (nunca datos demo)
   const getDriverTrips = (driverId: string, tf: TimeFrame) => {
-    let baseTrips: {
-      id: string;
-      comercio: string;
-      cliente: string;
-      hora: string;
-      distanciaKm: number;
-      estado: string;
-    }[] = [];
+    const drv = allDrivers.find(d => d.id === driverId);
+    const drvName = drv ? `${drv.nombre} ${drv.apellido}` : '';
+    const drvCedula = drv?.cedula || '';
+    const horasPorVentana = tf === 'dia' ? 24 : tf === 'semana' ? 24 * 7 : 24 * 30;
+    const cutoff = Date.now() - horasPorVentana * 60 * 60 * 1000;
 
-    if (tf === 'dia') {
-      baseTrips = [
-        {
-          id: 'VIX-8041',
-          comercio: 'Burger House Caracas',
-          cliente: 'Mariana Pérez (Los Palos Grandes)',
-          hora: '15:35',
-          distanciaKm: 2.8,
-          estado: 'Entregado a tiempo'
-        },
-        {
-          id: 'VIX-8038',
-          comercio: 'Ferretería El Tornillo Master',
-          cliente: 'Carlos Mendoza (Chacao)',
-          hora: '11:12',
-          distanciaKm: 3.4,
-          estado: 'Entregado a tiempo'
-        },
-        {
-          id: 'VIX-8035',
-          comercio: 'Burger House Caracas',
-          cliente: 'Valentina Silva (Parque Cristal)',
-          hora: '09:40',
-          distanciaKm: 1.9,
-          estado: 'Entregado a tiempo'
-        }
-      ];
-    } else if (tf === 'semana') {
-      baseTrips = [
-        { id: 'VIX-8041', comercio: 'Burger House Caracas', cliente: 'Mariana Pérez (Los Palos Grandes)', hora: 'Hoy 15:35', distanciaKm: 2.8, estado: 'Entregado' },
-        { id: 'VIX-8038', comercio: 'Ferretería El Tornillo Master', cliente: 'Carlos Mendoza (Chacao)', hora: 'Hoy 11:12', distanciaKm: 3.4, estado: 'Entregado' },
-        { id: 'VIX-8035', comercio: 'Burger House Caracas', cliente: 'Valentina Silva (Parque Cristal)', hora: 'Hoy 09:40', distanciaKm: 1.9, estado: 'Entregado' },
-        { id: 'VIX-8029', comercio: 'Farmacia & Salud La Castellana', cliente: 'Roberto Gómez (Altamira)', hora: 'Ayer 18:20', distanciaKm: 4.1, estado: 'Entregado' },
-        { id: 'VIX-8022', comercio: 'Doña Bárbara Criollo & Grill', cliente: 'Elena Rivas (Las Mercedes)', hora: 'Ayer 13:10', distanciaKm: 5.0, estado: 'Entregado' },
-        { id: 'VIX-8015', comercio: 'Supermercado Central Bello Monte', cliente: 'Andrés Gil (Bello Monte)', hora: 'Mar 17:05', distanciaKm: 2.9, estado: 'Entregado' },
-        { id: 'VIX-8004', comercio: 'Burger House Caracas', cliente: 'Patricia Lugo (El Rosal)', hora: 'Lun 20:15', distanciaKm: 2.2, estado: 'Entregado' }
-      ];
-    } else {
-      baseTrips = [
-        { id: 'VIX-8041', comercio: 'Burger House Caracas', cliente: 'Mariana Pérez (Los Palos Grandes)', hora: '02 Sep 15:35', distanciaKm: 2.8, estado: 'Entregado' },
-        { id: 'VIX-8038', comercio: 'Ferretería El Tornillo Master', cliente: 'Carlos Mendoza (Chacao)', hora: '02 Sep 11:12', distanciaKm: 3.4, estado: 'Entregado' },
-        { id: 'VIX-8029', comercio: 'Farmacia & Salud La Castellana', cliente: 'Roberto Gómez (Altamira)', hora: '01 Sep 18:20', distanciaKm: 4.1, estado: 'Entregado' },
-        { id: 'VIX-7988', comercio: 'Doña Bárbara Criollo & Grill', cliente: 'Elena Rivas (Las Mercedes)', hora: '28 Ago 14:10', distanciaKm: 5.0, estado: 'Entregado' },
-        { id: 'VIX-7945', comercio: 'Burger House Caracas', cliente: 'David Morales (Chacao)', hora: '24 Ago 19:30', distanciaKm: 2.0, estado: 'Entregado' },
-        { id: 'VIX-7901', comercio: 'Ferretería El Tornillo Master', cliente: 'Gabriel Ramos (Los Ruices)', hora: '19 Ago 11:15', distanciaKm: 4.6, estado: 'Entregado' },
-        { id: 'VIX-7860', comercio: 'Supermercado Central Bello Monte', cliente: 'Sonia Torres (La Florida)', hora: '14 Ago 16:40', distanciaKm: 3.8, estado: 'Entregado' }
-      ];
-    }
-
-    return baseTrips.map(trip => {
-      const calc = calculateDeliveryTripCost(trip.distanciaKm);
-      return {
-        ...trip,
-        costoTotalUsd: calc.totalViajeUsd,
-        costoTotalBs: calc.totalViajeBs,
-        gananciaUsd: calc.gananciaMotorizadoUsd,
-        comisionUsd: calc.comisionPlataformaUsd,
-        distanciaExcedenteKm: calc.distanciaExcedenteKm,
-        costoAdicionalUsd: calc.costoAdicionalUsd
-      };
-    });
+    return orders
+      .filter(o => {
+        const c = o.conductor;
+        if (!c) return false;
+        if (driverId && c.id === driverId) return true;
+        if (drvCedula && c.cedula && c.cedula === drvCedula) return true;
+        if (drvName && `${c.nombre || ''} ${c.apellido || ''}`.toLowerCase().replace(/\s+/g, ' ').trim() === drvName.toLowerCase().replace(/\s+/g, ' ').trim()) return true;
+        return false;
+      })
+      .filter(o => {
+        if (tf === 'mes') return true;
+        const ts = new Date(o.fechaCreacion || '').getTime();
+        return isNaN(ts) || ts >= cutoff;
+      })
+      .map(o => {
+        const distKm = Number(o.distanciaKm || 3.0);
+        const calc = calculateDeliveryTripCost(distKm);
+        const cliente = o.cliente ? `${o.cliente.nombre || ''} ${o.cliente.apellido || ''}`.trim() : '';
+        return {
+          id: o.codigoSeguimiento || String(o.id),
+          comercio: o.comercio?.nombre || 'Comercio',
+          cliente: cliente || 'Cliente',
+          hora: o.fechaCreacion ? new Date(o.fechaCreacion).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '',
+          distanciaKm: distKm,
+          estado: o.estado || 'Entregado',
+          costoTotalUsd: calc.totalViajeUsd,
+          costoTotalBs: calc.totalViajeBs,
+          gananciaUsd: calc.gananciaMotorizadoUsd,
+          comisionUsd: calc.comisionPlataformaUsd,
+          distanciaExcedenteKm: calc.distanciaExcedenteKm,
+          costoAdicionalUsd: calc.costoAdicionalUsd
+        };
+      })
+      .sort((a, b) => (a.id < b.id ? 1 : -1));
   };
 
-  // Payment receipts for the selected driver
+  // Comprobantes tomados SOLO de recargas reales del conductor (nunca datos demo)
   const getDriverPayments = (driverId: string) => {
-    return [
-      {
-        id: 'pago-cond-01',
-        montoUsd: 5.00,
-        montoBs: 5.00 * tasaBcv,
-        metodoPago: 'Binance Pay (USDT)',
-        referencia: 'BINANCE-PAY-9812903',
-        fecha: '2026-09-02 14:30:10',
-        comprobanteUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600&auto=format&fit=crop&q=80',
-        estado: 'Aprobado y Acreditado'
-      },
-      {
-        id: 'pago-cond-02',
-        montoUsd: 3.00,
-        montoBs: 3.00 * tasaBcv,
-        metodoPago: 'Zinli Wallet',
-        referencia: 'ZINLI-TR-448102',
-        fecha: '2026-09-01 18:20:00',
-        comprobanteUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
-        estado: 'Aprobado y Acreditado'
-      },
-      {
-        id: 'pago-cond-03',
-        montoUsd: 10.00,
-        montoBs: 10.00 * tasaBcv,
-        metodoPago: 'Pago Móvil Banesco',
-        referencia: 'PM-0134-5541920',
-        fecha: '2026-07-20 10:15:00', // Older than 30 days to demonstrate 30-day expiration rule!
-        comprobanteUrl: 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&auto=format&fit=crop&q=80',
-        estado: 'Histórico Archivado (>30 días)'
-      }
-    ];
+    const drv = allDrivers.find(d => d.id === driverId);
+    const drvName = drv ? `${drv.nombre} ${drv.apellido}`.toLowerCase().trim() : '';
+    const drvCedula = drv?.cedula || '';
+
+    return rechargeRequests
+      .filter(r => {
+        if (r.usuarioTipo !== 'conductor') return false;
+        if (driverId && r.usuarioId && r.usuarioId === driverId) return true;
+        if (!drvName && !drvCedula) return false;
+        if (drvCedula && r.usuarioCedula && r.usuarioCedula === drvCedula) return true;
+        return !!drvName && String(r.usuarioNombre || '').toLowerCase().trim().split(' ')[0] === drvName.split(' ')[0];
+      })
+      .map(r => ({
+        id: r.id,
+        montoUsd: Number(r.montoUsd || 0),
+        montoBs: Number(r.montoBs || (r.montoUsd || 0) * tasaBcv),
+        metodoPago: String(r.metodoPago || 'pago_movil').replace(/_/g, ' ').toUpperCase(),
+        referencia: r.referencia || 'S/P',
+        fecha: r.fecha || '',
+        comprobanteUrl: r.comprobanteUrl || '',
+        estado: r.estado === 'aprobada' ? 'Aprobado y Acreditado' : r.estado === 'rechazada' ? 'Rechazado' : 'Pendiente de Autorización'
+      }));
   };
 
   const totalDriversCount = allDrivers.length;
@@ -568,7 +544,7 @@ export const DriversManager: React.FC = () => {
                         {(selectedDriver.rating ?? 5.0).toFixed(1)}
                       </span>
                       <span className="text-neutral-400">•</span>
-                      <span className="text-neutral-300 truncate">{selectedDriver.totalEntregas} carreras</span>
+                      <span className="text-neutral-300 truncate">{selectedDriver.totalEntregas ?? selectedDriver.totalViajes ?? 0} carreras</span>
                     </div>
                   </div>
                 </div>

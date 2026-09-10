@@ -14,7 +14,6 @@ $dirs = @(
     "out/registro-comercios",
     "out/registro-comercios/api",
     "out/registro-delivery",
-    "out/panel",
     "out/api",
     "out/banners",
     "out/logo",
@@ -131,18 +130,14 @@ if (Test-Path "out/shop/assets/aistudio") {
     Remove-Item -Path "out/shop/assets/aistudio" -Recurse -Force
 }
 
-# 7b. Copiar Panel Web Administrativo exclusivamente a out/panel
-#     (la regla en .htaccess reescribe /panel-admin/ a /panel/ internamente sin duplicar 21MB)
+# 7b. Eliminar /panel/ del output - los deliverys se manejan en el admin panel de /shop/
+#     NO existe URL separada /panel/ - todo se gestiona desde vixy.uno/shop/
 if (Test-Path "out/panel-admin") {
     Remove-Item -Path "out/panel-admin" -Recurse -Force -ErrorAction SilentlyContinue
 }
 if (Test-Path "out/panel") {
     Remove-Item -Path "out/panel" -Recurse -Force -ErrorAction SilentlyContinue
-}
-if (Test-Path "panel-admin") {
-    New-Item -ItemType Directory -Path "out/panel" -Force | Out-Null
-    Copy-Item -Path "panel-admin/*" -Destination "out/panel" -Recurse -Force
-    Write-Host "[OK] Panel Web Administrativo instalado en out/panel (reescritura transparente lista)"
+    Write-Host "[OK] out/panel eliminado - conductores se gestionan dentro de /shop/ admin panel"
 }
 
 # 8. Copiar backend de Registro de Comercios a out/registro-comercios/api

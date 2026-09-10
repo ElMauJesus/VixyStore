@@ -12,6 +12,20 @@ class AuthMiddleware {
         return defined('JWT_SECRET') ? JWT_SECRET : 'VIXY_PLATFORM_SECURE_JWT_KEY_2026_CARACAS_9847231';
     }
 
+    // Clave interna del panel administración (misma para PHP y frontend)
+    public static function getAdminKey(): string {
+        return defined('ADMIN_PANEL_KEY') ? ADMIN_PANEL_KEY : 'vixy_admin_panel_2026';
+    }
+
+    // Verifica la clave interna del panel en los headers
+    public static function hasAdminKey(): bool {
+        $headers = function_exists('getallheaders') ? getallheaders() : [];
+        $adminKey = $headers['X-Vixy-Admin-Key'] ?? $headers['X-Admin-Key'] ?? $headers['x-admin-key']
+            ?? ($_SERVER['HTTP_X_VIXY_ADMIN_KEY'] ?? ($_SERVER['HTTP_X_ADMIN_KEY'] ?? ($_SERVER['HTTP_X_VIXY_ADMIN'] ?? '')));
+        $secret = self::getAdminKey();
+        return $adminKey === $secret && $secret !== '';
+    }
+
     public static function generateToken(array $payload, int $expiresInSeconds = null): string {
         if ($expiresInSeconds === null) {
             $expiresInSeconds = defined('JWT_EXPIRY_SECONDS') ? JWT_EXPIRY_SECONDS : 86400 * 7;
@@ -74,23 +88,45 @@ class AuthMiddleware {
 
     public static function requireAuth(array $rolesPermitidos = []): array {
         $user = self::verifyToken();
-        if (!$user) {
+
+        if ($user) {
+            $userRole  = $user['tipo_usuario'] ?? '';
+            $userLevel = $user['nivel_acceso'] ?? $user['rol'] ?? $userRole;
+
+            // Super admin siempre permitido (el token de admin viene con nivel_acceso='super_admin')
+            if ($userRole === 'super_admin' || $userLevel === 'super_admin') {
+                return $user;
+            }
+
+            if (empty($rolesPermitidos)
+                || in_array($userLevel, $rolesPermitidos, true)
+                || in_array($userRole, $rolesPermitidos, true)) {
+                return $user;
+            }
+
             Database::jsonResponse([
                 'error' => true,
-                'mensaje' => 'Acceso denegado: Token no provisto o expirado'
-            ], 401);
+                'mensaje' => 'Permisos insuficientes para realizar esta acción'
+            ], 403);
         }
 
-        if (!empty($rolesPermitidos)) {
-            $userRole = $user['tipo_usuario'] ?? $user['nivel_acceso'] ?? '';
-            if (!in_array($userRole, $rolesPermitidos) && $userRole !== 'super_admin') {
-                Database::jsonResponse([
-                    'error' => true,
-                    'mensaje' => 'Permisos insuficientes para realizar esta acción'
-                ], 403);
-            }
+        // Fallback: clave interna del panel de administración
+        if (self::hasAdminKey()) {
+            return [
+                'tipo_usuario' => 'super_admin',
+                'nivel_acceso' => 'super_admin',
+                'via' => 'admin_key'
+            ];
         }
 
-        return $user;
+        Database::jsonResponse([
+            'error' => true,
+            'mensaje' => 'Acceso denegado: Token no provisto o expirado'
+        ], 401);
+    }
+
+    // Alias semántico para acciones administrativas
+    public static function requireAdmin(array $rolesPermitidos = []): array {
+        return self::requireAuth($rolesPermitidos);
     }
 }

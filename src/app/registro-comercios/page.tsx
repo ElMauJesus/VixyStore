@@ -409,11 +409,14 @@ export default function RegistroComercioLandingPage() {
             ══════════════════════════════════════════════════════════════ */}
             <section className="relative overflow-hidden bg-[#0e0720] border-b border-purple-950">
                 <div className="absolute inset-0 z-0">
-                    <img
-                        src="/banners/banner_comercios.jpg"
-                        alt="Comercios Aliados Vixy Rider"
-                        className="w-full h-full object-cover object-center opacity-35 scale-105 transform motion-safe:transition-all duration-1000"
-                    />
+                    <picture>
+                        <source media="(max-width: 768px)" srcSet="/banners/vixybannerR2.jpeg" />
+                        <img
+                            src="/banners/vixybannerR1.jpeg"
+                            alt="Comercios Aliados Vixy Rider"
+                            className="w-full h-full object-cover object-center opacity-40 scale-105 transform motion-safe:transition-all duration-1000"
+                        />
+                    </picture>
                     <div className="absolute inset-0 bg-gradient-to-r from-[#0c061d] via-[#0c061de8] to-transparent z-10" />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0c061d] via-transparent to-transparent z-10" />
                 </div>

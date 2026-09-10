@@ -275,10 +275,29 @@ export interface Comercio {
   metodosPago?: MetodosPagoDirecto;
   metodosPagoAceptados?: any;
   productos: Producto[]; // Siempre array (puede estar vacío), nunca undefined
-  billetera?: ComercioBilletera;
   /** true = ya validado y migrado a c2861522_vixy_dl; false/undefined = pendiente en c2861522_regist */
   validado?: boolean;
   origen_bd?: 'delivery' | 'regist';
+  tipoRegistro?: 'rif' | 'independiente' | string;
+  tipoComercio?: string;
+  tipo_comercio?: string;
+  nombreRepresentante?: string;
+  nombre_representante?: string;
+  cedulaRepresentante?: string;
+  cedula_representante?: string;
+  telefonoAdicional?: string;
+  telefono_adicional?: string;
+  puntoReferencia?: string;
+  punto_referencia?: string;
+  ubicacionGps?: string;
+  ubicacion_gps?: string;
+  cantidadSucursales?: number;
+  cantidad_sucursales?: number;
+  descripcion?: string;
+  descripcionNegocio?: string;
+  descripcion_negocio?: string;
+  redesSociales?: string;
+  redes_sociales?: string;
 }
 
 export interface Cliente {

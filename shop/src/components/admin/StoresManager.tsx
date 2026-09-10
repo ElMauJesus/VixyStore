@@ -675,65 +675,242 @@ export const StoresManager: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto space-y-4 pr-1 flex-1">
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-bold text-neutral-700 dark:text-neutral-300">Ruta de Documentos: </span>
-                  <span className="font-mono text-amber-500">shop/imgs-c-d/comercios/{inspectingStoreDocs.id}</span>
+              {/* Header Status & Code Banner */}
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-neutral-700 dark:text-neutral-300">Expediente Oficial:</span>
+                  <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
+                    {inspectingStoreDocs.codigoComercio || inspectingStoreDocs.id}
+                  </span>
+                  <span className="text-neutral-400">•</span>
+                  <span className="text-neutral-500 dark:text-neutral-400">
+                    {(inspectingStoreDocs as any).tipoRegistro === 'independiente' ? 'Comercio Independiente' : 'Comercio con RIF'}
+                  </span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                  inspectingStoreDocs.status === 'aprobado' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
-                }`}>
-                  Estado: {inspectingStoreDocs.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    inspectingStoreDocs.status === 'aprobado' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  }`}>
+                    Estado: {inspectingStoreDocs.status || 'Pendiente'}
+                  </span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { key: 'rif', title: 'RIF Fiscal Registrado', file: 'rif_fiscal.svg' },
-                  { key: 'permiso', title: 'Permiso Sanitario / Comercial', file: 'permiso_sanitario.svg' },
-                  { key: 'fachada', title: 'Foto de Fachada del Local', file: 'fachada_local.svg' },
-                  { key: 'logo', title: 'Logotipo Oficial', file: 'logo.svg' },
-                ].map(doc => {
-                  const docUrl = `/imgs-c-d/comercios/${inspectingStoreDocs.id}/${doc.file}`;
-                  return (
-                    <div key={doc.key} className="p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 flex flex-col justify-between space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">{doc.title}</span>
-                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">
-                          Digital
+              {/* Dossier Content: 1 Single Real Storefront Photo + Written Verification Data */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                
+                {/* 1. ÚNICA IMAGEN REAL: FOTO DE FACHADA DEL LOCAL */}
+                <div className="md:col-span-5 flex flex-col space-y-3">
+                  <div className="p-4 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 flex flex-col justify-between h-full space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Store className="w-4 h-4 text-purple-500" />
+                        <span className="text-xs font-bold text-neutral-900 dark:text-white">Foto de Fachada del Local</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                        Única Foto
+                      </span>
+                    </div>
+
+                    {/* Contenedor de la foto con fallback robusto y click para ampliar */}
+                    {(() => {
+                      const fachadaSrc = (inspectingStoreDocs as any).foto_comercio_url || (inspectingStoreDocs as any).fotoComercioUrl || inspectingStoreDocs.logoUrl || `/imgs-c-d/comercios/${inspectingStoreDocs.id}/fachada_local.svg`;
+                      return (
+                        <div 
+                          onClick={() => setInspectingDocImage({ 
+                            title: `Fachada del Local — ${inspectingStoreDocs.nombre}`, 
+                            url: fachadaSrc 
+                          })}
+                          className="w-full h-56 sm:h-64 bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 flex items-center justify-center overflow-hidden cursor-pointer group relative shadow-inner"
+                        >
+                          <img 
+                            src={fachadaSrc} 
+                            alt={`Fachada de ${inspectingStoreDocs.nombre}`} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e: any) => {
+                              const target = e.currentTarget;
+                              if (!target.dataset.triedComercios && target.src.includes('/uploads/comercios/')) {
+                                target.dataset.triedComercios = '1';
+                                target.src = target.src.replace('/uploads/comercios/', '/registro-comercios/uploads/comercios/');
+                                return;
+                              }
+                              if (!target.dataset.triedImgs) {
+                                target.dataset.triedImgs = '1';
+                                target.src = `/imgs-c-d/comercios/${inspectingStoreDocs.id}/fachada_local.svg`;
+                                return;
+                              }
+                              target.src = '/banners/banner_comercios.jpg';
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-xs text-white font-bold p-2 text-center">
+                            <Eye className="w-5 h-5 text-purple-300" />
+                            <span>Clic para ver en tamaño completo</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="text-[11px] text-neutral-500 dark:text-neutral-400 bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 leading-relaxed">
+                      Fotografía del frente físico del comercio subida por el representante durante el proceso de registro oficial.
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setInspectingDocImage({ 
+                        title: `Fachada del Local — ${inspectingStoreDocs.nombre}`, 
+                        url: (inspectingStoreDocs as any).foto_comercio_url || (inspectingStoreDocs as any).fotoComercioUrl || inspectingStoreDocs.logoUrl || `/imgs-c-d/comercios/${inspectingStoreDocs.id}/fachada_local.svg` 
+                      })}
+                      className="w-full py-2 text-xs font-bold text-purple-600 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Ampliar Imagen</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. DATOS ESCRITOS COMPLETOS DEL COMERCIO (DOCUMENTACIÓN VERIFICABLE) */}
+                <div className="md:col-span-7 space-y-3">
+                  
+                  {/* SECCIÓN A: IDENTIFICACIÓN FISCAL Y LEGAL (ESCRITO) */}
+                  <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 dark:text-white pb-1.5 border-b border-neutral-200 dark:border-neutral-700/60">
+                      <FileText className="w-4 h-4 text-amber-500" />
+                      <span>Identificación Fiscal y Representación</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">RIF o Cédula Jurídica</span>
+                        <span className="font-mono font-extrabold text-neutral-900 dark:text-white text-sm">
+                          {inspectingStoreDocs.rif || 'No registrado'}
+                        </span>
+                      </div>
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Modalidad de Registro</span>
+                        <span className="font-bold text-neutral-800 dark:text-neutral-200">
+                          {(inspectingStoreDocs as any).tipoRegistro === 'independiente' ? 'Emprendedor / Independiente' : 'Comercio Registrado'}
+                        </span>
+                      </div>
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Representante Legal</span>
+                        <span className="font-bold text-neutral-800 dark:text-neutral-200">
+                          {(inspectingStoreDocs as any).nombreRepresentante || (inspectingStoreDocs as any).nombre_representante || inspectingStoreDocs.nombre}
+                        </span>
+                      </div>
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Cédula del Representante</span>
+                        <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">
+                          {(inspectingStoreDocs as any).cedulaRepresentante || (inspectingStoreDocs as any).cedula_representante || 'No registrada'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN B: CONTACTO DIRECTO */}
+                  <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 dark:text-white pb-1.5 border-b border-neutral-200 dark:border-neutral-700/60">
+                      <Phone className="w-4 h-4 text-emerald-500" />
+                      <span>Canales de Contacto Directo</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Teléfono Comercial</span>
+                        <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">
+                          {inspectingStoreDocs.telefono || 'No registrado'}
+                        </span>
+                      </div>
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Teléfono Adicional</span>
+                        <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">
+                          {(inspectingStoreDocs as any).telefonoAdicional || (inspectingStoreDocs as any).telefono_adicional || 'No registrado'}
+                        </span>
+                      </div>
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 sm:col-span-2">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Correo Electrónico</span>
+                        <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                          {inspectingStoreDocs.email || 'No registrado'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN C: UBICACIÓN, SUCURSALES Y GPS */}
+                  <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 dark:text-white pb-1.5 border-b border-neutral-200 dark:border-neutral-700/60">
+                      <MapPin className="w-4 h-4 text-rose-500" />
+                      <span>Ubicación, Sucursales y Referencia</span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Dirección Física</span>
+                        <span className="text-neutral-800 dark:text-neutral-200 leading-relaxed font-medium">
+                          {inspectingStoreDocs.direccion || 'Caracas, Venezuela'}
                         </span>
                       </div>
 
-                      <div 
-                        onClick={() => setInspectingDocImage({ title: doc.title, url: docUrl })}
-                        className="h-36 bg-neutral-100 dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 flex items-center justify-center overflow-hidden cursor-pointer group relative"
-                      >
-                        <img 
-                          src={docUrl} 
-                          alt={doc.title} 
-                          className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform"
-                          onError={(e: any) => {
-                            e.target.onerror = null;
-                            e.target.src = inspectingStoreDocs.logoUrl || '/banners/banner_comercios.jpg';
-                          }}
-                        />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-xs text-white font-bold">
-                          <Eye className="w-4 h-4" />
-                          <span>Ver en Detalle</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="bg-white dark:bg-neutral-900/80 p-2 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                          <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Punto Referencia</span>
+                          <span className="text-neutral-800 dark:text-neutral-200 font-medium truncate block" title={(inspectingStoreDocs as any).puntoReferencia || (inspectingStoreDocs as any).punto_referencia || 'No registrado'}>
+                            {(inspectingStoreDocs as any).puntoReferencia || (inspectingStoreDocs as any).punto_referencia || 'No registrado'}
+                          </span>
+                        </div>
+                        <div className="bg-white dark:bg-neutral-900/80 p-2 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                          <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Sucursales</span>
+                          <span className="font-bold text-purple-600 dark:text-purple-400">
+                            {(inspectingStoreDocs as any).cantidadSucursales || (inspectingStoreDocs as any).cantidad_sucursales || 1}
+                          </span>
+                        </div>
+                        <div className="bg-white dark:bg-neutral-900/80 p-2 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                          <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Ubicación GPS</span>
+                          <span className="font-mono text-[11px] text-neutral-800 dark:text-neutral-200 truncate block" title={(inspectingStoreDocs as any).ubicacionGps || (inspectingStoreDocs as any).ubicacion_gps || 'No registrada'}>
+                            {(inspectingStoreDocs as any).ubicacionGps || (inspectingStoreDocs as any).ubicacion_gps || 'No registrada'}
+                          </span>
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setInspectingDocImage({ title: doc.title, url: docUrl })}
-                        className="w-full py-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition cursor-pointer flex items-center justify-center gap-1"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        <span>Inspeccionar</span>
-                      </button>
                     </div>
-                  );
-                })}
+                  </div>
+
+                  {/* SECCIÓN D: HORARIOS, RUBRO Y DESCRIPCIÓN */}
+                  <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 dark:text-white pb-1.5 border-b border-neutral-200 dark:border-neutral-700/60">
+                      <Clock className="w-4 h-4 text-blue-500" />
+                      <span>Operación Comercial y Detalles</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Horario de Atención</span>
+                        <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                          {inspectingStoreDocs.horarios || (inspectingStoreDocs as any).horariosAtencion || 'Lun - Dom: 08:00 AM - 10:00 PM'}
+                        </span>
+                      </div>
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Rubro / Categoría</span>
+                        <span className="font-bold text-neutral-800 dark:text-neutral-200 capitalize">
+                          {(inspectingStoreDocs as any).tipo_comercio || inspectingStoreDocs.categoria || 'General'}
+                        </span>
+                      </div>
+                      <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 sm:col-span-2">
+                        <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Descripción del Negocio</span>
+                        <span className="text-neutral-800 dark:text-neutral-200 leading-relaxed font-medium">
+                          {(inspectingStoreDocs as any).descripcionNegocio || (inspectingStoreDocs as any).descripcion || inspectingStoreDocs.nombre}
+                        </span>
+                      </div>
+                      {((inspectingStoreDocs as any).redesSociales || (inspectingStoreDocs as any).redes_sociales) && (
+                        <div className="bg-white dark:bg-neutral-900/80 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 sm:col-span-2">
+                          <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">Redes Sociales</span>
+                          <span className="text-purple-600 dark:text-purple-400 font-medium">
+                            {(inspectingStoreDocs as any).redesSociales || (inspectingStoreDocs as any).redes_sociales}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
               </div>
             </div>
           </div>

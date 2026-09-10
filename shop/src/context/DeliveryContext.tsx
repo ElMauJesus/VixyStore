@@ -31,10 +31,7 @@ import {
   DEMO_COMERCIO_BILLETERA,
   ALL_DEMO_COMERCIOS,
   ALL_DEMO_CLIENTES,
-  ALL_DEMO_CONDUCTORES,
-  INITIAL_RECHARGE_REQUESTS,
   INITIAL_CLIENT_CLAIMS,
-  INITIAL_ORDERS, 
   INITIAL_INCIDENTS, 
   INITIAL_BACKEND_USERS, 
   INITIAL_ADMIN_USERS,
@@ -210,7 +207,7 @@ interface DeliveryContextType {
 const DeliveryContext = createContext<DeliveryContextType | undefined>(undefined);
 
 export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [orders, setOrders] = useState<Pedido[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Pedido[]>([]);
   const [client, setClient] = useState<Cliente>(DEMO_CLIENTE);
   const [clientWallet, setClientWallet] = useState<ClienteBilletera>(DEMO_CLIENTE_BILLETERA);
   const [registeredClients, setRegisteredClients] = useState<Cliente[]>(ALL_DEMO_CLIENTES);
@@ -221,7 +218,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ...DEMO_CONDUCTOR,
     billetera: DEMO_CONDUCTOR_BILLETERA
   });
-  const [allDrivers, setAllDrivers] = useState<Conductor[]>(ALL_DEMO_CONDUCTORES);
+  const [allDrivers, setAllDrivers] = useState<Conductor[]>([]);
   const [driverLoggedIn, setDriverLoggedIn] = useState<boolean>(false);
 
   const [stores, setStores] = useState<Comercio[]>(ALL_DEMO_COMERCIOS);
@@ -242,7 +239,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [storeWallet, setStoreWallet] = useState<ComercioBilletera>(DEMO_COMERCIO_BILLETERA);
 
-  const [rechargeRequests, setRechargeRequests] = useState<SolicitudRecarga[]>(INITIAL_RECHARGE_REQUESTS);
+  const [rechargeRequests, setRechargeRequests] = useState<SolicitudRecarga[]>([]);
   const [claims, setClaims] = useState<ReclamoCliente[]>(INITIAL_CLIENT_CLAIMS);
 
   const [incidents, setIncidents] = useState<Incidencia[]>(INITIAL_INCIDENTS);
@@ -502,12 +499,15 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const condRes = await api.getConductores(false).catch(() => null);
       if (condRes?.success && Array.isArray(condRes.conductores)) {
         const loadedDrivers: Conductor[] = condRes.conductores.map((d: any) => ({
-          id: String(d.id),
+          id: String(d.id || d.codigo_conductor || ('drv-' + Math.random())),
           nombre: d.nombre || 'Conductor',
           apellido: d.apellido || '',
           cedula: d.cedula || '',
           telefono: d.telefono || '',
-          fotoUrl: d.avatar_url || d.fotoUrl || '/banners/banner_comercios.jpg',
+          fotoUrl: d.avatar_url || d.foto_url || d.fotoUrl || '',
+          status: (d.status || d.estado_verificacion || 'pendiente') as any,
+          estadoVerificacion: (d.estado_verificacion || d.status || 'pendiente') as any,
+          codigoSolicitud: d.codigo_conductor || d.id,
           moto: (d.moto && typeof d.moto === 'object') ? d.moto : {
             marca: d.marca_moto || d.marca || 'Bera',
             modelo: d.modelo_moto || d.modelo || 'SBR 150',
@@ -517,7 +517,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           },
           legal: (d.legal && typeof d.legal === 'object') ? d.legal : {
             cedula: d.cedula || '',
-            licenciaGrado: '2da',
+            licenciaGrado: d.licencia_grado || '2da',
             licenciaNumero: d.licencia_numero || '',
             licenciaVencimiento: '2026-12-31',
             licenciaValida: true,
@@ -544,13 +544,31 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         }));
 
+        // Reemplazar con conductores reales de la BD (aunque venga vacío: nunca mostrar demo)
         setAllDrivers(loadedDrivers);
       }
 
-      // 5. Recargas reales
+      // 5. Recargas reales (normalizadas del shape MySQL crudo → SolicitudRecarga)
       const recRes = await api.getRecargas().catch(() => null);
       if (recRes?.success && Array.isArray(recRes.recargas)) {
-        setRechargeRequests(recRes.recargas);
+        setRechargeRequests((recRes.recargas as any[]).map((r: any) => ({
+          id: String(r.id || r.codigo_solicitud || r.codigoSolicitud || ('rec-' + Math.random())),
+          codigoSolicitud: r.codigo_solicitud || r.codigoSolicitud || String(r.id || ''),
+          usuarioTipo: r.tipo_usuario || r.usuarioTipo || 'conductor',
+          usuarioId: String(r.usuario_id || r.usuarioId || ''),
+          usuarioNombre: r.nombre_titular || r.usuario_nombre || r.usuarioNombre || 'Usuario',
+          usuarioCedula: r.usuario_cedula || r.cedula_titular || '',
+          montoUsd: Number(r.monto_usd || r.montoUsd || 0),
+          montoBs: Number(r.monto_bs || r.montoBs || 0),
+          metodoPago: r.metodo || r.metodo_pago || r.metodoPago || 'pago_movil',
+          referencia: r.referencia || 'S/P',
+          comprobanteUrl: r.comprobante_url || r.comprobanteUrl || '',
+          carpetaAlmacenamiento: r.carpeta_almacenamiento || r.carpetaAlmacenamiento || '',
+          fecha: r.creado_en || r.fecha_creacion || r.fecha || r.created_at || '',
+          estado: r.estado || 'pendiente',
+          autorizadoPor: r.revisado_por || '',
+          fechaResolucion: r.revisado_en || r.fecha_resolucion || ''
+        })));
       }
 
       // 6. Reclamos reales
@@ -1207,6 +1225,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setStore(prev => ({ ...prev, validado: true, status: 'aprobado', activo: true, abierto: true, origen_bd: 'delivery' }));
       }
       addNotification('web', '✅ Comercio Aprobado', `El comercio "${currentStore?.nombre || storeId}" fue validado y activado correctamente.`);
+      await refreshBackendData();
     } catch (e) {
       console.warn('Error aprobando comercio:', e);
     }
@@ -1220,6 +1239,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setStore(prev => ({ ...prev, status: 'rechazado', activo: false, abierto: false }));
       }
       addNotification('web', '❌ Solicitud Rechazada', 'El comercio ha sido rechazado y removido de la lista.');
+      await refreshBackendData();
     } catch (e) {
       console.warn('Error rechazando comercio:', e);
     }
@@ -1230,6 +1250,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await api.deleteComercio(storeId);
       setStores(prev => prev.filter(s => s.id !== storeId && s.rif !== storeId && s.codigoComercio !== storeId));
       addNotification('web', '🗑️ Comercio Eliminado', 'El comercio ha sido eliminado de la base de datos.');
+      await refreshBackendData();
     } catch (e) {
       console.warn('Error eliminando comercio:', e);
     }
@@ -1242,6 +1263,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (driver.id === driverId || driver.cedula === driverId) {
         setDriver(prev => ({ ...prev, disponible: true, status: 'aprobado' as any, estadoVerificacion: 'aprobado' as any }));
       }
+      await refreshBackendData();
       addNotification('web', '✅ Delivery Verificado', 'Repartidor verificado y activado para recibir pedidos.');
     } catch (e) {
       console.warn('Error aprobando repartidor:', e);
@@ -1255,6 +1277,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (driver.id === driverId || driver.cedula === driverId) {
         setDriver(prev => ({ ...prev, disponible: false, status: 'rechazado' as any, estadoVerificacion: 'rechazado' as any }));
       }
+      await refreshBackendData();
       addNotification('web', '❌ Delivery Rechazado', 'Cuenta de repartidor rechazada.');
     } catch (e) {
       console.warn('Error rechazando repartidor:', e);
@@ -1517,7 +1540,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             username: u.username || identifier,
             nombre: u.nombre || 'Administrador Vixy',
             email: u.email || `${identifier}@vixydelivery.com`,
-            nivelAcceso: (u.rol as any) || 'super_admin',
+            nivelAcceso: (u.nivel_acceso as any) || (u.nivelAcceso as any) || (u.rol as any) || 'super_admin',
             departamento: 'Dirección General y Operaciones',
             ultimoAcceso: 'Ahora mismo',
             activo: true,
@@ -1718,59 +1741,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   };
 
-  const [verificationPhotos, setVerificationPhotos] = useState<FotoVerificacion[]>([
-    {
-      id: 'foto-8041',
-      pedidoId: 'ped-8041',
-      url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
-      fecha: '2026-09-02 15:35:38',
-      conductorId: 'cond-001',
-      conductorNombre: 'Yeferson Ramírez',
-      clienteNombre: 'Mariana Pérez',
-      coordenadas: '10.4981° N, 66.8445° W (Los Palos Grandes)',
-      comentario: 'Entregado a la cliente en mano en lobby de Res. Ávila.'
-    }
-  ]);
+  const [verificationPhotos, setVerificationPhotos] = useState<FotoVerificacion[]>([]);
 
-  const [chatMessages, setChatMessages] = useState<MensajeChat[]>([
-    {
-      id: 'msg-1',
-      pedidoId: 'ped-8042',
-      emisorTipo: 'cliente',
-      emisorNombre: 'Carlos Mendoza',
-      mensaje: 'Buenas tardes, por favor toquen el timbre 72 cuando lleguen a la torre este.',
-      timestamp: '16:25',
-      leido: true
-    },
-    {
-      id: 'msg-2',
-      pedidoId: 'ped-8042',
-      emisorTipo: 'conductor',
-      emisorNombre: 'Yeferson Ramírez',
-      mensaje: 'Entendido señor Carlos, ya salgo del local en mi moto con su pedido protegido.',
-      timestamp: '16:33',
-      leido: true
-    }
-  ]);
+  const [chatMessages, setChatMessages] = useState<MensajeChat[]>([]);
 
-  const [supportMessages, setSupportMessages] = useState<MensajeSoporte[]>([
-    {
-      id: 'sup-1',
-      emisor: 'usuario',
-      usuarioTipo: 'cliente',
-      usuarioNombre: 'Carlos Mendoza',
-      texto: 'Hola, quería consultar si aceptan Pago Móvil interbancario inmediato.',
-      timestamp: '16:10'
-    },
-    {
-      id: 'sup-2',
-      emisor: 'agente',
-      usuarioTipo: 'cliente',
-      usuarioNombre: 'Soporte Vixy (Daniela)',
-      texto: '¡Hola Carlos! Sí, todos los pagos móviles directos al comercio son procesados al instante con su número de referencia.',
-      timestamp: '16:11'
-    }
-  ]);
+  const [supportMessages, setSupportMessages] = useState<MensajeSoporte[]>([]);
 
   // Modals
   const [callModal, setCallModal] = useState({ isOpen: false, caller: '', callee: '', phone: '', role: '' });

@@ -65,23 +65,42 @@ function normalizarComercio($c, $origen = 'delivery') {
         'nombre_comercial' => $nombre,
         'nombreComercial' => $nombre,
         'nombre_representante' => $c['nombre_representante'] ?? '',
+        'nombreRepresentante' => $c['nombre_representante'] ?? '',
         'cedula_representante' => $c['cedula_representante'] ?? '',
+        'cedulaRepresentante' => $c['cedula_representante'] ?? '',
         'rif' => $rif,
         'rif_cedula_juridica' => $rif,
+        'tipo_registro' => $c['tipo_registro'] ?? 'rif',
+        'tipoRegistro' => $c['tipo_registro'] ?? 'rif',
+        'tipo_comercio' => $c['tipo_comercio'] ?? ($c['categoria_negocio'] ?? $cat),
+        'tipoComercio' => $c['tipo_comercio'] ?? ($c['categoria_negocio'] ?? $cat),
         'categoria' => $cat,
         'categoria_principal' => $catPrincipal,
         'categoriaPrincipal' => $catPrincipal,
         'email' => $email,
         'telefono' => $c['telefono_comercio'] ?? ($c['telefono'] ?? ''),
         'telefono_adicional' => $c['telefono_adicional'] ?? '',
+        'telefonoAdicional' => $c['telefono_adicional'] ?? '',
         'direccion' => $c['direccion_negocio'] ?? ($c['direccion'] ?? 'Caracas, Venezuela'),
         'punto_referencia' => $c['punto_referencia'] ?? '',
+        'puntoReferencia' => $c['punto_referencia'] ?? '',
         'ubicacion_gps' => $c['ubicacion_gps'] ?? '',
+        'ubicacionGps' => $c['ubicacion_gps'] ?? '',
+        'cantidad_sucursales' => intval($c['cantidad_sucursales'] ?? 1),
+        'cantidadSucursales' => intval($c['cantidad_sucursales'] ?? 1),
+        'descripcion_negocio' => $c['descripcion_negocio'] ?? ($c['descripcion'] ?? ''),
+        'descripcionNegocio' => $c['descripcion_negocio'] ?? ($c['descripcion'] ?? ''),
+        'descripcion' => $c['descripcion_negocio'] ?? ($c['descripcion'] ?? ''),
+        'redes_sociales' => $c['redes_sociales'] ?? '',
+        'redesSociales' => $c['redes_sociales'] ?? '',
         'hora_apertura' => $c['hora_apertura'] ?? '08:00:00',
         'hora_cierre' => $c['hora_cierre'] ?? '22:00:00',
         'dias_operacion' => $dias,
         'horarios' => $horarioTxt,
         'horarioApertura' => $horarioTxt,
+        'horariosAtencion' => $horarioTxt,
+        'foto_comercio' => $c['foto_comercio'] ?? '',
+        'foto_comercio_url' => (!empty(trim($c['foto_comercio_url'] ?? '')) ? trim($c['foto_comercio_url']) : (!empty(trim($c['logo_url'] ?? '')) ? trim($c['logo_url']) : '')),
         'logo_url' => (!empty(trim($c['foto_comercio_url'] ?? '')) ? trim($c['foto_comercio_url']) : (!empty(trim($c['logo_url'] ?? '')) ? trim($c['logo_url']) : '/banners/banner_comercios.jpg')),
         'logoUrl' => (!empty(trim($c['foto_comercio_url'] ?? '')) ? trim($c['foto_comercio_url']) : (!empty(trim($c['logo_url'] ?? '')) ? trim($c['logo_url']) : '/banners/banner_comercios.jpg')),
         'banner_url' => (!empty(trim($c['portada_url'] ?? '')) ? trim($c['portada_url']) : (!empty(trim($c['foto_comercio_url'] ?? '')) ? trim($c['foto_comercio_url']) : (!empty(trim($c['logo_url'] ?? '')) ? trim($c['logo_url']) : '/banners/banner_comercios.jpg'))),
@@ -203,21 +222,22 @@ if ($method === 'GET') {
 // PUT: ACTUALIZAR ESTADO, HORARIOS O APROBACIÓN DE COMERCIO
 // -----------------------------------------------------------------------------
 if ($method === 'PUT' && $id) {
-    // Verificación permisiva: aceptar JWT admin o acceso interno del panel
+    // Verificación permisiva: aceptar JWT admin, token de comercio/conductor para
+    // acciones ligeras, o la clave interna del panel (X-Vixy-Admin-Key)
     $authUser = AuthMiddleware::verifyToken();
+    $hasPanelKey = AuthMiddleware::hasAdminKey();
+    $actionLigera = in_array($action, ['aprobar_comercio', 'aprobar', 'rechazar_comercio', 'rechazar', 'toggle_status']);
+
     if (!$authUser) {
-        // Si no hay token, verificar si hay una clave de admin de panel interna
-        $adminKey = $_SERVER['HTTP_X_ADMIN_KEY'] ?? $_SERVER['HTTP_X_VIXY_ADMIN'] ?? '';
-        if ($adminKey !== 'vixy_admin_panel_2026' && !in_array($action, ['aprobar_comercio', 'aprobar', 'rechazar_comercio', 'rechazar', 'toggle_status'])) {
+        if (!$hasPanelKey && !$actionLigera) {
             Database::jsonResponse(['error' => true, 'mensaje' => 'Acceso denegado: Token no provisto o expirado'], 401);
         }
     } else {
         $userRole = $authUser['tipo_usuario'] ?? $authUser['nivel_acceso'] ?? '';
-        if (!in_array($userRole, ['super_admin', 'operador', 'comercio', 'conductor']) && $userRole !== 'super_admin') {
-            // Para acciones de administración permiti aunque sea comercio autenticado
-            if (!in_array($action, ['aprobar_comercio', 'aprobar', 'rechazar_comercio', 'rechazar', 'toggle_status'])) {
-                Database::jsonResponse(['error' => true, 'mensaje' => 'Permisos insuficientes'], 403);
-            }
+        $esAdmin = $userRole === 'super_admin' || ($authUser['nivel_acceso'] ?? '') === 'super_admin'
+            || in_array($userRole, ['operador', 'comercio', 'conductor']);
+        if (!$esAdmin && !$hasPanelKey && !$actionLigera) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'Permisos insuficientes'], 403);
         }
     }
 
@@ -373,6 +393,9 @@ if ($method === 'PUT' && $id) {
 
     // 2.2 Acción: eliminar_comercio (Eliminación de comercio validado en c2861522_vixy_dl)
     if ($action === 'eliminar_comercio' || $action === 'eliminar' || $method === 'DELETE') {
+        // Solo administración real (JWT admin o clave del panel)
+        AuthMiddleware::requireAdmin(['super_admin', 'operador']);
+
         try {
             // Eliminar productos asociados primero
             $stP = $pdo->prepare("DELETE FROM productos WHERE comercio_id = :id");
@@ -433,6 +456,28 @@ if ($method === 'PUT' && $id) {
 // POST: CREAR O REGISTRAR COMERCIO DESDE EL ADMIN PANEL
 // -----------------------------------------------------------------------------
 if ($method === 'POST') {
+    // El panel actual elimina comercios por POST con action=eliminar_comercio
+    if ($action === 'eliminar_comercio' || $action === 'eliminar') {
+        AuthMiddleware::requireAdmin(['super_admin', 'operador']);
+        $eliminarId = $_GET['id'] ?? ($_POST['id'] ?? null);
+        if (!$eliminarId) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'ID de comercio requerido'], 400);
+        }
+        try {
+            $stP = $pdo->prepare("DELETE FROM productos WHERE comercio_id = :id");
+            $stP->execute(['id' => $eliminarId]);
+            $st = $pdo->prepare("DELETE FROM comercios WHERE id = :id OR rif = :id2");
+            $st->execute(['id' => $eliminarId, 'id2' => $eliminarId]);
+        } catch (Exception $e) {}
+        if ($pdoRegist) {
+            try {
+                $stR = $pdoRegist->prepare("UPDATE comercios SET status = 'rechazado' WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3");
+                $stR->execute(['id' => $eliminarId, 'id2' => $eliminarId, 'id3' => $eliminarId]);
+            } catch (Exception $e) {}
+        }
+        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio eliminado exitosamente']);
+    }
+
     AuthMiddleware::requireAuth(['super_admin', 'operador']);
     $data = Database::getJsonInput();
 

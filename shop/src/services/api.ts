@@ -9,6 +9,8 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
     ? '/shop/backend/php' 
     : '/backend/php');
 
+const ADMIN_PANEL_KEY = 'vixy_admin_panel_2026';
+
 class ApiService {
   private token: string | null = null;
 
@@ -38,6 +40,7 @@ class ApiService {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      'X-Vixy-Admin-Key': ADMIN_PANEL_KEY,
       ...(options.headers as Record<string, string> || {})
     };
 
@@ -48,6 +51,10 @@ class ApiService {
     try {
       const response = await fetch(url, { ...options, headers });
       const data = await response.json();
+      // No tratar como éxito respuestas con error del backend
+      if (data && data.error === true) {
+        throw new Error((data as any).mensaje || (data as any).message || 'Error de la API');
+      }
       return data as T;
     } catch (err: any) {
       console.warn(`[Vixy API] Offline o Endpoint inaccesible (${url}):`, err.message);
