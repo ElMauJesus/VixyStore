@@ -1,7 +1,7 @@
 <?php
 /**
  * Vixy Delivery Platform - Endpoint de Configuración Global y Tasas
- * Devuelve tasa BCV, tarifas oficiales ($2.00 base, +$0.50/km), límite de saldo (-$0.50), etc.
+ * Devuelve tasa BCV, tarifas oficiales ($2.00 base, +$0.50/km), límite de saldo ($0.00: recarga obligatoria), etc.
  */
 
 require_once __DIR__ . '/config/db.php';
@@ -59,7 +59,7 @@ if ($method === 'GET') {
                 'tarifa_base_usd' => 2.00,
                 'km_base' => 3.0,
                 'precio_km_adicional_usd' => 0.50,
-                'limite_saldo_negativo_conductor_usd' => -0.50,
+                'limite_saldo_negativo_conductor_usd' => 0.00,
                 'comision_plataforma_porcentaje' => 15.0,
                 'porcentaje_comision_comercio' => 0.00,
                 'carteras_habilitadas_global' => 1,

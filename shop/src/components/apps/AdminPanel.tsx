@@ -150,17 +150,17 @@ export const AdminPanel: React.FC = () => {
   // If admin is not logged in, show sleek login portal
   if (!adminIsLoggedIn) {
     return (
-      <div className="flex items-center justify-center min-h-full bg-slate-950 p-4 font-sans text-slate-100">
+      <div className="vixy-admin flex items-center justify-center min-h-full bg-slate-950 p-4 font-sans text-slate-100">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5">
           <div className="text-center space-y-2">
-            <h1 className="text-2xl font-black tracking-tighter text-orange-500 italic">
+            <h1 className="text-2xl font-black tracking-tighter text-violet-500 italic">
               VIXY <span className="text-white not-italic">ADMIN</span>
             </h1>
             <p className="text-xs text-slate-400">
               Panel de Control Centralizado y Gestión RBAC • Caracas
             </p>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
               <span>Autenticación Segura MySQL / PHP</span>
             </div>
           </div>
@@ -181,7 +181,7 @@ export const AdminPanel: React.FC = () => {
                 onChange={(e) => setLoginIdentifier(e.target.value)}
                 placeholder="Usuario o correo electrónico"
                 required
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-orange-500 font-mono"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-violet-500 font-mono"
               />
             </div>
 
@@ -193,14 +193,14 @@ export const AdminPanel: React.FC = () => {
                 onChange={(e) => setLoginPassword(e.target.value)}
                 placeholder="Contraseña"
                 required
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-orange-500 font-mono"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-violet-500 font-mono"
               />
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer"
+              className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer"
             >
               {isSubmitting ? 'Verificando credenciales...' : 'Acceder al Panel Web'}
             </button>
@@ -217,10 +217,10 @@ export const AdminPanel: React.FC = () => {
   // Si el usuario tiene la bandera `debeCambiarClave === true`, se le fuerza a cambiar la clave
   if (currentAdminUser.debeCambiarClave) {
     return (
-      <div className="flex items-center justify-center min-h-full bg-slate-950 p-4 font-sans text-slate-100">
-        <div className="max-w-md w-full bg-slate-900 border border-orange-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+      <div className="vixy-admin flex items-center justify-center min-h-full bg-slate-950 p-4 font-sans text-slate-100">
+        <div className="max-w-md w-full bg-slate-900 border border-violet-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center mx-auto border border-orange-500/30">
+            <div className="w-12 h-12 rounded-2xl bg-violet-500/20 text-violet-400 flex items-center justify-center mx-auto border border-violet-500/30">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <h2 className="text-lg font-bold text-white">
@@ -231,7 +231,7 @@ export const AdminPanel: React.FC = () => {
             </p>
           </div>
 
-          <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl text-xs text-orange-400 space-y-1">
+          <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl text-xs text-violet-400 space-y-1">
             <div className="font-bold flex items-center gap-1.5">
               <span>🔐 Política de Seguridad Vixy:</span>
             </div>
@@ -261,7 +261,7 @@ export const AdminPanel: React.FC = () => {
                 value={newPasswordVal}
                 onChange={(e) => setNewPasswordVal(e.target.value)}
                 placeholder="Mínimo 6 caracteres"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-orange-500 font-mono"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-violet-500 font-mono"
               />
             </div>
 
@@ -273,7 +273,7 @@ export const AdminPanel: React.FC = () => {
                 value={confirmPasswordVal}
                 onChange={(e) => setConfirmPasswordVal(e.target.value)}
                 placeholder="Repite tu nueva contraseña"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-orange-500 font-mono"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white outline-hidden focus:border-violet-500 font-mono"
               />
             </div>
 
@@ -287,7 +287,7 @@ export const AdminPanel: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="w-2/3 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer"
+                className="w-2/3 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer"
               >
                 Guardar y Acceder
               </button>
@@ -299,19 +299,19 @@ export const AdminPanel: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full bg-[#F1F5F9] dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
+    <div className="vixy-admin flex h-full bg-[#F1F5F9] dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
       {/* Bento Sidebar */}
       <aside className="w-64 bg-[#0F172A] text-white flex flex-col shrink-0 border-r border-slate-800">
         {/* Brand */}
         <div className="p-6 border-b border-slate-700/80">
-          <h1 className="text-2xl font-bold tracking-tighter text-orange-500 italic">
+          <h1 className="text-2xl font-bold tracking-tighter text-violet-500 italic">
             VIXY <span className="text-white not-italic font-bold">MANAGEMENT</span>
           </h1>
           <div className="flex items-center justify-between mt-1">
             <p className="text-[10px] text-slate-400 uppercase tracking-widest">
               Centralized Admin v2.2
             </p>
-            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-bold uppercase">
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 font-bold uppercase">
               RBAC Activo
             </span>
           </div>
@@ -323,13 +323,13 @@ export const AdminPanel: React.FC = () => {
             <img 
               src={currentAdminUser.avatarUrl} 
               alt={currentAdminUser.nombre} 
-              className="w-8 h-8 rounded-lg object-cover border border-orange-500/50 shrink-0" 
+              className="w-8 h-8 rounded-lg object-cover border border-violet-500/50 shrink-0" 
             />
             <div className="min-w-0">
               <p className="text-xs font-bold text-white truncate leading-tight">
                 {currentAdminUser.nombre}
               </p>
-              <span className="text-[10px] text-orange-400 uppercase font-mono block">
+              <span className="text-[10px] text-violet-300 uppercase font-mono block">
                 {currentAdminUser.nivelAcceso.replace('_', ' ')}
               </span>
             </div>
@@ -354,13 +354,13 @@ export const AdminPanel: React.FC = () => {
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs uppercase tracking-wide font-semibold transition cursor-pointer ${
                   isActive
-                    ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20'
+                    ? 'bg-violet-500/15 text-violet-300 border border-violet-500/30'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-2.5 min-w-0">
                   {isActive ? (
-                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse shrink-0" />
+                    <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse shrink-0" />
                   ) : (
                     <Icon className="w-4 h-4 text-slate-400 shrink-0" />
                   )}
@@ -368,7 +368,7 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 {item.badge !== undefined && item.badge > 0 && (
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold text-white shrink-0 ${item.badgeColor || 'bg-orange-600'}`}>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold text-white shrink-0 ${item.badgeColor || 'bg-violet-600'}`}>
                     {item.badge}
                   </span>
                 )}
@@ -446,7 +446,7 @@ export const AdminPanel: React.FC = () => {
                         }}
                         className={`w-full p-2 rounded-xl text-left text-xs flex items-center justify-between transition cursor-pointer ${
                           isSelected 
-                            ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold' 
+                            ? 'bg-violet-500/15 text-violet-500 font-bold' 
                             : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                         }`}
                       >
@@ -457,7 +457,7 @@ export const AdminPanel: React.FC = () => {
                             <span className="text-[10px] text-slate-400">{u.nivelAcceso} • {u.pestanasPermitidas.length} pestañas</span>
                           </div>
                         </div>
-                        {isSelected && <span className="text-orange-500 text-xs">✓</span>}
+                        {isSelected && <span className="text-violet-500 text-xs">✓</span>}
                       </button>
                     );
                   })}

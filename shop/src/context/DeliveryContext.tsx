@@ -289,6 +289,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const storeName = c.nombre || c.nombre_comercial || c.nombreComercial || 'Comercio';
 
           return {
+            ...c,
             id: String(c.id || c.codigo_comercio || c.codigoComercio || ''),
             codigoComercio: c.codigo_comercio || c.codigoComercio || c.id || '',
             nombre: storeName,
@@ -405,11 +406,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               ...c,
               cedula: c.cedula || c.legal?.cedula || '',
               moto: {
-                marca: c.moto?.marca || c.marca_moto || c.marca || 'Bera',
-                modelo: c.moto?.modelo || c.modelo_moto || c.modelo || 'SBR 150',
-                color: c.moto?.color || c.color_moto || c.color || 'Negro',
+                marca: c.moto?.marca || c.marca_moto || c.marca || 'Moto',
+                modelo: c.moto?.modelo || c.modelo_moto || c.modelo || '',
+                color: c.moto?.color || c.color_moto || c.color || '',
                 placa: c.moto?.placa || c.placa_moto || c.placa || '',
-                ano: Number(c.moto?.ano || c.ano_moto || c.ano || 2024),
+                ano: Number(c.moto?.ano || c.ano_moto || c.ano || 0),
                 serialMotor: c.moto?.serialMotor || c.serial_motor || '',
                 serialChasis: c.moto?.serialChasis || c.serial_chasis || '',
                 ...(typeof c.moto === 'object' ? c.moto : {})
@@ -438,11 +439,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               telefono: p.conductor_telefono || '',
               fotoUrl: '/banners/banner_comercios.jpg',
               moto: {
-                marca: p.conductor_marca || 'Bera',
-                modelo: p.conductor_modelo || 'SBR 150',
-                color: 'Negro',
+                marca: p.conductor_marca || 'Moto',
+                modelo: p.conductor_modelo || '',
+                color: '',
                 placa: p.conductor_placa || '',
-                ano: 2024,
+                ano: 0,
                 serialMotor: '',
                 serialChasis: ''
               },
@@ -499,6 +500,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const condRes = await api.getConductores(false).catch(() => null);
       if (condRes?.success && Array.isArray(condRes.conductores)) {
         const loadedDrivers: Conductor[] = condRes.conductores.map((d: any) => ({
+          ...d,
           id: String(d.id || d.codigo_conductor || ('drv-' + Math.random())),
           nombre: d.nombre || 'Conductor',
           apellido: d.apellido || '',
@@ -509,11 +511,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           estadoVerificacion: (d.estado_verificacion || d.status || 'pendiente') as any,
           codigoSolicitud: d.codigo_conductor || d.id,
           moto: (d.moto && typeof d.moto === 'object') ? d.moto : {
-            marca: d.marca_moto || d.marca || 'Bera',
-            modelo: d.modelo_moto || d.modelo || 'SBR 150',
-            color: d.color_moto || d.color || 'Negro',
+            marca: d.marca_moto || d.marca || 'Moto',
+            modelo: d.modelo_moto || d.modelo || '',
+            color: d.color_moto || d.color || '',
             placa: d.placa_moto || d.placa || '',
-            ano: Number(d.ano_moto || d.ano || 2024)
+            ano: Number(d.ano_moto || d.ano || 0)
           },
           legal: (d.legal && typeof d.legal === 'object') ? d.legal : {
             cedula: d.cedula || '',
@@ -1388,24 +1390,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return { success: false, error: res?.mensaje || 'Credenciales comerciales incorrectas. Verifica tu RIF o contraseña.' };
       }
     } catch (err: any) {
-      // Fallback local en caso de que esté offline
-      const clean = identifier.trim().toLowerCase();
-      const localStore = stores.find(s => 
-        (s.rif && s.rif.toLowerCase() === clean) ||
-        (s.email && s.email.toLowerCase() === clean) ||
-        (s.codigoComercio && s.codigoComercio.toLowerCase() === clean)
-      );
-
-      if (localStore) {
-        setStore(localStore);
-        setStoreLoggedIn(true);
-        try {
-          localStorage.setItem('vixy_store_session', JSON.stringify(localStore));
-        } catch (e) {}
-        return { success: true };
-      }
-
-      return { success: false, error: 'No se pudo verificar el comercio en el servidor. Verifica tus credenciales o conexión.' };
+      // El backend pudo responder 403 (comercio sin verificar, credenciales incorrectas,
+      // cuenta inactiva, etc.) o la red estar caída. NUNCA iniciar sesión sin esta
+      // verificación del servidor: solo un comercio validado puede entrar.
+      const msg = (err && err.message) ? String(err.message) : '';
+      return { success: false, error: msg || 'No se pudo verificar el comercio en el servidor. Verifica tus credenciales o conexión.' };
     }
   };
 

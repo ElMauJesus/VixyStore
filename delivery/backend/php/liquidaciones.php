@@ -30,11 +30,11 @@ if ($method === 'GET') {
             // Filtro Temporal
             $whereFecha = "";
             if ($periodo === 'dia') {
-                $whereFecha = "WHERE DATE(p.fecha_creacion) = CURRENT_DATE()";
+                $whereFecha = "WHERE DATE(p.creado_en) = CURRENT_DATE()";
             } elseif ($periodo === 'semana') {
-                $whereFecha = "WHERE p.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+                $whereFecha = "WHERE p.creado_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
             } elseif ($periodo === 'mes') {
-                $whereFecha = "WHERE p.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+                $whereFecha = "WHERE p.creado_en >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
             } else {
                 $whereFecha = "WHERE 1=1"; // Histórico
             }
@@ -43,8 +43,8 @@ if ($method === 'GET') {
             $sqlEntregados = "
                 SELECT 
                     COUNT(p.id) as cant_deliverys,
-                    COALESCE(SUM(p.costo_envio), 0) as flete_bruto_usd,
-                    COALESCE(SUM(p.subtotal), 0) as ventas_comercios_usd
+                    COALESCE(SUM(p.costo_envio_usd), 0) as flete_bruto_usd,
+                    COALESCE(SUM(p.monto_subtotal_usd), 0) as ventas_comercios_usd
                 FROM pedidos p
                 $whereFecha AND p.estado = 'entregado'
             ";
@@ -78,22 +78,23 @@ if ($method === 'GET') {
             $gananciaTotalBs = round($gananciaTotalUsd * $tasaBcv, 2);
 
             // Custodia Activa en Tránsito
-            $stmtCustodia = $pdo->query("SELECT COUNT(id) as count_custodia, COALESCE(SUM(total), 0) as saldo_custodia_usd FROM pedidos WHERE estado IN ('en_preparacion', 'asignado', 'en_camino')");
+            $stmtCustodia = $pdo->query("SELECT COUNT(id) as count_custodia, COALESCE(SUM(monto_total_usd), 0) as saldo_custodia_usd FROM pedidos WHERE estado IN ('en_preparacion', 'esperando_repartidor', 'en_camino_al_cliente')");
             $custodiaRow = $stmtCustodia->fetch();
             $custodiaUsd = floatval($custodiaRow['saldo_custodia_usd']);
             $custodiaBs = round($custodiaUsd * $tasaBcv, 2);
 
             // Últimos 50 pedidos entregados en el período
+            // Últimos 50 pedidos entregados en el período
             $sqlLista = "
                 SELECT 
-                    p.id, p.codigo_seguimiento, p.fecha_creacion, p.costo_envio, p.subtotal, p.total,
+                    p.id, p.codigo_seguimiento, p.creado_en, p.costo_envio_usd, p.monto_subtotal_usd, p.monto_total_usd,
                     c.nombre as comercio_nombre, c.rif as comercio_rif,
                     cond.nombre as conductor_nombre, cond.telefono as conductor_telefono
                 FROM pedidos p
                 LEFT JOIN comercios c ON p.comercio_id = c.id
                 LEFT JOIN conductores cond ON p.conductor_id = cond.id
                 $whereFecha AND p.estado = 'entregado'
-                ORDER BY p.fecha_creacion DESC LIMIT 50
+                ORDER BY p.creado_en DESC LIMIT 50
             ";
             $stmtLista = $pdo->query($sqlLista);
             $pedidosList = $stmtLista->fetchAll();

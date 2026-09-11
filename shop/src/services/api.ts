@@ -44,6 +44,12 @@ class ApiService {
       ...(options.headers as Record<string, string> || {})
     };
 
+    // Si el cuerpo es FormData (multipart), el navegador fija el Content-Type
+    // automáticamente con el boundary; no se debe forzar application/json.
+    if (options.body instanceof FormData) {
+      delete headers['Content-Type'];
+    }
+
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
     }

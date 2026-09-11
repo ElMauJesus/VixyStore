@@ -18,6 +18,7 @@ import {
   Receipt,
   Eye,
   ExternalLink,
+  Download,
   CreditCard,
   CheckCircle2,
   XCircle,
@@ -1030,9 +1031,9 @@ export const DriversManager: React.FC = () => {
                       <div className="p-3 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-1">
                         <span className="text-[10px] font-bold text-neutral-400 uppercase">Marca & Modelo</span>
                         <p className="font-bold text-neutral-900 dark:text-white text-sm">
-                          {selectedDriver.moto?.marca || 'Bera'} {selectedDriver.moto?.modelo || 'SBR'} {selectedDriver.moto?.ano ? `(${selectedDriver.moto.ano})` : ''}
+                          {selectedDriver.moto?.marca || 'Moto'} {selectedDriver.moto?.modelo || ''} {selectedDriver.moto?.ano ? `(${selectedDriver.moto.ano})` : ''}
                         </p>
-                        <p className="text-[10px] text-neutral-500">Color: {selectedDriver.moto?.color || 'Negro'}</p>
+                        <p className="text-[10px] text-neutral-500">Color: {selectedDriver.moto?.color || 'N/D'}</p>
                       </div>
 
                       <div className="p-3 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-1">
@@ -1072,7 +1073,7 @@ export const DriversManager: React.FC = () => {
                         <span>Expediente Documental Registrado</span>
                       </h4>
                       <p className="text-xs text-neutral-400 mt-0.5">
-                        Documentos auditables almacenados en carpeta de verificación del repartidor (imgs-c-d/deliverys/{selectedDriver.id}).
+                        Documentos auditables guardados en la carpeta del repartidor (uploads/conductores/{selectedDriver.id}/) o en imgs-c-d/deliverys/{selectedDriver.id}.
                       </p>
                     </div>
                     {getDriverStatusBadge(selectedDriver)}
@@ -1080,30 +1081,40 @@ export const DriversManager: React.FC = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     {[
-                      { key: 'cedula', title: 'Cédula de Identidad', file: 'cedula_identidad.svg' },
-                      { key: 'licencia', title: 'Licencia de Conducir', file: 'licencia_conducir.svg' },
-                      { key: 'carnet', title: 'Carnet de Circulación', file: 'carnet_circulacion.svg' },
-                      { key: 'medico', title: 'Certificado Médico', file: 'certificado_medico.svg' },
-                      { key: 'rcv', title: 'Póliza RCV Vigente', file: 'poliza_rcv.svg' },
-                      { key: 'foto', title: 'Fotografía de Perfil', file: 'foto_perfil.svg' },
+                      { key: 'cedula', docKey: 'cedula', title: 'Cédula de Identidad', file: 'cedula_identidad.svg' },
+                      { key: 'cedula_reverso', docKey: 'cedula_reverso', title: 'Cédula (reverso)', file: 'cedula_reverso.svg' },
+                      { key: 'licencia', docKey: 'licencia', title: 'Licencia de Conducir', file: 'licencia_conducir.svg' },
+                      { key: 'carnet', docKey: 'carnet_circulacion', title: 'Carnet de Circulación', file: 'carnet_circulacion.svg' },
+                      { key: 'medico', docKey: 'certificado_medico', title: 'Certificado Médico', file: 'certificado_medico.svg' },
+                      { key: 'rcv', docKey: 'rcv', title: 'Póliza RCV Vigente', file: 'poliza_rcv.svg' },
+                      { key: 'antecedentes', docKey: 'antecedentes', title: 'Antecedentes Penales', file: 'antecedentes.svg' },
+                      { key: 'foto', docKey: 'foto_perfil', title: 'Fotografía de Perfil', file: 'foto_perfil.svg' },
                     ].map(doc => {
-                      const docUrl = `/imgs-c-d/deliverys/${selectedDriver.id}/${doc.file}`;
+                      const realUrl = selectedDriver.documentos?.[doc.docKey] || null;
+                      const docUrl = realUrl || `/imgs-c-d/deliverys/${selectedDriver.id}/${doc.file}`;
+                      const originalName = realUrl ? (realUrl.split('/').pop() || doc.file) : doc.file;
                       return (
                         <div key={doc.key} className="p-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 flex flex-col justify-between space-y-2 hover:border-amber-500/50 transition">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-bold text-neutral-200">{doc.title}</span>
-                            <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                              Adjunto
-                            </span>
+                            {realUrl ? (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                Subido
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                Sin adjuntar
+                              </span>
+                            )}
                           </div>
-                          
-                          <div 
+
+                          <div
                             onClick={() => setInspectingDoc({ title: doc.title, url: docUrl })}
                             className="h-32 bg-neutral-950 rounded-xl border border-neutral-800 flex items-center justify-center overflow-hidden cursor-pointer group relative"
                           >
-                            <img 
-                              src={docUrl} 
-                              alt={doc.title} 
+                            <img
+                              src={realUrl || docUrl}
+                              alt={doc.title}
                               className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform"
                               onError={(e: any) => {
                                 e.target.onerror = null;
@@ -1116,14 +1127,26 @@ export const DriversManager: React.FC = () => {
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => setInspectingDoc({ title: doc.title, url: docUrl })}
-                            className="w-full py-1.5 text-center text-xs font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Inspeccionar Archivo</span>
-                          </button>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setInspectingDoc({ title: doc.title, url: docUrl })}
+                              className="w-full py-1.5 text-center text-xs font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Ver</span>
+                            </button>
+                            <a
+                              href={docUrl}
+                              download={realUrl ? originalName : undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full py-1.5 text-center text-xs font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 rounded-lg transition flex items-center justify-center gap-1"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Descargar</span>
+                            </a>
+                          </div>
                         </div>
                       );
                     })}

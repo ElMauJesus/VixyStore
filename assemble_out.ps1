@@ -96,7 +96,7 @@ Copy-Item -Path "delivery/backend/php/config/*" -Destination "out/api/config" -R
 if (-not (Test-Path "out/api/uploads")) {
     New-Item -ItemType Directory -Path "out/api/uploads" -Force | Out-Null
 }
-$uploadDirs = @("admin","comercios","comprobantes","entregas","productos","reclamos")
+$uploadDirs = @("admin","comercios","comprobantes","entregas","productos","reclamos","conductores")
 foreach ($ud in $uploadDirs) {
     if (-not (Test-Path "out/api/uploads/$ud")) {
         New-Item -ItemType Directory -Path "out/api/uploads/$ud" -Force | Out-Null

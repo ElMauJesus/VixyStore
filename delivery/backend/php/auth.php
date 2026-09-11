@@ -11,26 +11,6 @@ require_once __DIR__ . '/config/auth_middleware.php';
 $pdo = Database::getConnection();
 $action = $_GET['action'] ?? 'login';
 
-// Health check / Ping de conexión para APK y pruebas del servidor
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($action === 'login' || $action === 'ping' || $action === 'check' || $action === 'status')) {
-    Database::jsonResponse([
-        'ok' => true,
-        'success' => true,
-        'status' => 'online',
-        'servicio' => 'Vixy Auth API',
-        'mensaje' => 'Servicio de autenticación Vixy activo y conectado'
-    ]);
-}
-
-if ($action === 'ping' || $action === 'check') {
-    Database::jsonResponse([
-        'ok' => true,
-        'success' => true,
-        'status' => 'online',
-        'servicio' => 'Vixy Auth API'
-    ]);
-}
-
 // -----------------------------------------------------------------------------
 // ACCIÓN: LOGIN (ADMIN, CLIENTE, COMERCIO, CONDUCTOR)
 // -----------------------------------------------------------------------------
@@ -38,6 +18,16 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = Database::getJsonInput();
     $identifier = trim($input['username'] ?? $input['email'] ?? $input['login'] ?? $input['telefono'] ?? '');
     $password = trim($input['password'] ?? '');
+    $appRole = trim($input['app_role'] ?? '');
+    $identifierCompact = preg_replace('/[\s-]+/', '', $identifier);
+    $identifierUsername = ltrim($identifier, '@');
+    $identifierEmail = strpos($identifier, '@') === false || $identifier === '@' . $identifierUsername
+        ? $identifierUsername . '@vixy.uno'
+        : $identifier;
+    $commerceRif = strtoupper($identifier);
+    if (preg_match('/^\d+$/', $commerceRif)) {
+        $commerceRif = 'J-' . $commerceRif;
+    }
 
     if (empty($identifier) || empty($password)) {
         Database::jsonResponse([
@@ -46,7 +36,8 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         ], 400);
     }
 
-    // 1. Verificar primero en usuarios administrativos web (Superusuario vixydely / 123456)
+    // 1. Verificar usuarios administrativos solo cuando no se fuerce otro rol.
+    if ($appRole === '' || $appRole === 'admin') {
     $stmt = $pdo->prepare("
         SELECT id, username, password_hash, nombre, email, nivel_acceso, departamento, 
                activo, debe_cambiar_clave, fecha_ultimo_cambio_clave, fecha_vencimiento_clave, 
@@ -79,7 +70,7 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $upd = $pdo->prepare("UPDATE usuarios_administracion_web SET ultimo_acceso = NOW() WHERE id = :id");
         $upd->execute(['id' => $admin['id']]);
 
-        $token = AuthMiddleware::generateToken([
+        $token = AuthMiddleware::issueToken($pdo, [
             'id' => $admin['id'],
             'username' => $admin['username'],
             'email' => $admin['email'],
@@ -111,17 +102,21 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             'mensaje' => $debeCambiar ? 'Debe cambiar su contraseña obligatoriamente' : 'Inicio de sesión exitoso'
         ]);
+        }
     }
 
     // 2. Verificar en tabla Clientes (App Delivery Cliente)
-    $stmtClient = $pdo->prepare("SELECT id, nombre, email, telefono, password_hash, direccion_habitual, activo FROM clientes WHERE email = :id1 OR telefono = :id2 LIMIT 1");
-    $stmtClient->execute(['id1' => $identifier, 'id2' => $identifier]);
-    $client = $stmtClient->fetch();
+    $client = false;
+    if ($appRole === '' || $appRole === 'cliente') {
+        $stmtClient = $pdo->prepare("SELECT id, nombre, apellido, cedula, email, telefono, password_hash, direccion_habitual, activo FROM clientes WHERE email = :id1 OR email = :generated_email OR telefono = :id2 OR cedula = :id3 OR REPLACE(REPLACE(telefono, '-', ''), ' ', '') = :compact OR REPLACE(REPLACE(cedula, '-', ''), ' ', '') = :compact LIMIT 1");
+        $stmtClient->execute(['id1' => $identifier, 'generated_email' => $identifierEmail, 'id2' => $identifier, 'id3' => $identifier, 'compact' => $identifierCompact]);
+        $client = $stmtClient->fetch();
+    }
 
     if ($client) {
         $validPass = (password_verify($password, $client['password_hash']) || $client['password_hash'] === $password || $password === '123456');
         if ($validPass) {
-            $token = AuthMiddleware::generateToken([
+            $token = AuthMiddleware::issueToken($pdo, [
                 'id' => $client['id'],
                 'email' => $client['email'],
                 'tipo_usuario' => 'cliente'
@@ -133,6 +128,8 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'usuario' => [
                     'id' => $client['id'],
                     'nombre' => $client['nombre'],
+                    'apellido' => $client['apellido'] ?? '',
+                    'cedula' => $client['cedula'] ?? '',
                     'email' => $client['email'],
                     'telefono' => $client['telefono'],
                     'direccion' => $client['direccion_habitual'],
@@ -143,15 +140,18 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // 3. Verificar en tabla Comercios (App Comercio)
-    $stmtStore = $pdo->prepare("SELECT id, nombre, email, telefono, categoria_principal, activo, abierto_manual, hora_apertura, hora_cierre, password_hash FROM comercios WHERE email = :id1 OR rif = :id2 LIMIT 1");
-    $stmtStore->execute(['id1' => $identifier, 'id2' => $identifier]);
-    $store = $stmtStore->fetch();
+    $store = false;
+    if ($appRole === '' || $appRole === 'comercio') {
+        $stmtStore = $pdo->prepare("SELECT id, nombre, email, telefono, rif, categoria_principal, activo, abierto_manual, hora_apertura, hora_cierre, password_hash FROM comercios WHERE email = :id1 OR rif = :id2 OR rif = :id3 LIMIT 1");
+        $stmtStore->execute(['id1' => strtolower($identifier), 'id2' => $identifier, 'id3' => $commerceRif]);
+        $store = $stmtStore->fetch();
+    }
 
     if ($store) {
         $validStorePass = (password_verify($password, $store['password_hash'] ?? '') || ($store['password_hash'] ?? '') === $password || $password === '123456');
 
         if ($validStorePass) {
-            $token = AuthMiddleware::generateToken([
+            $token = AuthMiddleware::issueToken($pdo, [
                 'id' => $store['id'],
                 'email' => $store['email'],
                 'tipo_usuario' => 'comercio'
@@ -164,6 +164,7 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'id' => $store['id'],
                     'nombre' => $store['nombre'],
                     'email' => $store['email'],
+                    'rif' => $store['rif'],
                     'telefono' => $store['telefono'],
                     'categoria' => $store['categoria_principal'],
                     'tipo_usuario' => 'comercio',
@@ -176,15 +177,28 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // 4. Verificar en tabla Conductores (App Conductor)
-    $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, disponible, saldo_billetera_usd, bloqueado_por_saldo, password_hash FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
-    $stmtDriver->execute(['id1' => $identifier, 'id2' => $identifier, 'id3' => $identifier]);
-    $driver = $stmtDriver->fetch();
+    $driver = false;
+    if ($appRole === '' || $appRole === 'conductor') {
+        $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, foto_url, disponible, saldo_billetera_usd, bloqueado_por_saldo, verificado_por_admin, password_hash FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
+        $stmtDriver->execute(['id1' => $identifier, 'id2' => $identifier, 'id3' => $identifier]);
+        $driver = $stmtDriver->fetch();
+    }
 
     if ($driver) {
+        if (!(bool)($driver['verificado_por_admin'] ?? false)) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'Tu registro está pendiente de aprobación por administración.'], 403);
+        }
         $validDriverPass = (password_verify($password, $driver['password_hash'] ?? '') || ($driver['password_hash'] ?? '') === $password || $password === '123456');
 
         if ($validDriverPass) {
-            $token = AuthMiddleware::generateToken([
+            $saldoUsd = (float)$driver['saldo_billetera_usd'];
+            $isBlocked = ($saldoUsd <= 0.00) || (bool)$driver['bloqueado_por_saldo'];
+
+            if ($isBlocked && !$driver['bloqueado_por_saldo']) {
+                $pdo->prepare("UPDATE conductores SET bloqueado_por_saldo = 1, disponible = 0 WHERE id = :id")->execute(['id' => $driver['id']]);
+            }
+
+            $token = AuthMiddleware::issueToken($pdo, [
                 'id' => $driver['id'],
                 'email' => $driver['email'],
                 'tipo_usuario' => 'conductor'
@@ -199,10 +213,12 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'email' => $driver['email'],
                     'telefono' => $driver['telefono'],
                     'cedula' => $driver['cedula'],
+                    'foto_url' => $driver['foto_url'] ?? '',
+                    'verificado_por_admin' => (bool)$driver['verificado_por_admin'],
                     'tipo_usuario' => 'conductor',
-                    'disponible' => (bool)$driver['disponible'],
-                    'saldoBilletera' => (float)$driver['saldo_billetera_usd'],
-                    'bloqueadoPorSaldo' => (bool)$driver['bloqueado_por_saldo']
+                    'disponible' => $isBlocked ? false : (bool)$driver['disponible'],
+                    'saldoBilletera' => $saldoUsd,
+                    'bloqueadoPorSaldo' => $isBlocked
                 ]
             ]);
         }
@@ -217,17 +233,19 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = Database::getJsonInput();
     $nombre = trim($input['nombre'] ?? '');
+    $apellido = trim($input['apellido'] ?? '');
+    $cedula = strtoupper(trim($input['cedula'] ?? ''));
     $email = trim($input['email'] ?? '');
     $telefono = trim($input['telefono'] ?? '');
     $password = trim($input['password'] ?? '');
     $direccion = trim($input['direccion'] ?? 'Caracas, Venezuela');
 
-    if (empty($nombre) || empty($email) || empty($password) || empty($telefono)) {
+    if (empty($nombre) || empty($apellido) || empty($cedula) || empty($email) || empty($password) || empty($telefono)) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'Todos los campos son requeridos'], 400);
     }
 
-    $chk = $pdo->prepare("SELECT id FROM clientes WHERE email = :e OR telefono = :t LIMIT 1");
-    $chk->execute(['e' => $email, 't' => $telefono]);
+    $chk = $pdo->prepare("SELECT id FROM clientes WHERE email = :e OR telefono = :t OR cedula = :c LIMIT 1");
+    $chk->execute(['e' => $email, 't' => $telefono, 'c' => $cedula]);
     if ($chk->fetch()) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'El correo o teléfono ya se encuentra registrado'], 409);
     }
@@ -236,19 +254,21 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $hash = password_hash($password, PASSWORD_BCRYPT);
 
     $ins = $pdo->prepare("
-        INSERT INTO clientes (id, nombre, email, telefono, password_hash, direccion_habitual)
-        VALUES (:id, :n, :e, :t, :h, :d)
+        INSERT INTO clientes (id, nombre, apellido, cedula, email, telefono, password_hash, direccion_habitual)
+        VALUES (:id, :n, :a, :c, :e, :t, :h, :d)
     ");
     $ins->execute([
         'id' => $id,
         'n' => $nombre,
+        'a' => $apellido,
+        'c' => $cedula,
         'e' => $email,
         't' => $telefono,
         'h' => $hash,
         'd' => $direccion
     ]);
 
-    $token = AuthMiddleware::generateToken([
+    $token = AuthMiddleware::issueToken($pdo, [
         'id' => $id,
         'email' => $email,
         'tipo_usuario' => 'cliente'
@@ -260,11 +280,109 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'usuario' => [
             'id' => $id,
             'nombre' => $nombre,
+            'apellido' => $apellido,
+            'cedula' => $cedula,
             'email' => $email,
             'telefono' => $telefono,
             'tipo_usuario' => 'cliente'
         ],
         'mensaje' => 'Registro de cliente exitoso'
+    ], 201);
+}
+
+// -----------------------------------------------------------------------------
+// ACCIÓN: REGISTRO DE NUEVO COMERCIO (APP VIXY STORE)
+// -----------------------------------------------------------------------------
+if ($action === 'register_store' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $input = Database::getJsonInput();
+    $nombre = trim($input['nombre'] ?? '');
+    $rif = strtoupper(trim($input['rif'] ?? ''));
+    $categoria = trim($input['categoria'] ?? $input['categoria_principal'] ?? 'restaurantes');
+    $email = strtolower(trim($input['email'] ?? ''));
+    $telefono = trim($input['telefono'] ?? '');
+    $password = trim($input['password'] ?? '');
+    $direccion = trim($input['direccion'] ?? 'Caracas, Venezuela');
+    $latitud = isset($input['latitud']) ? (float)$input['latitud'] : 10.4930;
+    $longitud = isset($input['longitud']) ? (float)$input['longitud'] : -66.8520;
+    $horaApertura = trim($input['hora_apertura'] ?? '08:00:00');
+    $horaCierre = trim($input['hora_cierre'] ?? '22:00:00');
+
+    if (empty($nombre) || empty($rif) || empty($email) || empty($password) || empty($telefono)) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Nombre, RIF, Teléfono, Correo y Contraseña son obligatorios'], 400);
+    }
+    if (strlen($password) < 6) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'La contraseña debe tener al menos 6 caracteres'], 400);
+    }
+
+    $chk = $pdo->prepare("SELECT id FROM comercios WHERE email = :e OR rif = :r OR telefono = :t LIMIT 1");
+    $chk->execute(['e' => $email, 'r' => $rif, 't' => $telefono]);
+    if ($chk->fetch()) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'El RIF, correo o teléfono ya se encuentra registrado'], 409);
+    }
+
+    $id = 'store-' . bin2hex(random_bytes(4));
+    $hash = password_hash($password, PASSWORD_BCRYPT);
+
+    try {
+        $pdo->beginTransaction();
+
+        $ins = $pdo->prepare("
+            INSERT INTO comercios (
+                id, nombre, rif, categoria_principal, direccion, latitud, longitud, telefono, email, password_hash,
+                hora_apertura, hora_cierre, activo, abierto_manual, calificacion, total_calificaciones
+            ) VALUES (
+                :id, :nom, :rif, :cat, :dir, :lat, :lng, :tel, :email, :pass,
+                :hap, :hci, 1, 1, 5.00, 0
+            )
+        ");
+        $ins->execute([
+            'id' => $id,
+            'nom' => $nombre,
+            'rif' => $rif,
+            'cat' => $categoria,
+            'dir' => $direccion,
+            'lat' => $latitud,
+            'lng' => $longitud,
+            'tel' => $telefono,
+            'email' => $email,
+            'pass' => $hash,
+            'hap' => $horaApertura,
+            'hci' => $horaCierre
+        ]);
+
+        $token = AuthMiddleware::issueToken($pdo, [
+            'id' => $id,
+            'email' => $email,
+            'tipo_usuario' => 'comercio'
+        ]);
+
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('Vixy register_store failed: ' . $error->getMessage());
+        Database::jsonResponse([
+            'error' => true,
+            'mensaje' => 'No se pudo crear la sesión del comercio. Ejecute la migración de sesiones y vuelva a intentarlo.'
+        ], 500);
+    }
+
+    Database::jsonResponse([
+        'success' => true,
+        'token' => $token,
+        'usuario' => [
+            'id' => $id,
+            'nombre' => $nombre,
+            'rif' => $rif,
+            'email' => $email,
+            'telefono' => $telefono,
+            'categoria' => $categoria,
+            'direccion' => $direccion,
+            'tipo_usuario' => 'comercio',
+            'activo' => true
+        ],
+        'mensaje' => 'Comercio registrado exitosamente'
     ], 201);
 }
 
@@ -320,6 +438,15 @@ if ($action === 'me' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         'success' => true,
         'usuario' => $authUser
     ]);
+}
+
+// -----------------------------------------------------------------------------
+// ACCIÓN: CIERRE DE SESIÓN REVOCABLE
+// -----------------------------------------------------------------------------
+if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $authUser = AuthMiddleware::requireAuth();
+    AuthMiddleware::revokeCurrentSession($authUser);
+    Database::jsonResponse(['success' => true, 'mensaje' => 'Sesión cerrada correctamente']);
 }
 
 Database::jsonResponse(['error' => true, 'mensaje' => 'Acción no reconocida'], 404);

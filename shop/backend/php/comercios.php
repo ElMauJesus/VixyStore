@@ -17,6 +17,41 @@ $action = $_GET['action'] ?? null;
 
 // Función para normalizar comercio a estructura uniforme
 function normalizarComercio($c, $origen = 'delivery') {
+    global $pdoRegist;
+
+    // Los comercios ya aprobados viven en vixy_dl con pocas columnas y pierden
+    // la información completa del registro. Completar estos campos desde
+    // c2861522_regist (fuente primaria de registro) por código/RIF/email.
+    if ($origen === 'delivery' && $pdoRegist) {
+        try {
+            $cod   = trim((string)($c['codigo_comercio'] ?? ''));
+            $rif   = trim((string)($c['rif'] ?? ''));
+            $email = trim((string)($c['email'] ?? ''));
+            $stM = $pdoRegist->prepare("
+                SELECT * FROM comercios
+                WHERE (:cod != '' AND codigo_comercio = :cod)
+                   OR rif_cedula_juridica = :rif
+                   OR email = :email
+                LIMIT 1
+            ");
+            $stM->execute(['cod' => $cod, 'rif' => $rif, 'email' => $email]);
+            $reg = $stM->fetch();
+        } catch (Exception $e) {
+            $reg = null;
+        }
+        if ($reg) {
+            foreach ([
+                'nombre_comercial', 'nombre_representante', 'cedula_representante',
+                'telefono_comercio', 'telefono_adicional', 'punto_referencia',
+                'ubicacion_gps', 'descripcion_negocio', 'redes_sociales',
+                'tipo_comercio', 'categoria_negocio', 'direccion_negocio',
+                'horarios_atencion', 'codigo_comercio'
+            ] as $k) {
+                if (empty($c[$k]) && !empty($reg[$k])) $c[$k] = $reg[$k];
+            }
+        }
+    }
+
     $rif = $c['rif_cedula_juridica'] ?? ($c['rif'] ?? '');
     
     // Si viene de 'regist', la columna es 'nombre_comercial'.

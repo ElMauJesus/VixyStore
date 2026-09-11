@@ -40,6 +40,19 @@ import { MetodoPagoTipo } from '../../types/delivery';
 import { DeliveryRadarMap } from '../common/DeliveryRadarMap';
 import { api } from '../../services/api';
 
+// Documentos que el conductor debe adjuntar al registrarse.
+// Las claves coinciden con los campos multipart que espera registro_conductor.php.
+const REG_DOCUMENTOS: { key: string; label: string }[] = [
+  { key: 'foto_perfil', label: 'Foto de Perfil' },
+  { key: 'cedula_identidad', label: 'Cédula de Identidad' },
+  { key: 'cedula_reverso', label: 'Cédula (reverso)' },
+  { key: 'licencia_conducir', label: 'Licencia de Conducir' },
+  { key: 'carnet_circulacion', label: 'Carnet de Circulación' },
+  { key: 'certificado_medico', label: 'Certificado Médico' },
+  { key: 'poliza_rcv', label: 'Póliza RCV Vigente' },
+  { key: 'antecedentes', label: 'Antecedentes Penales' },
+];
+
 export const DriverApp: React.FC = () => {
   const { 
     driver, 
@@ -84,12 +97,27 @@ export const DriverApp: React.FC = () => {
   const [regEmail, setRegEmail] = useState('');
   const [regFechaNac, setRegFechaNac] = useState('');
   const [regDireccion, setRegDireccion] = useState('');
-  const [regMotoMarca, setRegMotoMarca] = useState('Bera');
-  const [regMotoModelo, setRegMotoModelo] = useState('SBR 150');
-  const [regMotoColor, setRegMotoColor] = useState('Negro');
+  const [regMotoMarca, setRegMotoMarca] = useState('');
+  const [regMotoModelo, setRegMotoModelo] = useState('');
+  const [regMotoColor, setRegMotoColor] = useState('');
   const [regMotoPlaca, setRegMotoPlaca] = useState('');
-  const [regMotoAno, setRegMotoAno] = useState('2024');
+  const [regMotoAno, setRegMotoAno] = useState('');
+  const [regMotoSerialMotor, setRegMotoSerialMotor] = useState('');
+  const [regMotoSerialChasis, setRegMotoSerialChasis] = useState('');
+  // Permisología y legalidad
+  const [regTipoSangre, setRegTipoSangre] = useState('');
   const [regLicencia, setRegLicencia] = useState('');
+  const [regLicenciaGrado, setRegLicenciaGrado] = useState('2da');
+  const [regLicenciaVencimiento, setRegLicenciaVencimiento] = useState('');
+  const [regCertMedNro, setRegCertMedNro] = useState('');
+  const [regCertMedVenc, setRegCertMedVenc] = useState('');
+  const [regRcvAseguradora, setRegRcvAseguradora] = useState('');
+  const [regRcvPolizaNro, setRegRcvPolizaNro] = useState('');
+  const [regRcvVencimiento, setRegRcvVencimiento] = useState('');
+  // Archivos de la solicitud (se guardan en el servidor, nunca en la BD)
+  const [regDocFiles, setRegDocFiles] = useState<Record<string, File | null>>({});
+  const [regDocPreview, setRegDocPreview] = useState<Record<string, string>>({});
+  const [regDragKey, setRegDragKey] = useState<string | null>(null);
   const [regIsSubmitting, setRegIsSubmitting] = useState(false);
   const [regError, setRegError] = useState('');
   const [regSuccessResult, setRegSuccessResult] = useState<{
@@ -251,22 +279,36 @@ export const DriverApp: React.FC = () => {
 
     setRegIsSubmitting(true);
     try {
-      const payload = {
-        nombre: regNombre.trim(),
-        apellido: regApellido.trim(),
-        cedula: regCedula.trim().toUpperCase(),
-        telefono: regTelefono.trim(),
-        email: regEmail.trim(),
-        fecha_nacimiento: regFechaNac,
-        direccion: regDireccion.trim(),
-        moto_marca: regMotoMarca.trim(),
-        moto_modelo: regMotoModelo.trim(),
-        moto_color: regMotoColor.trim(),
-        moto_placa: regMotoPlaca.trim().toUpperCase(),
-        moto_ano: regMotoAno.trim(),
-        licencia_conducir: regLicencia.trim()
-      };
-      const res = await api.registerConductor(payload);
+      const form = new FormData();
+      form.append('nombre', regNombre.trim());
+      form.append('apellido', regApellido.trim());
+      form.append('cedula', regCedula.trim().toUpperCase());
+      form.append('telefono', regTelefono.trim());
+      form.append('email', regEmail.trim());
+      form.append('fecha_nacimiento', regFechaNac);
+      form.append('direccion', regDireccion.trim());
+      form.append('moto_marca', regMotoMarca.trim());
+      form.append('moto_modelo', regMotoModelo.trim());
+      form.append('moto_color', regMotoColor.trim());
+      form.append('moto_placa', regMotoPlaca.trim().toUpperCase());
+      form.append('moto_ano', regMotoAno.trim());
+      form.append('moto_serial_motor', regMotoSerialMotor.trim());
+      form.append('moto_serial_chasis', regMotoSerialChasis.trim());
+      form.append('tipo_sangre', regTipoSangre.trim());
+      form.append('licencia_conducir', regLicencia.trim());
+      form.append('licencia_grado', regLicenciaGrado);
+      form.append('licencia_vencimiento', regLicenciaVencimiento);
+      form.append('certificado_medico_nro', regCertMedNro.trim());
+      form.append('certificado_medico_vencimiento', regCertMedVenc);
+      form.append('rcv_aseguradora', regRcvAseguradora.trim());
+      form.append('rcv_poliza_nro', regRcvPolizaNro.trim());
+      form.append('rcv_vencimiento', regRcvVencimiento);
+      // Archivos: solo se adjuntan los que el usuario seleccionó
+      REG_DOCUMENTOS.forEach(doc => {
+        const file = regDocFiles[doc.key];
+        if (file) form.append(doc.key, file, file.name);
+      });
+      const res = await api.registerConductor(form);
       if (res && res.success && res.codigo_conductor) {
         setRegSuccessResult({
           codigo_conductor: res.codigo_conductor,
@@ -285,6 +327,39 @@ export const DriverApp: React.FC = () => {
     } finally {
       setRegIsSubmitting(false);
     }
+  };
+
+  // --- Subidas de documentos del registro (click y drag & drop) ---
+  const setRegDocFile = (key: string, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setRegError('Solo se permiten imágenes (JPG, PNG o WebP) en los documentos.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setRegError('Cada documento debe pesar máximo 5MB.');
+      return;
+    }
+    setRegError('');
+    setRegDocFiles(prev => ({ ...prev, [key]: file }));
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        setRegDocPreview(prev => ({ ...prev, [key]: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeRegDoc = (key: string) => {
+    setRegDocFiles(prev => { const next = { ...prev }; delete next[key]; return next; });
+    setRegDocPreview(prev => { const next = { ...prev }; delete next[key]; return next; });
+  };
+
+  const handleRegDocDrop = (e: React.DragEvent, key: string) => {
+    e.preventDefault();
+    setRegDragKey(null);
+    const file = e.dataTransfer.files?.[0];
+    if (file) setRegDocFile(key, file);
   };
 
   const copyToClipboard = (text: string, type: 'code' | 'pass') => {
@@ -727,15 +802,206 @@ export const DriverApp: React.FC = () => {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Serial del Motor</label>
+                        <input
+                          type="text"
+                          value={regMotoSerialMotor}
+                          onChange={(e) => setRegMotoSerialMotor(e.target.value)}
+                          placeholder="Ej. G3H4-567890"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Serial de Chasis (NIV)</label>
+                        <input
+                          type="text"
+                          value={regMotoSerialChasis}
+                          onChange={(e) => setRegMotoSerialChasis(e.target.value)}
+                          placeholder="Ej. 8APCJ08A..."
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">N° Licencia de Conducir</label>
+                        <input
+                          type="text"
+                          value={regLicencia}
+                          onChange={(e) => setRegLicencia(e.target.value)}
+                          placeholder="Ej. LIC-24891023"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Grado INTT</label>
+                        <select
+                          value={regLicenciaGrado}
+                          onChange={(e) => setRegLicenciaGrado(e.target.value)}
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-semibold"
+                        >
+                          <option value="2da">2da Grado</option>
+                          <option value="3ra">3ra Grado</option>
+                          <option value="4ta">4ta Grado</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sección: Permisología, Seguros y Legalidad */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-amber-500 block border-b border-neutral-200 dark:border-neutral-700 pb-1">
+                      3. Permisología, Seguros y Legalidad
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Licencia vence (fecha)</label>
+                        <input
+                          type="date"
+                          value={regLicenciaVencimiento}
+                          onChange={(e) => setRegLicenciaVencimiento(e.target.value)}
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">N° Certificado Médico</label>
+                        <input
+                          type="text"
+                          value={regCertMedNro}
+                          onChange={(e) => setRegCertMedNro(e.target.value)}
+                          placeholder="Ej. CM-2026-12345"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Certificado Médico vence</label>
+                        <input
+                          type="date"
+                          value={regCertMedVenc}
+                          onChange={(e) => setRegCertMedVenc(e.target.value)}
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Aseguradora RCV</label>
+                        <input
+                          type="text"
+                          value={regRcvAseguradora}
+                          onChange={(e) => setRegRcvAseguradora(e.target.value)}
+                          placeholder="Ej. Seguros La Previsora"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">N° Póliza RCV</label>
+                        <input
+                          type="text"
+                          value={regRcvPolizaNro}
+                          onChange={(e) => setRegRcvPolizaNro(e.target.value)}
+                          placeholder="Ej. POL-2026-9988"
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[10px] font-bold text-neutral-500">Póliza RCV vence</label>
+                        <input
+                          type="date"
+                          value={regRcvVencimiento}
+                          onChange={(e) => setRegRcvVencimiento(e.target.value)}
+                          className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs"
+                        />
+                      </div>
+                    </div>
                     <div className="space-y-0.5">
-                      <label className="text-[10px] font-bold text-neutral-500">N° Licencia de Conducir (2da Grado)</label>
+                      <label className="text-[10px] font-bold text-neutral-500">Tipo de Sangre</label>
                       <input
                         type="text"
-                        value={regLicencia}
-                        onChange={(e) => setRegLicencia(e.target.value)}
-                        placeholder="Ej. LIC-24891023"
+                        value={regTipoSangre}
+                        onChange={(e) => setRegTipoSangre(e.target.value.toUpperCase())}
+                        placeholder="Ej. O+"
                         className="w-full p-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono"
                       />
+                    </div>
+                  </div>
+
+                  {/* Sección: Documentos y Fotografías (subida al servidor) */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-amber-500 block border-b border-neutral-200 dark:border-neutral-700 pb-1">
+                      4. Documentos y Fotografías
+                    </span>
+                    <p className="text-[10px] text-neutral-500 leading-relaxed">
+                      Toca la casilla para elegir el archivo o arrastra la foto dentro de ella. Los documentos se
+                      suben al servidor (no a la base de datos), quedan ordenados en la carpeta del repartidor y
+                      se ven en su expediente.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {REG_DOCUMENTOS.map(doc => {
+                        const preview = regDocPreview[doc.key];
+                        const dragging = regDragKey === doc.key;
+                        return (
+                          <div key={doc.key} className="relative">
+                            {/* label nativo: el click abre directamente el selector de archivos sin depender de JS */}
+                            <label
+                              htmlFor={`regdoc-${doc.key}`}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById(`regdoc-${doc.key}`)?.click(); }}
+                              onDragOver={(e) => { e.preventDefault(); setRegDragKey(doc.key); }}
+                              onDragLeave={() => setRegDragKey(k => (k === doc.key ? null : k))}
+                              onDrop={(e) => handleRegDocDrop(e, doc.key)}
+                              className={`block h-28 rounded-xl border-2 border-dashed transition flex items-center justify-center overflow-hidden cursor-pointer group text-center select-none ${
+                                dragging
+                                  ? 'border-amber-500 bg-amber-500/10'
+                                  : preview
+                                  ? 'border-emerald-500/60 bg-neutral-950'
+                                  : 'border-neutral-400 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800'
+                              }`}
+                            >
+                              <input
+                                id={`regdoc-${doc.key}`}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="sr-only"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) setRegDocFile(doc.key, f);
+                                  e.target.value = '';
+                                }}
+                              />
+                              {preview ? (
+                                <>
+                                  <img src={preview} alt={doc.label} className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-1 text-[9px] text-white font-bold">
+                                    <RefreshCcw className="w-3.5 h-3.5" />
+                                    <span>Toca para reemplazar</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex flex-col items-center gap-1 p-1">
+                                  <Upload className="w-4 h-4 text-amber-500" />
+                                  <span className="text-[9px] font-bold text-neutral-600 dark:text-neutral-300 leading-tight">{doc.label}</span>
+                                  <span className="text-[8px] text-neutral-400">Click o arrastra</span>
+                                </div>
+                              )}
+                            </label>
+                            {preview && (
+                              <button
+                                type="button"
+                                onClick={() => removeRegDoc(doc.key)}
+                                className="absolute top-1 right-1 z-10 p-1 bg-red-600 text-white rounded-full hover:bg-red-500 cursor-pointer"
+                                title="Quitar archivo"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 

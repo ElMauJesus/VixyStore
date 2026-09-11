@@ -302,6 +302,11 @@
     padding: 0.5rem;
 }
 
+.dropzoneDrag {
+    border-color: #5E17EB;
+    background: #F0EAFF;
+}
+
 .dropzoneIcon {
     color: #9D4EDD;
     display: flex;

@@ -8,7 +8,7 @@
  * 2. Temporizador de Comercio (60 segundos) y Aceptación/Rechazo
  * 3. Temporizador de Conductor (15 segundos) y Aceptación/Rechazo
  * 4. Reasignación automática inmediata al conductor libre más cercano al comercio
- * 5. Bloqueo de conductores con saldo inferior a -$0.50 USD
+ * 5. Bloqueo de conductores sin saldo (deben recargar: saldo > $0.00)
  * 6. Finalización con foto de entrega y acreditación de ganancias netas
  */
 
@@ -40,7 +40,8 @@ function buscarConductorMasCercano($pdo, $comercioId, $excluidos = []) {
         WHERE disponible = 1 
           AND en_carrera = 0 
           AND bloqueado_por_saldo = 0 
-          AND saldo_billetera_usd > -0.50
+          AND verificado_por_admin = 1 
+          AND saldo_billetera_usd > 0.00
         ORDER BY distancia_km ASC
     ");
     $stmt->execute(['lat' => $lat, 'lng' => $lng]);
@@ -126,7 +127,9 @@ if ($method === 'GET') {
 // POST: CREAR NUEVO PEDIDO (VIXY PEDIDOS / APP CLIENTE)
 // -----------------------------------------------------------------------------
 if ($method === 'POST') {
+    $authUser = AuthMiddleware::requireAuth(['cliente']);
     $data = Database::getJsonInput();
+    $clienteId = $authUser['sub'] ?? $authUser['id'] ?? null;
 
     if (empty($data['comercio_id']) || empty($data['items']) || empty($data['destino_direccion'])) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'Faltan datos obligatorios del pedido'], 400);
@@ -176,7 +179,7 @@ if ($method === 'POST') {
     $stmt->execute([
         'id' => $newId,
         'code' => $codigoSeguimiento,
-        'client' => $data['cliente_id'] ?? 'cli-001',
+        'client' => $clienteId,
         'store' => $data['comercio_id'],
         'sub' => $subtotal,
         'env' => $costoEnvio,
@@ -229,7 +232,8 @@ if ($method === 'PUT' && $id) {
 
     // 1. RECHAZAR PEDIDO POR CONDUCTOR -> Salto automático al más cercano
     if ($subAction === 'rechazar_conductor') {
-        $conductorId = $data['conductor_id'] ?? null;
+        $authUser = AuthMiddleware::requireAuth(['conductor']);
+        $conductorId = $authUser['sub'] ?? $authUser['id'] ?? null;
         if (!$conductorId) {
             Database::jsonResponse(['error' => true, 'mensaje' => 'conductor_id es requerido'], 400);
         }
@@ -274,17 +278,28 @@ if ($method === 'PUT' && $id) {
 
     // 2. ACEPTAR PEDIDO POR CONDUCTOR (dentro de los 15 segundos)
     if ($subAction === 'aceptar_conductor') {
-        $conductorId = $data['conductor_id'] ?? null;
+        $authUser = AuthMiddleware::requireAuth(['conductor']);
+        $conductorId = $authUser['sub'] ?? $authUser['id'] ?? null;
 
-        // Validar saldo
-        $stmtCond = $pdo->prepare("SELECT disponible, saldo_billetera_usd, bloqueado_por_saldo FROM conductores WHERE id = :cid");
+        // Validar saldo (debe tener saldo POSITIVO para recibir viajes)
+        $stmtCond = $pdo->prepare("SELECT disponible, saldo_billetera_usd, bloqueado_por_saldo, verificado_por_admin FROM conductores WHERE id = :cid");
         $stmtCond->execute(['cid' => $conductorId]);
         $cond = $stmtCond->fetch();
 
-        if ($cond && ($cond['saldo_billetera_usd'] < -0.50 || $cond['bloqueado_por_saldo'])) {
+        if (!$cond || !$cond['verificado_por_admin']) {
+            $pdo->prepare("UPDATE conductores SET disponible = 0 WHERE id = :cid")->execute(['cid' => $conductorId]);
             Database::jsonResponse([
                 'error' => true,
-                'mensaje' => 'No puedes aceptar carreras porque tu saldo es inferior a -$0.50 USD. Recarga tu billetera.'
+                'mensaje' => 'No puedes aceptar carreras: tu cuenta aún no ha sido verificada/aprobada por administración.'
+            ], 403);
+        }
+
+        if ($cond && ($cond['saldo_billetera_usd'] <= 0.00 || $cond['bloqueado_por_saldo'])) {
+            $pdo->prepare("UPDATE conductores SET bloqueado_por_saldo = 1, disponible = 0 WHERE id = :cid")->execute(['cid' => $conductorId]);
+            Database::jsonResponse([
+                'error' => true,
+                'bloqueado' => true,
+                'mensaje' => 'No puedes aceptar carreras: debes recargar tu billetera para recibir viajes (saldo actual: $' . number_format($cond['saldo_billetera_usd'], 2) . ' USD).'
             ], 403);
         }
 
@@ -305,6 +320,7 @@ if ($method === 'PUT' && $id) {
 
     // 3. ACEPTAR PEDIDO POR COMERCIO (dentro de 60 segundos)
     if ($subAction === 'aceptar_comercio') {
+        AuthMiddleware::requireAuth(['comercio']);
         $stmtPed = $pdo->prepare("SELECT comercio_id FROM pedidos WHERE id = :id");
         $stmtPed->execute(['id' => $id]);
         $ped = $stmtPed->fetch();
@@ -331,6 +347,7 @@ if ($method === 'PUT' && $id) {
     // 4. CAMBIO GENÉRICO DE ESTADO
     $nuevoEstado = $data['estado'] ?? null;
     if ($nuevoEstado) {
+        AuthMiddleware::requireAuth(['conductor', 'comercio']);
         $fields = ["estado = :est"];
         $params = ['est' => $nuevoEstado, 'id' => $id];
 
