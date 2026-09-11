@@ -81,8 +81,6 @@ interface FormState {
     trabajoAnteriorDelivery: boolean;
     empresaAnteriorDelivery: string;
     zonaTrabajoPreferida: string;
-    metodoPago: string;
-    referenciaPago: string;
     confirmacion: boolean;
 }
 
@@ -123,8 +121,6 @@ const INITIAL_FORM: FormState = {
     trabajoAnteriorDelivery: false,
     empresaAnteriorDelivery: '',
     zonaTrabajoPreferida: '',
-    metodoPago: '',
-    referenciaPago: '',
     confirmacion: false,
 };
 
@@ -299,14 +295,6 @@ export default function RegistroDeliveryPage() {
             setErrorMessage('La foto de la placa es obligatoria.');
             return;
         }
-        if (!form.metodoPago) {
-            setErrorMessage('Selecciona un método de pago.');
-            return;
-        }
-        if (!form.referenciaPago.trim()) {
-            setErrorMessage('Ingresa la referencia del pago.');
-            return;
-        }
         if (!form.confirmacion) {
             setErrorMessage('Debes confirmar que la información es verídica.');
             return;
@@ -339,8 +327,6 @@ export default function RegistroDeliveryPage() {
         fd.append('trabajo_anterior_delivery', form.trabajoAnteriorDelivery ? '1' : '0');
         fd.append('empresa_anterior_delivery', form.empresaAnteriorDelivery.trim());
         fd.append('zona_trabajo_preferida', form.zonaTrabajoPreferida.trim());
-        fd.append('metodo_pago', form.metodoPago);
-        fd.append('referencia_pago', form.referenciaPago.trim());
 
         if (form.fotoPerfil) fd.append('foto_perfil', form.fotoPerfil);
         if (form.cedulaAnverso.file) fd.append('cedula_anverso', form.cedulaAnverso.file);
@@ -699,18 +685,6 @@ export default function RegistroDeliveryPage() {
                                 {form.trabajoAnteriorDelivery && (
                                     <div className={styles.fieldGroup}><label className={styles.label}>Empresa anterior</label><input type="text" placeholder="Ej. Yummy, PedidosYa..." value={form.empresaAnteriorDelivery} onChange={setField('empresaAnteriorDelivery')} className={styles.input} /></div>
                                 )}
-                            </div>
-                        </section>
-
-                        {/* SECCIÓN 9: PAGO */}
-                        <section className={styles.formSection}>
-                            <div className={styles.sectionHeader}>
-                                <div className={styles.sectionIcon}><CreditCard size={18} /></div>
-                                <h2 className={styles.sectionTitle}>9. PAGO DE INSCRIPCIÓN</h2>
-                            </div>
-                            <div className={styles.fieldsGrid2}>
-                                <div className={styles.fieldGroup}><label className={styles.label}>Método de Pago *</label><select value={form.metodoPago} onChange={setField('metodoPago')} className={styles.input}><option value="">— Seleccionar —</option><option value="pago_movil">Pago Móvil</option><option value="transferencia_bs">Transferencia Bs.</option><option value="efectivo_usd">Efectivo USD</option><option value="zelle">Zelle</option><option value="binance">Binance/Cripto</option></select></div>
-                                <div className={styles.fieldGroup}><label className={styles.label}>Referencia del Pago *</label><input type="text" required placeholder="Nro. de referencia" value={form.referenciaPago} onChange={setField('referenciaPago')} className={styles.input} /></div>
                             </div>
                         </section>
 
