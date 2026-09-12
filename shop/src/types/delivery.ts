@@ -76,8 +76,8 @@ export interface Conductor {
   totalEntregas?: number;
   totalViajes?: number;
   billetera: ConductorBilletera;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   precisionGps?: number;
   velocidadKmh?: number;
   rumboGrados?: number;

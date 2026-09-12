@@ -8,8 +8,8 @@ export interface KeepAlivePayload {
   usuarioId: string;
   tipoUsuario: 'conductor' | 'comercio' | 'cliente';
   nombre: string;
-  latitud?: number;
-  longitud?: number;
+  latitud?: number | null;
+  longitud?: number | null;
   bateria?: number;
   online?: boolean;
   appVersion?: string;
@@ -30,8 +30,8 @@ export function startKeepAliveHeartbeat(
 
   const sendPing = async () => {
     try {
-      let lat = config.latitud || 10.4920;
-      let lng = config.longitud || -66.8570;
+      let lat: number | undefined = config.latitud;
+      let lng: number | undefined = config.longitud;
 
       // Obtener coordenadas GPS en tiempo real si el dispositivo/navegador lo permite
       if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {

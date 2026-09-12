@@ -108,6 +108,17 @@ ALTER TABLE `conductores`
 ALTER TABLE `conductores`
     MODIFY `longitud_actual` DECIMAL(11,8) NULL DEFAULT NULL COMMENT 'Longitud GPS actual del conductor (NULL = sin coordenada)';
 
+-- D.4 LIMPIAR COORDENADAS FABRICADAS (Caracas por defecto 10.491,-66.862)
+--     Solo se borra cuando el valor es EXACTAMENTE el antiguo default (nadie se
+--     ubica con 8 decimales idénticos al default). Si el conductor ya envió GPS
+--     real (otro valor), se conserva.
+UPDATE `conductores`
+SET `latitud_actual` = NULL,
+    `longitud_actual` = NULL
+WHERE (`latitud_actual` = 10.49100000 AND `longitud_actual` = -66.86200000)
+   OR (`latitud_actual` = 10.4910 AND `longitud_actual` = -66.8620)
+   OR (`latitud_actual` = 10.4920 AND `longitud_actual` = -66.8570);
+
 -- ============================================================================
 -- E) ÍNDICES DE APOYO
 -- ============================================================================

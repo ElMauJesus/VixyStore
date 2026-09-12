@@ -1491,15 +1491,15 @@ export const ClientApp: React.FC = () => {
                       </span>
                     </div>
                     <OrderTrackingMap
-                      storeLat={store.lat || 10.4930}
-                      storeLng={store.lng || -66.8520}
+                      storeLat={store.lat || 0}
+                      storeLng={store.lng || 0}
                       storeName={store.nombre}
                       driverLat={latestOrder.conductor?.lat}
                       driverLng={latestOrder.conductor?.lng}
                       driverName={latestOrder.conductor ? `${latestOrder.conductor.nombre} ${latestOrder.conductor.apellido}` : undefined}
                       driverPhoto={latestOrder.conductor?.fotoUrl}
-                      clientLat={10.4890}
-                      clientLng={-66.8560}
+                      clientLat={client.lat || 0}
+                      clientLng={client.lng || 0}
                       clientAddress={latestOrder.cliente?.direccion || 'Av. Francisco de Miranda, Chacao'}
                       orderStatus={latestOrder.estado}
                     />

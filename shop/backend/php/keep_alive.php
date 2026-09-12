@@ -106,17 +106,32 @@ try {
 
     // 3. Sincronizar tabla correspondiente según el rol
     if ($tipoUsuario === 'conductor' && $latitud != 0 && $longitud != 0) {
+        // El frontend puede enviar el id numérico de vixy_dl.conductores o el
+        // código de conductor (DRV-xxxx). Se busca por cualquiera de los dos.
         $stmtSyncCond = $pdo->prepare("
             UPDATE conductores 
             SET latitud_actual = :lat,
                 longitud_actual = :lng,
                 disponible = :online,
                 ultima_actualizacion = NOW()
-            WHERE id = :uid
+            WHERE id = :uid OR codigo_conductor = :uid
         ");
         $stmtSyncCond->execute([
             'lat' => $latitud,
             'lng' => $longitud,
+            'online' => $online,
+            'uid' => $usuarioId
+        ]);
+    } else if ($tipoUsuario === 'conductor' && ($latitud == 0 || $longitud == 0)) {
+        // Sin GPS real aún: solo refrescar presencia (disponible) si el conductor
+        // se identifica por id numérico o código de conductor.
+        $stmtSyncPres = $pdo->prepare("
+            UPDATE conductores 
+            SET disponible = :online,
+                ultima_actualizacion = NOW()
+            WHERE id = :uid OR codigo_conductor = :uid
+        ");
+        $stmtSyncPres->execute([
             'online' => $online,
             'uid' => $usuarioId
         ]);

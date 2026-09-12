@@ -78,10 +78,10 @@ function asignarSiguienteConductorCercano($pdo, $pedidoId) {
         $condLat = (float)$cond['latitud_actual'];
         $condLng = (float)$cond['longitud_actual'];
 
-        // Si no tiene GPS válido en Caracas por defecto (10.49, -66.86)
+        // Sin GPS real (NULL/0): no se inventa Caracas; ese conductor no puede
+        // calcularse distancia real y se excluye del despacho por radar.
         if ($condLat == 0 && $condLng == 0) {
-            $condLat = 10.4910;
-            $condLng = -66.8620;
+            continue;
         }
 
         $distanciaKm = calcularDistanciaHaversine($origenLat, $origenLng, $condLat, $condLng);

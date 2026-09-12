@@ -7,8 +7,8 @@ interface OrderTrackingMapProps {
   storeLat: number;
   storeLng: number;
   storeName: string;
-  driverLat?: number;
-  driverLng?: number;
+  driverLat?: number | null;
+  driverLng?: number | null;
   driverName?: string;
   driverPhoto?: string;
   clientLat?: number;
@@ -26,8 +26,8 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
   driverLng,
   driverName = 'Motorizado Vixy',
   driverPhoto,
-  clientLat = 10.4900,
-  clientLng = -66.8520,
+  clientLat = 0,
+  clientLng = 0,
   clientAddress = 'Av. Francisco de Miranda, Chacao',
   orderStatus,
   customApiKey
@@ -55,7 +55,7 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
     if (mapInstanceRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [storeLat, storeLng],
+      center: [storeLat !== 0 ? storeLat : 10.4912, storeLng !== 0 ? storeLng : -66.8580],
       zoom: 14,
       zoomControl: false,
       attributionControl: true
@@ -112,6 +112,8 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
     });
 
     const bounds: [number, number][] = [];
+    const hasStore = storeLat !== 0 && storeLng !== 0;
+    const hasClient = clientLat !== 0 && clientLng !== 0;
 
     // 1. Store Marker
     const storeIconHtml = `
@@ -129,8 +131,10 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
         iconAnchor: [16, 16]
       })
     }).bindTooltip(`<strong>${storeName}</strong><br/><span style="font-size:10px; color:#94a3b8;">Origen del pedido</span>`, { direction: 'top' });
-    storeMarker.addTo(map);
-    bounds.push([storeLat, storeLng]);
+    if (hasStore) {
+      storeMarker.addTo(map);
+      bounds.push([storeLat, storeLng]);
+    }
 
     // 2. Client Destination Marker
     const clientIconHtml = `
@@ -148,14 +152,25 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
         iconAnchor: [16, 16]
       })
     }).bindTooltip(`<strong>Entrega a Cliente</strong><br/><span style="font-size:10px; color:#94a3b8;">${clientAddress}</span>`, { direction: 'top' });
-    clientMarker.addTo(map);
-    bounds.push([clientLat, clientLng]);
+    if (hasClient) {
+      clientMarker.addTo(map);
+      bounds.push([clientLat, clientLng]);
+    }
 
     // 3. Driver Marker (if assigned)
-    const effectiveDriverLat = driverLat || (storeLat + clientLat) / 2;
-    const effectiveDriverLng = driverLng || (storeLng + clientLng) / 2;
+    const validAnchorCoords: [number, number][] = [];
+    if (hasStore) validAnchorCoords.push([storeLat, storeLng]);
+    if (hasClient) validAnchorCoords.push([clientLat, clientLng]);
+    const anchorLat = validAnchorCoords.length
+      ? validAnchorCoords.reduce((sum, c) => sum + c[0], 0) / validAnchorCoords.length
+      : 0;
+    const anchorLng = validAnchorCoords.length
+      ? validAnchorCoords.reduce((sum, c) => sum + c[1], 0) / validAnchorCoords.length
+      : 0;
+    const effectiveDriverLat = driverLat ?? anchorLat;
+    const effectiveDriverLng = driverLng ?? anchorLng;
 
-    if (driverLat !== undefined && driverLng !== undefined) {
+    if (driverLat != null && driverLng != null && driverLat !== 0 && driverLng !== 0) {
       const driverIconHtml = `
         <div class="relative cursor-pointer transition hover:scale-110">
           <div class="absolute -inset-2 rounded-full bg-emerald-500/30 animate-ping"></div>
@@ -181,11 +196,11 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
       bounds.push([effectiveDriverLat, effectiveDriverLng]);
 
       // Draw route polyline from Driver to Client
-      const routeLine = L.polyline([
-        [storeLat, storeLng],
-        [effectiveDriverLat, effectiveDriverLng],
-        [clientLat, clientLng]
-      ], {
+      const routePoints: [number, number][] = [];
+      if (hasStore) routePoints.push([storeLat, storeLng]);
+      routePoints.push([effectiveDriverLat, effectiveDriverLng]);
+      if (hasClient) routePoints.push([clientLat, clientLng]);
+      const routeLine = L.polyline(routePoints, {
         color: '#10b981',
         weight: 3.5,
         opacity: 0.75,
@@ -193,7 +208,7 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
         lineCap: 'round'
       });
       routeLine.addTo(map);
-    } else {
+    } else if (hasStore && hasClient) {
       // Connect store to client directly
       const directLine = L.polyline([
         [storeLat, storeLng],

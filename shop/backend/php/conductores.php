@@ -77,10 +77,12 @@ function normalizarConductor($c, $origen = 'delivery') {
             'fotoUrl'               => $avatar,
             'disponible'            => $disponible,
             'en_carrera'            => (bool)($c['en_carrera'] ?? false),
-            'latitud_actual'        => (float)($c['latitud_actual'] ?? 10.4910),
-            'longitud_actual'       => (float)($c['longitud_actual'] ?? -66.8620),
-            'lat'                   => (float)($c['latitud_actual'] ?? 10.4910),
-            'lng'                   => (float)($c['longitud_actual'] ?? -66.8620),
+            // GPS REAL: si no hay coordenada (NULL/0), se devuelve null para que el
+            // mapa/radar NO invente una posición hardcodeada (antes: 10.49, -66.86).
+            'latitud_actual'        => (($c['latitud_actual'] ?? null) !== null && (float)$c['latitud_actual'] != 0) ? (float)$c['latitud_actual'] : null,
+            'longitud_actual'       => (($c['longitud_actual'] ?? null) !== null && (float)$c['longitud_actual'] != 0) ? (float)$c['longitud_actual'] : null,
+            'lat'                   => (($c['latitud_actual'] ?? null) !== null && (float)$c['latitud_actual'] != 0) ? (float)$c['latitud_actual'] : null,
+            'lng'                   => (($c['longitud_actual'] ?? null) !== null && (float)$c['longitud_actual'] != 0) ? (float)$c['longitud_actual'] : null,
             'saldo_billetera_usd'   => (float)($c['saldo_billetera_usd'] ?? 0.00),
             'limite_saldo_negativo' => (float)($c['limite_saldo_negativo'] ?? -0.50),
             'bloqueado_por_saldo'   => (bool)($c['bloqueado_por_saldo'] ?? false),
@@ -657,8 +659,10 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
                 'tipo_vehiculo'        => $regData['tipo_vehiculo'] ?? 'moto',
                 'disponible'           => 1,
                 'en_carrera'           => 0,
-                'latitud_actual'       => 10.49100000,
-                'longitud_actual'      => -66.86200000,
+                // GPS: 0 = sin coordenada real (el app la manda por action=gps/keep_alive).
+                // NUNCA escribir Caracas (10.49, -66.86) como posición inventada.
+                'latitud_actual'       => 0.00000000,
+                'longitud_actual'      => 0.00000000,
                 'placa_moto'           => $placa,
                 'marca_moto'           => $marca,
                 'modelo_moto'          => $modelo,
@@ -794,9 +798,9 @@ if ($method === 'POST' && $action === 'pre_registro') {
 
     $fotoUrl = "/shop/backend/uploads/repartidores/$filename";
 
-    // Parsear GPS
-    $lat = 10.49100000;
-    $lng = -66.86200000;
+    // Parsear GPS (0,0 = sin coordenada real; NO inventar Caracas)
+    $lat = 0.00000000;
+    $lng = 0.00000000;
     if (!empty($ubicacionGps)) {
         $parts = explode(',', $ubicacionGps);
         if (count($parts) >= 2) {

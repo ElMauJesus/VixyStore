@@ -350,15 +350,19 @@ if ($method === 'PUT' && $id) {
             $pwdHash = !empty($existingDl['password_hash']) ? $existingDl['password_hash'] : ($regData['password_hash'] ?? password_hash('123456', PASSWORD_BCRYPT));
             $storeId = !empty($existingDl['id']) ? $existingDl['id'] : (!empty($regData['codigo_comercio']) ? $regData['codigo_comercio'] : (string)$id);
 
-            // Parsear coordenadas GPS si existen
-            $lat = 10.48801100;
-            $lng = -66.85334100;
+            // Parsear coordenadas GPS reales (0 = sin coordenada; NO inventar Caracas).
+            // Radar/mapa saltan comercios sin GPS en vez de ubicarlos en un punto fijo.
+            $lat = (isset($existingDl['latitud']) && (float)$existingDl['latitud'] != 0) ? (float)$existingDl['latitud'] : 0.00000000;
+            $lng = (isset($existingDl['longitud']) && (float)$existingDl['longitud'] != 0) ? (float)$existingDl['longitud'] : 0.00000000;
             if (!empty($regData['ubicacion_gps'])) {
                 $coords = explode(',', $regData['ubicacion_gps']);
                 if (count($coords) >= 2) {
                     $lat = floatval(trim($coords[0]));
                     $lng = floatval(trim($coords[1]));
                 }
+            } elseif (!empty($data['latitud']) && !empty($data['longitud'])) {
+                $lat = floatval($data['latitud']);
+                $lng = floatval($data['longitud']);
             }
 
             // Mapear categoría a los valores permitidos del enum

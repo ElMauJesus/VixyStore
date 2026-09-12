@@ -258,7 +258,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
             <div className="flex items-center gap-4 flex-wrap">
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-violet-500" />
-                Comercio: {store.nombre} (10.4910° N, 66.8520° W)
+                Comercio: {store.nombre} {store.lat && store.lng ? `(${store.lat.toFixed(4)}° N, ${Math.abs(store.lng).toFixed(4)}° W)` : '(Sin GPS)'}
               </span>
               <span className="hidden sm:flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />

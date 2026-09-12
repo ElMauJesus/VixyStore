@@ -177,9 +177,16 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // 4. Verificar en tabla Conductores (App Conductor)
+    // El teléfono ingresa su ubicación junto con las credenciales: el login PHP
+    // registra la posición en la BD para que la página web la reciba en el radar.
+    $gpsLat = isset($input['latitud']) ? (float)$input['latitud'] : (isset($input['lat']) ? (float)$input['lat'] : 0.0);
+    $gpsLng = isset($input['longitud']) ? (float)$input['longitud'] : (isset($input['lng']) ? (float)$input['lng'] : 0.0);
+    $gpsPres = isset($input['precision_metros']) ? (float)$input['precision_metros'] : 0.0;
+    $gpsVel  = isset($input['velocidad_kmh']) ? (float)$input['velocidad_kmh'] : 0.0;
+
     $driver = false;
     if ($appRole === '' || $appRole === 'conductor') {
-        $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, foto_url, disponible, saldo_billetera_usd, bloqueado_por_saldo, verificado_por_admin, password_hash FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
+        $stmtDriver = $pdo->prepare("SELECT id, nombre, apellido, email, telefono, cedula, foto_url, disponible, saldo_billetera_usd, bloqueado_por_saldo, verificado_por_admin, password_hash, latitud_actual, longitud_actual FROM conductores WHERE email = :id1 OR telefono = :id2 OR cedula = :id3 LIMIT 1");
         $stmtDriver->execute(['id1' => $identifier, 'id2' => $identifier, 'id3' => $identifier]);
         $driver = $stmtDriver->fetch();
     }
@@ -196,6 +203,16 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($isBlocked && !$driver['bloqueado_por_saldo']) {
                 $pdo->prepare("UPDATE conductores SET bloqueado_por_saldo = 1, disponible = 0 WHERE id = :id")->execute(['id' => $driver['id']]);
+            }
+
+            // GPS guardado en el login (el APK reporta su posición al iniciar sesión)
+            if ($gpsLat != 0.0 && $gpsLng != 0.0) {
+                $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, disponible = 1, ultima_actualizacion = NOW() WHERE id = :id")
+                    ->execute(['lat' => $gpsLat, 'lng' => $gpsLng, 'id' => $driver['id']]);
+
+                // Historial de tracking GPS (para el radar/caminos)
+                $hist = $pdo->prepare("INSERT INTO ubicaciones_gps_conductores (conductor_id, latitud, longitud, precision_metros, velocidad_kmh) VALUES (:cid, :lat, :lng, :prec, :vel)");
+                $hist->execute(['cid' => $driver['id'], 'lat' => $gpsLat, 'lng' => $gpsLng, 'prec' => $gpsPres, 'vel' => $gpsVel]);
             }
 
             $token = AuthMiddleware::issueToken($pdo, [
@@ -218,7 +235,9 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'tipo_usuario' => 'conductor',
                     'disponible' => $isBlocked ? false : (bool)$driver['disponible'],
                     'saldoBilletera' => $saldoUsd,
-                    'bloqueadoPorSaldo' => $isBlocked
+                    'bloqueadoPorSaldo' => $isBlocked,
+                    'latitud' => $gpsLat != 0.0 ? $gpsLat : (float)($driver['latitud_actual'] ?? 0.0),
+                    'longitud' => $gpsLng != 0.0 ? $gpsLng : (float)($driver['longitud_actual'] ?? 0.0)
                 ]
             ]);
         }
@@ -302,8 +321,8 @@ if ($action === 'register_store' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $telefono = trim($input['telefono'] ?? '');
     $password = trim($input['password'] ?? '');
     $direccion = trim($input['direccion'] ?? 'Caracas, Venezuela');
-    $latitud = isset($input['latitud']) ? (float)$input['latitud'] : 10.4930;
-    $longitud = isset($input['longitud']) ? (float)$input['longitud'] : -66.8520;
+    $latitud = isset($input['latitud']) ? (float)$input['latitud'] : 0.00000000;
+    $longitud = isset($input['longitud']) ? (float)$input['longitud'] : 0.00000000;
     $horaApertura = trim($input['hora_apertura'] ?? '08:00:00');
     $horaCierre = trim($input['hora_cierre'] ?? '22:00:00');
 

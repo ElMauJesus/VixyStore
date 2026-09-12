@@ -265,6 +265,66 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [activityLogs, setActivityLogs] = useState<LogActividad[]>(INITIAL_ACTIVITY_LOGS);
   const [deliveryRates, setDeliveryRates] = useState<TarifasDeliveryConfig>(INITIAL_TARIFAS_CONFIG);
 
+  // Carga ligera y periódica de conductores (GPS en vivo para el radar/mapa)
+  const cargarConductores = async () => {
+    try {
+      const condRes = await api.getConductores(false).catch(() => null);
+      if (condRes?.success && Array.isArray(condRes.conductores)) {
+        const loadedDrivers: Conductor[] = condRes.conductores.map((d: any) => ({
+          ...d,
+          id: String(d.id || d.codigo_conductor || ('drv-' + Math.random())),
+          nombre: d.nombre || 'Conductor',
+          apellido: d.apellido || '',
+          cedula: d.cedula || '',
+          telefono: d.telefono || '',
+          fotoUrl: d.avatar_url || d.foto_url || d.fotoUrl || '',
+          status: (d.status || d.estado_verificacion || 'pendiente') as any,
+          estadoVerificacion: (d.estado_verificacion || d.status || 'pendiente') as any,
+          codigoSolicitud: d.codigo_conductor || d.id,
+          moto: (d.moto && typeof d.moto === 'object') ? d.moto : {
+            marca: d.marca_moto || d.marca || 'Moto',
+            modelo: d.modelo_moto || d.modelo || '',
+            color: d.color_moto || d.color || '',
+            placa: d.placa_moto || d.placa || '',
+            ano: Number(d.ano_moto || d.ano || 0)
+          },
+          legal: (d.legal && typeof d.legal === 'object') ? d.legal : {
+            cedula: d.cedula || '',
+            licenciaGrado: d.licencia_grado || '2da',
+            licenciaNumero: d.licencia_numero || '',
+            licenciaVencimiento: '2026-12-31',
+            licenciaValida: true,
+            certificadoMedicoNumero: d.certificado_medico || '',
+            certificadoMedicoVencimiento: '2026-12-31',
+            certificadoMedicoValido: true,
+            rcvAseguradora: 'Seguros Caracas',
+            rcvPolizaNumero: d.rcv_poliza || '',
+            rcvVencimiento: '2026-12-31'
+          },
+          disponible: Boolean(d.disponible),
+          ubicacionActual: d.ubicacion_actual || d.ubicacionActual || 'Caracas',
+          lat: d.latitud_actual ?? d.lat ?? null,
+          lng: d.longitud_actual ?? d.lng ?? null,
+          calificacion: Number(d.rating || d.calificacion || 5.0),
+          totalViajes: Number(d.total_carreras || d.totalViajes || 0),
+          billetera: (d.billetera && typeof d.billetera === 'object') ? d.billetera : {
+            saldoUsd: Number(d.saldo_billetera_usd || 0),
+            limiteSaldoNegativo: Number(d.limite_saldo_negativo || -0.50),
+            bloqueadoPorSaldo: Boolean(d.bloqueado_por_saldo),
+            totalGanadoUsd: 0,
+            totalComisionesPagadasUsd: 0,
+            historialTransacciones: []
+          }
+        }));
+
+        // Conservar el conductor local activo (el que tiene la web abierta del lado driver)
+        setAllDrivers(loadedDrivers);
+      }
+    } catch (err) {
+      console.warn('[Vixy Conductor Sync]', err);
+    }
+  };
+
   // Carga inicial y sincronización de datos reales desde el Backend MySQL / cPanel
   const refreshBackendData = async () => {
     try {
@@ -318,8 +378,8 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           status: c.status || (c.origen_bd === 'delivery' ? 'aprobado' : 'pendiente'),
           validado: c.validado === true || c.status === 'aprobado' || c.origen_bd === 'delivery',
           origen_bd: c.origen_bd || 'delivery',
-          lat: Number(c.lat || c.latitud || 10.4910),
-          lng: Number(c.lng || c.longitud || -66.8530),
+          lat: c.lat ?? c.latitud ?? 0,
+          lng: c.lng ?? c.longitud ?? 0,
           productos: Array.isArray(c.productos) ? c.productos : [],
           categoriasCatalogo: Array.isArray(c.categorias_catalogo) ? c.categorias_catalogo : [],
           metodosPagoAceptados: c.metodos_pago || {
@@ -497,58 +557,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       // 4. Conductores reales desde MySQL con Normalización Completa
-      const condRes = await api.getConductores(false).catch(() => null);
-      if (condRes?.success && Array.isArray(condRes.conductores)) {
-        const loadedDrivers: Conductor[] = condRes.conductores.map((d: any) => ({
-          ...d,
-          id: String(d.id || d.codigo_conductor || ('drv-' + Math.random())),
-          nombre: d.nombre || 'Conductor',
-          apellido: d.apellido || '',
-          cedula: d.cedula || '',
-          telefono: d.telefono || '',
-          fotoUrl: d.avatar_url || d.foto_url || d.fotoUrl || '',
-          status: (d.status || d.estado_verificacion || 'pendiente') as any,
-          estadoVerificacion: (d.estado_verificacion || d.status || 'pendiente') as any,
-          codigoSolicitud: d.codigo_conductor || d.id,
-          moto: (d.moto && typeof d.moto === 'object') ? d.moto : {
-            marca: d.marca_moto || d.marca || 'Moto',
-            modelo: d.modelo_moto || d.modelo || '',
-            color: d.color_moto || d.color || '',
-            placa: d.placa_moto || d.placa || '',
-            ano: Number(d.ano_moto || d.ano || 0)
-          },
-          legal: (d.legal && typeof d.legal === 'object') ? d.legal : {
-            cedula: d.cedula || '',
-            licenciaGrado: d.licencia_grado || '2da',
-            licenciaNumero: d.licencia_numero || '',
-            licenciaVencimiento: '2026-12-31',
-            licenciaValida: true,
-            certificadoMedicoNumero: d.certificado_medico || '',
-            certificadoMedicoVencimiento: '2026-12-31',
-            certificadoMedicoValido: true,
-            rcvAseguradora: 'Seguros Caracas',
-            rcvPolizaNumero: d.rcv_poliza || '',
-            rcvVencimiento: '2026-12-31'
-          },
-          disponible: Boolean(d.disponible),
-          ubicacionActual: d.ubicacion_actual || d.ubicacionActual || 'Caracas',
-          lat: Number(d.latitud_actual || d.lat || 10.4910),
-          lng: Number(d.longitud_actual || d.lng || -66.8620),
-          calificacion: Number(d.rating || d.calificacion || 5.0),
-          totalViajes: Number(d.total_carreras || d.totalViajes || 0),
-          billetera: (d.billetera && typeof d.billetera === 'object') ? d.billetera : {
-            saldoUsd: Number(d.saldo_billetera_usd || 0),
-            limiteSaldoNegativo: Number(d.limite_saldo_negativo || -0.50),
-            bloqueadoPorSaldo: Boolean(d.bloqueado_por_saldo),
-            totalGanadoUsd: 0,
-            totalComisionesPagadasUsd: 0,
-            historialTransacciones: []
-          }
-        }));
-
-        // Reemplazar con conductores reales de la BD (aunque venga vacío: nunca mostrar demo)
-        setAllDrivers(loadedDrivers);
-      }
+      await cargarConductores();
 
       // 5. Recargas reales (normalizadas del shape MySQL crudo → SolicitudRecarga)
       const recRes = await api.getRecargas().catch(() => null);
@@ -585,6 +594,16 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     refreshBackendData();
+  }, []);
+
+  // Polling GPS en vivo: refresca conductores cada 10s para que el radar/mapa
+  // muestre la posición real de los deliverys sin necesidad de recargar la página.
+  useEffect(() => {
+    cargarConductores();
+    const interval = setInterval(() => {
+      cargarConductores();
+    }, 10000);
+    return () => clearInterval(interval);
   }, []);
   const [cartoApiKey, setCartoApiKeyState] = useState<string>(() => {
     const defaultKey = 'cb1_2or2_1_cfdc8f91393881d023074657';

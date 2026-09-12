@@ -2116,7 +2116,7 @@ export const DriverApp: React.FC = () => {
                 <span className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/80 text-emerald-400 rounded text-[10px] font-mono border border-emerald-500/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                   <span>
-                    GPS: {realGpsCoords ? `${realGpsCoords.lat.toFixed(5)}° N, ${Math.abs(realGpsCoords.lng).toFixed(5)}° W` : '10.4965° N, -66.8523° W'}
+                    GPS: {realGpsCoords ? `${realGpsCoords.lat.toFixed(5)}° N, ${Math.abs(realGpsCoords.lng).toFixed(5)}° W` : 'SIN GPS'}
                   </span>
                 </span>
               </div>

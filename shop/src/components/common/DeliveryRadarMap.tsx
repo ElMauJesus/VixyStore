@@ -257,8 +257,10 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
     const activeStores = stores.filter(s => s.activo !== false);
 
     activeStores.forEach(com => {
-      const lat = com.lat || 10.4930;
-      const lng = com.lng || -66.8530;
+      const lat = com.lat || 0;
+      const lng = com.lng || 0;
+      // Sin GPS real del comercio: no se inventa una posición hardcodeada
+      if (!lat || !lng) return;
       const pendingOrders = 0; // Will be populated from orders context in a future update
 
       // Create rich HTML icon for store
@@ -325,10 +327,15 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
       if (!showAllDrivers && d.id !== driver?.id) return false;
       if (driverFilter === 'disponibles') return d.disponible;
       if (driverFilter === 'en_ruta') return !d.disponible;
+      // Sin GPS real (NULL/0): no aparece en el radar para no inventar Caracas
+      if (!d.lat || !d.lng) return false;
       return true;
     });
 
     driversToRender.forEach(drv => {
+      const drvLat = Number(drv.lat);
+      const drvLng = Number(drv.lng);
+      if (!drvLat || !drvLng) return; // Sin GPS real: no marcar en el mapa
       const isSelected = activeDriverId === drv.id;
       const isAvailable = drv.disponible;
       const ringColor = isAvailable ? '#10b981' : '#3b82f6';
@@ -366,7 +373,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
         popupAnchor: [0, -22]
       });
 
-      const marker = L.marker([drv.lat, drv.lng], { 
+      const marker = L.marker([drvLat, drvLng], { 
         icon: driverIcon,
         zIndexOffset: isSelected ? 1000 : 100
       });
@@ -376,7 +383,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
         setSelectedComercio(null);
         setSelectedZona(null);
         if (onSelectDriver) onSelectDriver(drv.id);
-        mapInstanceRef.current?.flyTo([drv.lat, drv.lng], 15, { duration: 0.8 });
+        mapInstanceRef.current?.flyTo([drvLat, drvLng], 15, { duration: 0.8 });
       });
 
       marker.bindTooltip(`
@@ -437,7 +444,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
   useEffect(() => {
     if (externalSelectedDriverId) {
       const found = allDrivers.find(d => d.id === externalSelectedDriverId);
-      if (found) {
+      if (found && found.lat && found.lng) {
         setSelectedDriverOnMap(found);
         mapInstanceRef.current?.flyTo([found.lat, found.lng], 15, { duration: 0.8 });
       }

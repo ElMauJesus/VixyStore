@@ -398,7 +398,14 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     //  - Identificador: Cédula de Identidad (o teléfono)
     //  - Código de Acceso: Código único asignado por el registro (DRV-...)
     //  - Contraseña: Clave generada por el registro (o cambiada por el conductor)
+    // El teléfono ingresa su ubicación junto con las credenciales: se guarda en la
+    // BD para que la página web la reciba en el radar/Mapa de Conductores.
     $driver = null;
+
+    $gpsLat = isset($input['latitud']) ? (float)$input['latitud'] : (isset($input['lat']) ? (float)$input['lat'] : 0.0);
+    $gpsLng = isset($input['longitud']) ? (float)$input['longitud'] : (isset($input['lng']) ? (float)$input['lng'] : 0.0);
+    $gpsPres = isset($input['precision_metros']) ? (float)$input['precision_metros'] : 0.0;
+    $gpsVel  = isset($input['velocidad_kmh']) ? (float)$input['velocidad_kmh'] : 0.0;
 
     $cleanDrvDigits = preg_replace('/[^0-9]/', '', $cleanId);
 
@@ -483,6 +490,16 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $drvApe  = $drvRegist['apellido'];
                 $drvTok  = AuthMiddleware::generateToken(['id' => $drvId, 'email' => $drvRegist['email'] ?? '', 'tipo_usuario' => 'conductor']);
 
+                // Guardar GPS recibido en el login (tabla vixy_dl.conductores que lee el radar)
+                if ($gpsLat != 0.0 && $gpsLng != 0.0) {
+                    try {
+$updGps = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, disponible = 1, ultima_actualizacion = NOW() WHERE id = :id OR codigo_conductor = :id");
+                        $updGps->execute(['lat' => $gpsLat, 'lng' => $gpsLng, 'id' => $drvId]);
+                    } catch (Exception $e) {
+                        error_log('GPS login conductor (regist): ' . $e->getMessage());
+                    }
+                }
+
                 Database::jsonResponse([
                     'success' => true,
                     'token'   => $drvTok,
@@ -530,6 +547,16 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $driver['email'],
                 'tipo_usuario' => 'conductor'
             ]);
+
+            // Guardar GPS recibido en el login (tabla vixy_dl.conductores que lee el radar)
+            if ($gpsLat != 0.0 && $gpsLng != 0.0) {
+                try {
+                    $updGps = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, disponible = 1, ultima_actualizacion = NOW() WHERE id = :id");
+                    $updGps->execute(['lat' => $gpsLat, 'lng' => $gpsLng, 'id' => $driver['id']]);
+                } catch (Exception $e) {
+                    error_log('GPS login conductor (vixy_dl): ' . $e->getMessage());
+                }
+            }
             Database::jsonResponse([
                 'success' => true,
                 'token' => $token,
