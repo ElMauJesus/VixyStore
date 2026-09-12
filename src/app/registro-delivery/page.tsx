@@ -136,6 +136,7 @@ export default function RegistroDeliveryPage() {
     const [copiedCode, setCopiedCode] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [gpsLoading, setGpsLoading] = useState(false);
+    const [dragOverPerfil, setDragOverPerfil] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const formSectionRef = useRef<HTMLDivElement>(null);
@@ -400,16 +401,23 @@ export default function RegistroDeliveryPage() {
     }) => {
         const value = form[fieldName] as FileField;
         const inputId = `file-${String(fieldName)}`;
+        const [dragOver, setDragOver] = useState(false);
         return (
             <div className={styles.fileGroup}>
                 <label className={styles.fileLabel}>
                     {label} {isRequired && <span style={{ color: 'red' }}>*</span>}
                 </label>
-                <div className={`${styles.dropzone} ${value?.file ? styles.dropzoneFilled : ''}`}>
+                <label
+                    htmlFor={inputId}
+                    className={`${styles.dropzone} ${value?.file ? styles.dropzoneFilled : ''} ${dragOver ? styles.dropzoneDrag : ''}`}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleFileField(fieldName, f); }}
+                >
                     {value?.preview ? (
                         <div className="relative w-full">
                             <img src={value.preview} alt={label} className={styles.previewImg} />
-                            <button type="button" onClick={() => handleClearFile(fieldName)} className={styles.clearFile}>
+                            <button type="button" className={styles.clearFile} onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleClearFile(fieldName); }}>
                                 <Trash2 size={14} />
                             </button>
                             <div className="flex items-center gap-1.5 mt-2 text-emerald-600 text-xs font-bold">
@@ -420,7 +428,7 @@ export default function RegistroDeliveryPage() {
                     ) : (
                         <>
                             <span className={styles.dropzoneIcon}>{icon}</span>
-                            <span className={styles.dropzoneHint}>Toca para subir</span>
+                            <span className={styles.dropzoneHint}>Toca para subir o arrastra aquí</span>
                             {hint && <span className={styles.dropzoneSub}>{hint}</span>}
                         </>
                     )}
@@ -429,9 +437,9 @@ export default function RegistroDeliveryPage() {
                         type="file"
                         accept="image/*"
                         className={styles.fileInputHidden}
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileField(fieldName, f); }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileField(fieldName, f); e.target.value = ''; }}
                     />
-                </div>
+                </label>
             </div>
         );
     };
@@ -536,11 +544,17 @@ export default function RegistroDeliveryPage() {
                             <div className={styles.fieldsGrid2}>
                                 <div className={styles.fileGroup}>
                                     <label className={styles.fileLabel}>Foto de rostro / Selfie *</label>
-                                    <div className={`${styles.dropzone} ${form.fotoPreview ? styles.dropzoneFilled : ''}`}>
+                                    <label
+                                        htmlFor="input-foto-perfil"
+                                        className={`${styles.dropzone} ${form.fotoPreview ? styles.dropzoneFilled : ''} ${dragOverPerfil ? styles.dropzoneDrag : ''}`}
+                                        onDragOver={(e) => { e.preventDefault(); setDragOverPerfil(true); }}
+                                        onDragLeave={() => setDragOverPerfil(false)}
+                                        onDrop={(e) => { e.preventDefault(); setDragOverPerfil(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
+                                    >
                                         {form.fotoPreview ? (
                                             <>
                                                 <img src={form.fotoPreview} alt="Preview" className={styles.previewImg} />
-                                                <button className={styles.clearFile} onClick={handleRemovePhoto}><X size={14} /></button>
+                                                <button className={styles.clearFile} onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemovePhoto(); }}><X size={14} /></button>
                                             </>
                                         ) : (
                                             <>
@@ -549,8 +563,8 @@ export default function RegistroDeliveryPage() {
                                                 <span className={styles.dropzoneSub}>Toca para subir o arrastra aquí</span>
                                             </>
                                         )}
-                                    </div>
-                                    <input type="file" accept="image/*" className={styles.fileInputHidden} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+                                    </label>
+                                    <input id="input-foto-perfil" type="file" accept="image/*" className={styles.fileInputHidden} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
                                 </div>
                                 <FileUploadField label="Cédula - Anverso" fieldName="cedulaAnverso" icon={<CreditCard size={28} />} hint="Frente de tu cédula" required />
                                 <FileUploadField label="Cédula - Reverso" fieldName="cedulaReverso" icon={<CreditCard size={28} />} hint="Reverso de tu cédula" required />

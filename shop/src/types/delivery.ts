@@ -89,6 +89,8 @@ export interface Conductor {
     comentario: string;
     fecha: string;
   }[];
+  carpetaImagenes?: string;
+  documentos?: Record<string, string | null>;
 }
 
 export interface Producto {

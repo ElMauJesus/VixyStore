@@ -6,14 +6,12 @@
  * Edite este archivo con las credenciales de su base de datos creadas en cPanel.
  */
 
-// 1. CREDENCIALES DE BASE DE DATOS (Donweb / Ferozo / cPanel)
+// 1. CREDENCIALES DE BASE DE DATOS (Ajustar según cPanel)
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_PORT', getenv('DB_PORT') ?: '3306');
 define('DB_NAME', getenv('DB_NAME') ?: 'c2861522_vixy_dl');
-define('REGIST_DB_NAME', getenv('REGIST_DB_NAME') ?: 'c2861522_regist');
-define('STORE_DB_NAME', getenv('STORE_DB_NAME') ?: 'c2861522_vixy_st');
 define('DB_USER', getenv('DB_USER') ?: 'c2861522_VixySD');
-define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : 'LnsdEjc@st6f4fY');
+define('DB_PASS', getenv('DB_PASS') ?: 'LnsdEjc@st6f4fY');
 
 // 2. SEGURIDAD Y JWT SECRET (Cambie esta clave en producción)
 define('JWT_SECRET', getenv('JWT_SECRET') ?: 'VIXY_SECRET_KEY_SUPER_SECURE_2026_PROD_JWT_AUTH_TOKEN');
@@ -27,5 +25,5 @@ define('UPLOAD_URL', '/api/uploads/');
 define('TARIFA_BASE_USD', 2.00);            // Tarifa mínima hasta 3 km
 define('KM_BASE', 3.0);                     // Cobertura base de 3 kilómetros
 define('PRECIO_KM_ADICIONAL_USD', 0.50);     // $0.50 por cada km adicional
-define('LIMITE_SALDO_NEGATIVO_USD', -0.50);  // Bloqueo de asignación si saldo < -$0.50
+define('LIMITE_SALDO_NEGATIVO_USD', 0.00);  // Bloqueo de asignación si saldo <= 0 (recarga obligatoria para viajar)
 define('COMISION_PLATAFORMA_PCT', 15.0);    // 15% de comisión de servicio

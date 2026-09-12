@@ -296,8 +296,10 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset($store['activo'])) {
                 $storeStatus = ((int)$store['activo'] === 1) ? 'aprobado' : 'pendiente';
             } else {
-                // Si el comercio viene de la tabla de delivery (sin campo status), asumir aprobado
-                $storeStatus = 'aprobado';
+                // Si viene de la cola de registro (c2861522_regist) no asumir aprobado:
+                // debe ser verificado por el administrador. Solo los comercios legacy
+                // de vixy_dl sin status se tratan como aprobados.
+                $storeStatus = $isFromRegist ? 'pendiente' : 'aprobado';
             }
         }
 

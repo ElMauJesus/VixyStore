@@ -392,7 +392,7 @@ export const ServiceOperationModal: React.FC<ServiceOperationModalProps> = ({
                     </p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono font-bold">
-                        🏍️ {order.conductor.moto?.marca || 'Bera'} {order.conductor.moto?.modelo || 'SBR'} ({order.conductor.moto?.ano || 2024})
+                        🏍️ {order.conductor.moto?.marca || 'Moto'} {order.conductor.moto?.modelo || ''} {order.conductor.moto?.ano ? '(' + order.conductor.moto.ano + ')' : ''}
                       </span>
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-extrabold border border-slate-300 dark:border-slate-700">
                         Placa: [{order.conductor.moto?.placa || 'S/P'}]

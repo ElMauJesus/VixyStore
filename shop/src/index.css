@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+@theme {
+  --color-vixy-navy: #070C2D;
+  --color-vixy-navy-deep: #040A25;
+  --color-vixy-card: #10163C;
+  --color-vixy-card-soft: #171D4A;
+  --color-vixy-indigo: #1D1A59;
+  --color-vixy-indigo-bright: #331491;
+  --color-vixy-violet: #6728DC;
+  --color-vixy-violet-soft: #8B5CF6;
+  --color-vixy-blue: #215C8E;
+  --color-vixy-border: #262A66;
+  --color-vixy-border-soft: #33387E;
+  --color-vixy-text: #EDEEFF;
+  --color-vixy-muted: #A5A8CC;
+  --color-vixy-faint: #6E7299;
+}
+
 @layer base {
   :root {
     --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -89,4 +106,137 @@
 
 .leaflet-popup-close-button:hover {
   color: #f8fafc !important;
+}
+
+/* ============================================================
+   VIXY ADMIN THEME — NAVY + VIOLET (#6728DC)
+   Estética "midnight navy" del panel admin (scoped a .vixy-admin)
+   ============================================================ */
+.vixy-admin {
+  color-scheme: dark;
+}
+
+/* --- Canvas principal --- */
+.vixy-admin .bg-\[\#F1F5F9\],
+.vixy-admin .bg-neutral-100,
+.vixy-admin .bg-neutral-50,
+.vixy-admin .bg-slate-950,
+.vixy-admin .dark\:bg-neutral-950,
+.vixy-admin .dark\:bg-slate-950 {
+  background-color: #070C2D !important;
+}
+.vixy-admin main {
+  background-image:
+    radial-gradient(1100px 460px at 85% -10%, rgba(103, 40, 220, 0.20), transparent 62%),
+    radial-gradient(900px 420px at -8% 108%, rgba(33, 92, 142, 0.16), transparent 55%);
+}
+
+/* --- Sidebar / panel lateral --- */
+.vixy-admin aside,
+.vixy-admin .bg-\[\#0F172A\] {
+  background: linear-gradient(180deg, #0B1034 0%, #040A25 45%, #070C2D 100%) !important;
+  border-right-color: #1B1E52 !important;
+}
+
+/* --- Tarjetas --- */
+.vixy-admin .bg-white,
+.vixy-admin .bg-slate-900,
+.vixy-admin .dark\:bg-neutral-900,
+.vixy-admin .dark\:bg-slate-900 {
+  background-color: #10163C !important;
+}
+.vixy-admin .bg-slate-800,
+.vixy-admin .dark\:bg-neutral-800,
+.vixy-admin .dark\:bg-slate-800 {
+  background-color: #0C1134 !important;
+}
+.vixy-admin .bg-slate-700,
+.vixy-admin .dark\:bg-neutral-850,
+.vixy-admin .dark\:bg-neutral-700,
+.vixy-admin .dark\:bg-slate-700 {
+  background-color: #0A0E32 !important;
+}
+
+/* --- Bordes --- */
+.vixy-admin .border-neutral-200,
+.vixy-admin .border-neutral-100,
+.vixy-admin .border-slate-200,
+.vixy-admin .border-slate-800,
+.vixy-admin .dark\:border-neutral-800,
+.vixy-admin .dark\:border-slate-800 {
+  border-color: #262A66 !important;
+}
+.vixy-admin .border-slate-100,
+.vixy-admin .dark\:border-neutral-700,
+.vixy-admin .dark\:border-slate-700,
+.vixy-admin .border-slate-700 {
+  border-color: #33387E !important;
+}
+
+/* --- Texto sobre navy --- */
+.vixy-admin .text-neutral-900,
+.vixy-admin .text-slate-900 {
+  color: #EDEEFF !important;
+}
+.vixy-admin .text-neutral-800,
+.vixy-admin .text-neutral-700,
+.vixy-admin .text-slate-700 {
+  color: #C6CAEC !important;
+}
+.vixy-admin .text-neutral-600,
+.vixy-admin .text-slate-600 {
+  color: #9BA0C8 !important;
+}
+.vixy-admin .text-neutral-500,
+.vixy-admin .text-slate-500 {
+  color: #8288B4 !important;
+}
+.vixy-admin .text-neutral-400,
+.vixy-admin .text-slate-400 {
+  color: #6E739E !important;
+}
+
+/* --- Acento naranja → violeta (#6728DC) --- */
+.vixy-admin .bg-orange-600,
+.vixy-admin .bg-orange-500,
+.vixy-admin .hover\:bg-orange-500,
+.vixy-admin .hover\:bg-orange-600 {
+  background-color: #6728DC !important;
+  background-image: linear-gradient(135deg, #7330EE 0%, #4C24A6 100%) !important;
+}
+.vixy-admin .text-orange-500,
+.vixy-admin .text-orange-600,
+.vixy-admin .text-orange-400,
+.vixy-admin .hover\:text-orange-500,
+.vixy-admin .dark\:text-orange-400 {
+  color: #8B5CF6 !important;
+}
+.vixy-admin .border-orange-500,
+.vixy-admin .border-orange-500\/10,
+.vixy-admin .border-orange-500\/20,
+.vixy-admin .border-orange-500\/30,
+.vixy-admin .border-orange-500\/40 {
+  border-color: rgba(103, 40, 220, 0.45) !important;
+}
+.vixy-admin .bg-orange-500\/10,
+.vixy-admin .bg-orange-500\/20 {
+  background-color: rgba(103, 40, 220, 0.16) !important;
+}
+.vixy-admin .focus\:border-orange-500 {
+  border-color: #6728DC !important;
+}
+.vixy-admin .bg-blue-600 {
+  background-color: #6728DC !important;
+  background-image: linear-gradient(135deg, #7330EE 0%, #4C24A6 100%) !important;
+}
+
+/* --- Utilidades de acento para ediciones directas --- */
+.vixy-card-grad {
+  background-image: linear-gradient(135deg, #6728DC 0%, #331491 55%, #1D1A59 100%);
+}
+.vixy-glow {
+  box-shadow: 0 18px 40px -18px rgba(103, 40, 220, 0.55);
+}
+.vixy-glow-sm {
+  box-shadow: 0 10px 26px -14px rgba(103, 40, 220, 0.5);
 }

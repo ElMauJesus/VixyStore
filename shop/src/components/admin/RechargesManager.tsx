@@ -778,7 +778,7 @@ export const RechargesManager: React.FC = () => {
 
                   <div className="p-2.5 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800">
                     <span className="text-[10px] text-neutral-400 block font-bold uppercase">Vehículo Asignado</span>
-                    <span className="font-bold text-neutral-900 dark:text-white">{inspectingDriver.moto?.marca || 'Bera'} {inspectingDriver.moto?.modelo || 'SBR'} {inspectingDriver.moto?.ano ? `(${inspectingDriver.moto.ano})` : ''}</span>
+                    <span className="font-bold text-neutral-900 dark:text-white">{inspectingDriver.moto?.marca || 'Moto'} {inspectingDriver.moto?.modelo || ''} {inspectingDriver.moto?.ano ? `(${inspectingDriver.moto.ano})` : ''}</span>
                     <span className="text-[10px] font-mono text-neutral-500 block">Color: {inspectingDriver.moto?.color || 'N/A'}</span>
                   </div>
 

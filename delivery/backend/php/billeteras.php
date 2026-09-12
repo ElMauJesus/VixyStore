@@ -11,6 +11,7 @@ $pdo = Database::getConnection();
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
+    AuthMiddleware::requireAuth(['super_admin', 'operador', 'finanzas', 'auditor']);
     $entidad = $_GET['entidad'] ?? 'todas'; // 'comercios', 'conductores', 'clientes', 'todas'
     $idFiltro = $_GET['id'] ?? null; // Filtrar por comercio o conductor individual
 
@@ -33,7 +34,7 @@ if ($method === 'GET') {
                     c.nombre as comercio_nombre,
                     c.rif,
                     c.telefono,
-                    COALESCE(SUM(p.subtotal), 0) as total_ventas_brutas_usd,
+                    COALESCE(SUM(p.monto_subtotal_usd), 0) as total_ventas_brutas_usd,
                     COUNT(p.id) as total_pedidos
                 FROM comercios c
                 LEFT JOIN pedidos p ON c.id = p.comercio_id AND p.estado = 'entregado'
@@ -112,8 +113,8 @@ if ($method === 'GET') {
                     cond.nombre as conductor_nombre,
                     cond.cedula,
                     cond.telefono,
-                    cond.vehiculo,
-                    COALESCE(SUM(p.costo_envio), 0) as total_delivery_bruto_usd,
+                    MAX(CONCAT_WS(' ', cond.marca_moto, cond.modelo_moto, cond.placa_moto)) as vehiculo,
+                    COALESCE(SUM(p.costo_envio_usd), 0) as total_delivery_bruto_usd,
                     COUNT(p.id) as total_carreras
                 FROM conductores cond
                 LEFT JOIN pedidos p ON cond.id = p.conductor_id AND p.estado = 'entregado'
@@ -122,7 +123,7 @@ if ($method === 'GET') {
             if ($idFiltro && $entidad === 'conductores') {
                 $sqlConductores .= " WHERE cond.id = :drid";
             }
-            $sqlConductores .= " GROUP BY cond.id, cond.nombre, cond.cedula, cond.telefono, cond.vehiculo";
+            $sqlConductores .= " GROUP BY cond.id, cond.nombre, cond.cedula, cond.telefono";
 
             $stmtD = $pdo->prepare($sqlConductores);
             if ($idFiltro && $entidad === 'conductores') {
@@ -160,6 +161,35 @@ if ($method === 'GET') {
 
             $resultado['conductores'] = [
                 'listaPorConductor' => $conductoresFinal
+            ];
+        }
+
+        // 3. CARTERAS DE CLIENTES: saldo independiente de pedidos y comercios.
+        if ($entidad === 'clientes' || $entidad === 'todas') {
+            $clienteColumns = array_column($pdo->query('SHOW COLUMNS FROM clientes')->fetchAll(), 'Field');
+            $saldoClienteUsd = in_array('saldo_cartera_usd', $clienteColumns, true) ? 'saldo_cartera_usd' : '0';
+            $saldoClienteBs = in_array('saldo_cartera_bs', $clienteColumns, true) ? 'saldo_cartera_bs' : '0';
+            $sqlClientes = "SELECT id, nombre, apellido, cedula, {$saldoClienteUsd} AS saldo_cartera_usd, {$saldoClienteBs} AS saldo_cartera_bs FROM clientes";
+            $paramsClientes = [];
+            if ($idFiltro && $entidad === 'clientes') {
+                $sqlClientes .= ' WHERE id = :id';
+                $paramsClientes['id'] = $idFiltro;
+            }
+            $stmtClientes = $pdo->prepare($sqlClientes);
+            $stmtClientes->execute($paramsClientes);
+            $clientesFinal = array_map(static function ($cliente) use ($tasaBcv) {
+                $saldoUsd = (float)($cliente['saldo_cartera_usd'] ?? 0);
+                return [
+                    'clienteId' => $cliente['id'],
+                    'clienteNombre' => trim($cliente['nombre'] . ' ' . $cliente['apellido']),
+                    'cedula' => $cliente['cedula'],
+                    'saldoUsd' => $saldoUsd,
+                    'saldoBs' => isset($cliente['saldo_cartera_bs']) ? (float)$cliente['saldo_cartera_bs'] : round($saldoUsd * $tasaBcv, 2)
+                ];
+            }, $stmtClientes->fetchAll());
+            $resultado['clientes'] = [
+                'listaPorCliente' => $clientesFinal,
+                'saldoGlobalUsd' => round(array_sum(array_column($clientesFinal, 'saldoUsd')), 2)
             ];
         }
 

@@ -81,8 +81,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
         </div>
       </div>
 
-      {/* 2. VERIFICATION VAULT BENTO TILE (Span 1, Row-span 2, Electric Orange) */}
-      <div className="col-span-1 md:col-span-2 lg:col-span-1 lg:row-span-2 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
+      {/* 2. VERIFICATION VAULT BENTO TILE (Span 1, Row-span 2, Electric Violet) */}
+      <div className="col-span-1 md:col-span-2 lg:col-span-1 lg:row-span-2 vixy-card-grad vixy-glow rounded-2xl p-6 text-white relative overflow-hidden flex flex-col justify-between">
         {/* Soft decorative visual circle */}
         <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full pointer-events-none" />
 
@@ -135,7 +135,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           </span>
           <button
             onClick={() => onNavigateTab('recargas')}
-            className="text-xs font-bold underline hover:text-amber-100 cursor-pointer flex items-center gap-1 shrink-0"
+            className="text-xs font-bold underline hover:text-white cursor-pointer flex items-center gap-1 shrink-0"
           >
             <span>Ver Bóveda</span>
             <ChevronRight className="w-3 h-3" />
@@ -200,18 +200,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                     {driver.nombre} {driver.apellido}
                   </p>
                   <p className="text-[10px] text-slate-400 font-mono truncate">
-                    {driver.moto?.marca || 'Bera'} {driver.moto?.modelo || 'SBR'} [{driver.moto?.placa || 'S/P'}]
+                    {driver.moto?.marca || 'Moto'} {driver.moto?.modelo || ''} [{driver.moto?.placa || 'S/P'}]
                   </p>
                 </div>
               </div>
 
               <div className="space-y-1">
                 <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-amber-500 h-full w-3/4 rounded-full" />
+                  <div className="bg-violet-500 h-full w-3/4 rounded-full" />
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-400 font-mono">
                   <span>Destino: {activeOrder?.direccionEntrega?.sector || 'Chacao'}</span>
-                  <span className="text-amber-400 font-bold">ETA: 4m 12s</span>
+                  <span className="text-violet-400 font-bold">ETA: 4m 12s</span>
                 </div>
               </div>
             </div>
@@ -257,7 +257,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           <div className="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between text-[11px] text-slate-400 gap-2">
             <div className="flex items-center gap-4 flex-wrap">
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span className="w-2 h-2 rounded-full bg-violet-500" />
                 Comercio: {store.nombre} (10.4910° N, 66.8520° W)
               </span>
               <span className="hidden sm:flex items-center gap-1.5">
@@ -276,7 +276,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
               </button>
               <button
                 onClick={() => onNavigateTab('pedidos')}
-                className="text-amber-400 font-bold hover:underline cursor-pointer flex items-center gap-1 text-xs"
+                className="text-violet-400 font-bold hover:underline cursor-pointer flex items-center gap-1 text-xs"
               >
                 <span>Ver Pedidos</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -294,7 +294,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
 
         <div className="flex-1 space-y-3 overflow-hidden">
           <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl text-[11px] text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-800">
-            <p className="font-bold text-amber-600 dark:text-amber-400">
+            <p className="font-bold text-violet-600 dark:text-violet-400">
               [Comercio] {store.nombre}
             </p>
             El pedido #{activeOrder?.codigoSeguimiento || 'VXY-901'} fue empacado y sellado.
@@ -359,7 +359,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           </p>
           <button
             onClick={() => onNavigateTab('comercios')}
-            className="mt-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+            className="mt-2 text-xs font-bold text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1 cursor-pointer"
           >
             <span>Gestionar Comercios y Rubros</span>
             <ChevronRight className="w-3 h-3" />
@@ -375,7 +375,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           </h3>
           <button
             onClick={() => onNavigateTab('conductores')}
-            className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer flex items-center gap-1"
+            className="text-xs font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer flex items-center gap-1"
           >
             <span>Ver Fichas de Carnet</span>
             <ChevronRight className="w-3 h-3" />
@@ -405,7 +405,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                     <span className="truncate">{c.nombre} {c.apellido}</span>
                   </td>
                   <td className="py-2.5 text-slate-600 dark:text-slate-400 font-mono text-xs">
-                    {c.moto?.marca || 'Bera'} ({c.moto?.ano || (c.moto as any)?.anio || '2024'}) • [{c.moto?.placa || 'S/P'}]
+                    {c.moto?.marca || 'Moto'} {c.moto?.modelo ? c.moto.modelo + ' ' : ''}({c.moto?.ano || (c.moto as any)?.anio || 'Año N/D'}) • [{c.moto?.placa || 'S/P'}]
                   </td>
                   <td className="py-2.5 text-right text-emerald-600 dark:text-emerald-400 font-bold font-mono text-[11px] whitespace-nowrap">
                     CERT-MED ✓
@@ -423,7 +423,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           <h3 className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1">
             Configuración Servidor & API
           </h3>
-          <p className="text-sm font-mono text-amber-400 font-bold truncate">
+          <p className="text-sm font-mono text-violet-400 font-bold truncate">
             AUTH_JWT_SECRET_V1
           </p>
         </div>

@@ -1,7 +1,7 @@
 <?php
 /**
  * Vixy Delivery Platform - Almacenamiento Centralizado de Imágenes y Consultas SQL
- * Destinos soportados: comercios, productos, entregas, reclamos, comprobantes
+ * Destinos soportados: comercios, productos, entregas, reclamos, comprobantes y conductores
  * Ejecución directa de consultas SQL individuales según entidad y tipo
  */
 
@@ -52,7 +52,7 @@ $tipo = $_POST['tipo'] ?? 'general'; // comercios, productos, entregas, reclamos
 $entityId = $_POST['entity_id'] ?? null; // ID del comercio, producto, pedido, reclamo, etc.
 $campoEspecifico = $_POST['campo'] ?? null; // ej: 'logo', 'banner'
 
-$validTypes = ['comercios', 'productos', 'entregas', 'reclamos', 'comprobantes', 'admin'];
+$validTypes = ['comercios', 'productos', 'entregas', 'reclamos', 'comprobantes', 'admin', 'conductores'];
 if (!in_array($tipo, $validTypes)) {
     $tipo = 'general';
 }
@@ -70,7 +70,7 @@ if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
     Database::jsonResponse(['error' => true, 'mensaje' => 'Error al mover el archivo al disco de almacenamiento'], 500);
 }
 
-$publicUrl = "/backend/php/uploads/{$tipo}/" . $filename;
+$publicUrl = "/api/uploads/{$tipo}/" . $filename;
 
 // 3. EJECUTAR CONSULTAS SQL INDIVIDUALES SEGÚN ENTIDAD Y TIPO
 $sqlExecuted = false;
@@ -92,6 +92,10 @@ if ($entityId) {
             try {
                 $stmt = $pdo->prepare("UPDATE productos SET imagen_url = :url WHERE id = :id");
                 $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
+                if ($stmt->rowCount() === 0) {
+                    $stmt = $pdo->prepare("UPDATE productos_catalogo SET imagen_url = :url WHERE id = :id");
+                    $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
+                }
             } catch (Exception $e) {
                 $stmt = $pdo->prepare("UPDATE productos_catalogo SET imagen_url = :url WHERE id = :id");
                 $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
@@ -131,6 +135,38 @@ if ($entityId) {
             }
             $sqlExecuted = true;
             $sqlMessage = "Comprobante de Pago [{$entityId}]: Recibo bancario registrado.";
+            break;
+
+        // --- F. DOCUMENTO / FOTO DE CONDUCTOR (MI CEDULA, LICENCIA, CARNET, ETC.) ---
+        case 'conductores':
+            // Mapear campo → columna de BD (vixy_dl usa sufijo _url; regist puede usar otros nombres)
+            $campoMap = [
+                'perfil'                => 'foto_perfil_url',
+                'cedula'                => 'foto_cedula_url',
+                'cedula_reverso'        => 'foto_cedula_reverso_url',
+                'licencia'              => 'foto_licencia_url',
+                'carnet'                => 'foto_carnet_circulacion_url',
+                'carnet_circulacion'    => 'foto_carnet_circulacion_url',
+                'certificado_medico'    => 'foto_certificado_medico_url',
+                'rcv'                   => 'foto_rcv_url',
+                'antecedentes'          => 'foto_antecedentes_url',
+                'vehiculo'              => 'foto_vehiculo_url',
+                'placa'                 => 'foto_placa_url',
+                'record'                => 'record_policial_url',
+            ];
+            $campo  = strtolower(trim($campoEspecifico ?? ''));
+            $col    = $campoMap[$campo] ?? 'foto_cedula_url';
+            // Si la columna no existe en la tabla, usar foto_url como fallback
+            try {
+                $cols = array_column($pdo->query("SHOW COLUMNS FROM conductores")->fetchAll(), 'Field');
+                if (!in_array($col, $cols, true)) $col = 'foto_url';
+                $stmt = $pdo->prepare("UPDATE conductores SET `{$col}` = :url WHERE id = :id");
+                $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
+                $sqlExecuted = true;
+                $sqlMessage  = "Conductor [{$entityId}]: Campo {$col} actualizado con éxito.";
+            } catch (Exception $e) {
+                $sqlMessage = "Conductor [{$entityId}]: Imagen guardada pero no se pudo vincular automáticamente ({$e->getMessage()}).";
+            }
             break;
     }
 }
