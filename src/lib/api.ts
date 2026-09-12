@@ -218,6 +218,11 @@ export const storeApi = {
       body: JSON.stringify(data),
     });
   },
+
+  // Banners
+  getBanners: () => {
+    return request<{ id: number; imagen_url: string; titulo?: string; subtitulo?: string; texto_boton?: string; enlace_boton?: string; orden: number }[]>('/admin/banners.php?publico=1');
+  },
 };
 
 // -------------------------------------------------------------
@@ -357,5 +362,19 @@ export const adminApi = {
   // Usuarios Admin
   getUsers: () => {
     return request<User[]>('/admin/usuarios.php');
+  },
+
+  // Banners
+  getBannersAdmin: () => {
+    return request<any[]>('/admin/banners.php');
+  },
+  createBanner: (data: any) => {
+    return request<{ banner_id: number }>('/admin/banners.php', { method: 'POST', body: JSON.stringify(data) });
+  },
+  updateBanner: (data: any) => {
+    return request('/admin/banners.php', { method: 'PUT', body: JSON.stringify(data) });
+  },
+  deleteBanner: (id: number) => {
+    return request(`/admin/banners.php?id=${id}`, { method: 'DELETE' });
   },
 };

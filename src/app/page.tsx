@@ -11,6 +11,17 @@ import { Product, Category, Pagination } from '@/types/store';
 import { storeApi } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import BannerCarousel from '@/components/BannerCarousel';
+
+interface Banner {
+  id: number;
+  imagen_url: string;
+  titulo?: string;
+  subtitulo?: string;
+  texto_boton?: string;
+  enlace_boton?: string;
+  orden: number;
+}
 
 function CatalogContent() {
   const searchParams = useSearchParams();
@@ -23,6 +34,7 @@ function CatalogContent() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(currentSearch);
@@ -46,6 +58,32 @@ function CatalogContent() {
         }
       })
       .catch(() => { });
+  }, []);
+
+  // Cargar banners
+  useEffect(() => {
+    storeApi.getBanners()
+      .then((res) => {
+        if (res.success && res.data && res.data.length > 0) {
+          setBanners(res.data);
+        } else {
+          // Fallback: banner por defecto si no hay banners en la BD
+          setBanners([{
+            id: 0,
+            imagen_url: '/banners/vixybanner1.png',
+            titulo: 'Todo lo que tu Moto y Carro necesitan',
+            orden: 0,
+          }]);
+        }
+      })
+      .catch(() => {
+        setBanners([{
+          id: 0,
+          imagen_url: '/banners/vixybanner1.png',
+          titulo: 'Todo lo que tu Moto y Carro necesitan',
+          orden: 0,
+        }]);
+      });
   }, []);
 
   useEffect(() => {
@@ -110,12 +148,10 @@ function CatalogContent() {
       const res = await storeApi.login({ email: cedula.trim(), password });
 
       if (res.success && res.token) {
-        // Guardar token y usuario
         localStorage.setItem('vixy_auth_token', res.token);
         if (res.user) {
           localStorage.setItem('vixy_user', JSON.stringify(res.user));
         }
-        // Redirigir según el rol
         if (res.user?.role === 'administrator' || res.user?.role === 'secretary') {
           router.push('/admin');
         } else {
@@ -138,43 +174,10 @@ function CatalogContent() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-6 items-start">
 
-          {/* Banner Hero */}
-          <div className="relative w-full h-64 md:h-96 lg:h-[420px] rounded-3xl overflow-hidden shadow-lg">
-            <Image
-              src="/banners/vixybanner1.png"
-              alt="Todo lo que tu moto y carro necesitan"
-              fill
-              className="object-cover"
-              priority
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent p-8 md:p-12 flex flex-col justify-center">
-              <div className="relative w-32 h-24 md:w-56 md:h-40 mb-6">
-                <Image
-                  src="/logo/logostore2.png"
-                  alt="Vixy Store"
-                  fill
-                  className="object-contain"
-                />
-              </div>
-              <h1 className="text-white text-2xl md:text-4xl font-black uppercase leading-tight mb-4">
-                Todo lo que tu <br /> Moto y Carro necesitan
-              </h1>
-              <div className="flex flex-wrap gap-3">
-                <span className="bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-[#5A20CB]" /> Calidad garantizada
-                </span>
-                <span className="bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                  <CreditCard className="w-4 h-4 text-[#5A20CB]" /> Mejores precios
-                </span>
-                <span className="bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                  <Lock className="w-4 h-4 text-[#5A20CB]" /> Compra segura
-                </span>
-                <span className="bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                  <Truck className="w-4 h-4 text-[#5A20CB]" /> Envíos rápidos
-                </span>
-              </div>
-            </div>
-          </div>
+          {/* Banner Hero - CARRUSEL */}
+          {banners.length > 0 && (
+            <BannerCarousel banners={banners} intervalo={5000} />
+          )}
 
           {/* Panel de Login */}
           <div className="hidden lg:block bg-white rounded-2xl shadow-sm border border-gray-100 p-6">

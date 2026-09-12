@@ -375,3 +375,19 @@ CREATE TABLE IF NOT EXISTS `auditoria_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- =============================================================================
+-- 15 TABLA: banners_store (Carrusel de banners de la tienda)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS banners_store (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    imagen_url VARCHAR(500) NOT NULL,
+    titulo VARCHAR(150) DEFAULT NULL,
+    subtitulo VARCHAR(255) DEFAULT NULL,
+    texto_boton VARCHAR(100) DEFAULT NULL,
+    enlace_boton VARCHAR(255) DEFAULT NULL,
+    orden INT DEFAULT 0,
+    activo TINYINT(1) DEFAULT 1,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -17,9 +17,11 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import LoadingSpinner from '@/components/LoadingSpinner';
+
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -73,6 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: 'Pedidos', href: `${baseAdmin}/pedidos`, rawHref: '/admin/pedidos', icon: ClipboardList },
     { label: 'Garantías', href: `${baseAdmin}/garantias`, rawHref: '/admin/garantias', icon: ShieldCheck },
     { label: 'Usuarios', href: `${baseAdmin}/usuarios`, rawHref: '/admin/usuarios', icon: Users },
+    { label: 'Banners', href: `${baseAdmin}/banners`, rawHref: '/admin/banners', icon: ImageIcon },
   ];
 
   return (
@@ -102,9 +105,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Sidebar Desktop & Mobile drawer */}
       <aside
-        className={`${
-          mobileNavOpen ? 'block' : 'hidden'
-        } md:block w-full md:w-64 bg-[#0a0614] text-slate-300 flex-shrink-0 flex flex-col justify-between border-r border-purple-950 z-30`}
+        className={`${mobileNavOpen ? 'block' : 'hidden'
+          } md:block w-full md:w-64 bg-[#0a0614] text-slate-300 flex-shrink-0 flex flex-col justify-between border-r border-purple-950 z-30`}
       >
         <div>
           {/* Logo */}
@@ -144,11 +146,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileNavOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                    isActive
-                      ? 'bg-purple-600 text-white font-bold shadow-md shadow-purple-600/30'
-                      : 'text-slate-400 hover:bg-purple-950/60 hover:text-white'
-                  }`}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                    ? 'bg-purple-600 text-white font-bold shadow-md shadow-purple-600/30'
+                    : 'text-slate-400 hover:bg-purple-950/60 hover:text-white'
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
