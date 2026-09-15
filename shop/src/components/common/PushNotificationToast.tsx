@@ -3,19 +3,34 @@ import { Bell, X } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
 
 export const PushNotificationToast: React.FC = () => {
-  const { notifications } = useDelivery();
+  const { notifications, storeLoggedIn, adminIsLoggedIn, clientLoggedIn } = useDelivery();
   const [visibleNotif, setVisibleNotif] = useState<any | null>(null);
+  const [lastShownId, setLastShownId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Solo mostrar notificaciones flotantes si hay una sesión activa
+    const isAnyLoggedIn = storeLoggedIn || adminIsLoggedIn || clientLoggedIn;
+    if (!isAnyLoggedIn) {
+      setVisibleNotif(null);
+      return;
+    }
+
     if (notifications.length > 0) {
       const latest = notifications[0];
-      setVisibleNotif(latest);
-      const timer = setTimeout(() => {
-        setVisibleNotif(null);
-      }, 4500);
-      return () => clearTimeout(timer);
+      if (latest && latest.id !== lastShownId) {
+        // Si es comercio sin admin, no mostrar logs técnicos de administración web
+        if (storeLoggedIn && !adminIsLoggedIn && latest.canal === 'web') {
+          return;
+        }
+        setLastShownId(latest.id);
+        setVisibleNotif(latest);
+        const timer = setTimeout(() => {
+          setVisibleNotif(null);
+        }, 4500);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [notifications]);
+  }, [notifications, storeLoggedIn, adminIsLoggedIn, clientLoggedIn]);
 
   if (!visibleNotif) return null;
 

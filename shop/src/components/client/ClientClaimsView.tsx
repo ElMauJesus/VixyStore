@@ -237,10 +237,6 @@ export const ClientClaimsView: React.FC<ClientClaimsViewProps> = ({ onBackToMenu
                         <img src={img} alt="Evidencia" className="w-full h-full object-cover" />
                       </a>
                     ))}
-                    <div className="text-[10px] text-neutral-400 font-mono">
-                      <FolderTree className="w-3 h-3 inline mr-1 text-purple-500" />
-                      /uploads/clientes/{claim.clienteId}/reclamos/
-                    </div>
                   </div>
                 )}
               </div>
@@ -355,8 +351,7 @@ export const ClientClaimsView: React.FC<ClientClaimsViewProps> = ({ onBackToMenu
                 {/* Real Photo Attachment */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-bold text-neutral-500 flex items-center justify-between">
-                    <span>Adjuntar Foto de Evidencia Real</span>
-                    <span className="font-mono text-purple-600 dark:text-purple-400">/backend/php/uploads/reclamos/</span>
+                    <span>Adjuntar Foto de Evidencia</span>
                   </label>
                   
                   <div className="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border border-dashed border-neutral-300 dark:border-neutral-700 flex flex-col sm:flex-row items-start sm:items-center gap-3">

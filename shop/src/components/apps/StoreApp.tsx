@@ -50,9 +50,20 @@ import {
 } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
 import { Producto, MetodoPagoTipo } from '../../types/delivery';
-import { RUBROS_COMERCIO_DISPONIBLES } from '../../data/initialData';
+import { RUBROS_COMERCIO_DISPONIBLES, CATEGORIAS_PRODUCTO_POR_RUBRO } from '../../data/initialData';
 import { StoreClaimsManager } from '../store/StoreClaimsManager';
 import { api } from '../../services/api';
+
+const decodeHtml = (text?: string): string => {
+  if (!text) return '';
+  return text
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+};
 
 export const StoreApp: React.FC = () => {
   const { 
@@ -160,6 +171,8 @@ export const StoreApp: React.FC = () => {
   const [prodCategoria, setProdCategoria] = useState('Hamburguesas');
   const [prodDisponible, setProdDisponible] = useState(true);
   const [prodImagenUrl, setProdImagenUrl] = useState('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop&q=80');
+  const [prodImageFile, setProdImageFile] = useState<File | null>(null);
+  const [prodImageUploading, setProdImageUploading] = useState(false);
   const [productCategoryFilter, setProductCategoryFilter] = useState('todas');
 
   // Manual / In-Store Delivery Request Modal State
@@ -179,6 +192,11 @@ export const StoreApp: React.FC = () => {
   const [manualFormError, setManualFormError] = useState('');
 
   const storeProducts = Array.isArray(store?.productos) ? store.productos : [];
+  const productCatalogCategories = Array.from(new Set([
+    ...(Array.isArray(customCatalogCategories) ? customCatalogCategories : []),
+    ...storeProducts.map(p => p?.categoria).filter((c): c is string => !!c),
+    ...(CATEGORIAS_PRODUCTO_POR_RUBRO[store.categoria] || CATEGORIAS_PRODUCTO_POR_RUBRO['Otro (Personalizado)'] || [])
+  ]));
   const storeOrders = (orders || []).filter(o => {
     const oCid = o?.comercio?.id || (o as any)?.comercio_id || '';
     return store?.id && oCid && String(oCid) === String(store.id);
@@ -338,9 +356,11 @@ export const StoreApp: React.FC = () => {
     setProdNombre('');
     setProdDescripcion('');
     setProdPrecioUsd(6.0);
-    setProdCategoria('Hamburguesas');
+    setProdCategoria(productCatalogCategories[0] || 'General');
     setProdDisponible(true);
-    setProdImagenUrl('https://images.unsplash.com/photo-1550547660-d9450f859349?w=500&auto=format&fit=crop&q=80');
+    setProdImagenUrl(`/shop/imgs-c-d/comercios/${store.id}/logo.svg`);
+    setProdImageFile(null);
+    setProdImageUploading(false);
     setShowProductModal(true);
   };
 
@@ -352,17 +372,47 @@ export const StoreApp: React.FC = () => {
     setProdCategoria(prod.categoria);
     setProdDisponible(prod.disponible);
     setProdImagenUrl(prod.imagenUrl);
+    setProdImageFile(null);
+    setProdImageUploading(false);
     setShowProductModal(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prodNombre.trim()) return;
 
-    // Build specific SQL folder path for storing image as requested:
-    // "las imagenes iran en una carpeta individual que se llamara a traves del codigo sql"
+    let finalImageUrl = prodImagenUrl;
+
+    if (prodImageFile) {
+      setProdImageUploading(true);
+      try {
+        const uploadRes = await api.uploadImage(prodImageFile, 'productos', undefined, undefined, store.id);
+        if (uploadRes && uploadRes.url) {
+          finalImageUrl = uploadRes.url;
+        } else {
+          // Fallback a base64 para que productos.php lo guarde en el disco del comercio
+          finalImageUrl = await new Promise<string>((resolve) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result));
+            r.readAsDataURL(prodImageFile);
+          });
+        }
+      } catch (err) {
+        console.warn('Upload image error, using base64 fallback:', err);
+        finalImageUrl = await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.readAsDataURL(prodImageFile);
+        });
+      } finally {
+        setProdImageUploading(false);
+      }
+    }
+
     const slugName = prodNombre.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const imagenRuta = `/uploads/comercios/${store.id}/articulos/${slugName}.jpg`;
+    const imagenRuta = finalImageUrl.startsWith('/shop/imgs-c-d')
+      ? finalImageUrl
+      : `/shop/imgs-c-d/comercios/${store.id}/articulos/${slugName}.jpg`;
 
     if (editingProduct) {
       updateProductInStore(editingProduct.id, {
@@ -371,7 +421,7 @@ export const StoreApp: React.FC = () => {
         precioUsd: Number(prodPrecioUsd),
         categoria: prodCategoria,
         disponible: prodDisponible,
-        imagenUrl: prodImagenUrl,
+        imagenUrl: finalImageUrl,
         imagenRuta
       });
     } else {
@@ -381,11 +431,12 @@ export const StoreApp: React.FC = () => {
         precioUsd: Number(prodPrecioUsd),
         categoria: prodCategoria,
         disponible: prodDisponible,
-        imagenUrl: prodImagenUrl,
+        imagenUrl: finalImageUrl,
         imagenRuta
       });
     }
 
+    setProdImageFile(null);
     setShowProductModal(false);
   };
 
@@ -644,13 +695,13 @@ export const StoreApp: React.FC = () => {
         <div className="flex items-center gap-2 min-w-0">
           <img
             src={store.logoUrl}
-            alt={store.nombre}
+            alt={decodeHtml(store.nombre)}
             className="w-8 h-8 rounded-xl object-cover border border-purple-500 shrink-0"
           />
           <div className="min-w-0">
             <div className="flex items-center gap-1">
               <h3 className="text-xs font-bold text-neutral-900 dark:text-white leading-tight truncate">
-                {store.nombre}
+                {decodeHtml(store.nombre)}
               </h3>
               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
             </div>
@@ -875,7 +926,7 @@ export const StoreApp: React.FC = () => {
                   </h3>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold">
-                  SQL Conectado
+                  En Línea
                 </span>
               </div>
               <p className="text-[11px] text-neutral-500">
@@ -886,7 +937,7 @@ export const StoreApp: React.FC = () => {
             {storeInfoSavedMsg && (
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-2">
                 <Check className="w-4 h-4" />
-                <span>¡Datos del comercio y rubros actualizados exitosamente en la base de datos SQL!</span>
+                <span>¡Datos del comercio y rubros actualizados exitosamente!</span>
               </div>
             )}
 
@@ -959,7 +1010,7 @@ export const StoreApp: React.FC = () => {
                         className="w-full p-2 bg-purple-500/10 border border-purple-500/40 rounded-xl text-xs font-bold text-neutral-900 dark:text-white"
                       />
                       <p className="text-[10px] text-neutral-400">
-                        Este rubro personalizado se guardará en la base de datos SQL para identificar tu negocio en toda la plataforma.
+                        Este rubro personalizado identificará tu negocio en toda la plataforma.
                       </p>
                     </div>
                   )}
@@ -1288,9 +1339,6 @@ export const StoreApp: React.FC = () => {
                 <h3 className="text-xs font-bold text-neutral-900 dark:text-white truncate">
                   Artículos del Menú ({filteredProducts.length} de {store.productos?.length ?? 0})
                 </h3>
-                <p className="text-[10px] text-neutral-400 truncate font-mono">
-                  SQL: /uploads/comercios/{store.id}/articulos/
-                </p>
               </div>
 
               <button
@@ -1419,14 +1467,6 @@ export const StoreApp: React.FC = () => {
                           </span>
                         </div>
                       </div>
-                    </div>
-
-                    {/* SQL Image Path Reference */}
-                    <div className="px-2 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-900 text-[9px] text-neutral-500 dark:text-neutral-400 font-mono border border-neutral-100 dark:border-neutral-800 flex items-center gap-1.5">
-                      <FileCode className="w-3 h-3 text-purple-500 shrink-0" />
-                      <span className="truncate">
-                        SQL imagen_ruta: {prod.imagenRuta || `/uploads/comercios/${store.id}/articulos/${prod.id}.jpg`}
-                      </span>
                     </div>
 
                     {/* Actions Row */}
@@ -1999,13 +2039,13 @@ export const StoreApp: React.FC = () => {
               </div>
             </div>
 
-            {/* Banner de Sincronización SQL */}
+            {/* Banner de Cartera */}
             <div className="p-3 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Database className="w-4 h-4 text-emerald-500 shrink-0" />
                 <div>
-                  <p className="font-bold text-neutral-800 dark:text-neutral-200">Tabla SQL: <code className="text-purple-500 font-mono">comercio_billeteras</code></p>
-                  <p className="text-[10px] text-neutral-400">Acreditaciones directas de pedidos abonados con Cartera de Cliente</p>
+                  <p className="font-bold text-neutral-800 dark:text-neutral-200">Cartera Comercial Vixy</p>
+                  <p className="text-[10px] text-neutral-400">Acreditaciones de pedidos abonados por clientes</p>
                 </div>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold">
@@ -2148,11 +2188,16 @@ export const StoreApp: React.FC = () => {
                     onChange={(e) => setProdCategoria(e.target.value)}
                     className="w-full p-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 font-semibold"
                   >
-                    {customCatalogCategories.map((cat) => (
+                    {productCatalogCategories.map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}
                       </option>
                     ))}
+                    {!productCatalogCategories.includes(prodCategoria) && (
+                      <option key={prodCategoria} value={prodCategoria}>
+                        {prodCategoria || 'General'}
+                      </option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -2168,38 +2213,74 @@ export const StoreApp: React.FC = () => {
                 />
               </div>
 
-              {/* Imagen del Artículo y Carpeta Individual */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-neutral-400">URL / Previsualización de Imagen</label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={prodImagenUrl}
-                    onChange={(e) => setProdImagenUrl(e.target.value)}
-                    className="flex-1 p-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-[11px]"
-                  />
-                  <img
-                    src={prodImagenUrl}
-                    alt="Preview"
-                    className="w-9 h-9 rounded-xl object-cover border border-purple-500 shrink-0"
-                  />
+              {/* Imagen del Artículo y Archivo del Dispositivo */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">
+                  Foto del Artículo <span className="text-purple-400 font-bold">*</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-purple-500/40 bg-neutral-800 flex items-center justify-center shrink-0 shadow-inner">
+                    {prodImagenUrl ? (
+                      <img
+                        src={prodImagenUrl}
+                        alt="Previsualización"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=120';
+                        }}
+                      />
+                    ) : (
+                      <ImageIcon className="w-6 h-6 text-purple-400/50" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <label className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-800/40 text-purple-200 text-xs font-bold transition cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{prodImageFile ? 'Cambiar foto seleccionada' : 'Seleccionar foto desde dispositivo'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setProdImageFile(file);
+                            const preview = URL.createObjectURL(file);
+                            setProdImagenUrl(preview);
+                          }
+                        }}
+                      />
+                    </label>
+                    <input
+                      type="text"
+                      value={prodImagenUrl}
+                      onChange={(e) => {
+                        setProdImagenUrl(e.target.value);
+                        setProdImageFile(null);
+                      }}
+                      placeholder="O escribe una URL de imagen..."
+                      className="w-full p-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-[11px]"
+                    />
+                  </div>
                 </div>
-              </div>
-
-              {/* Server Folder Path indicator */}
-              <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-800 dark:text-purple-300 space-y-0.5">
-                <span className="font-bold block">Destino de Archivo en Servidor Namecheap:</span>
-                <code className="font-mono text-[9px] block">
-                  /uploads/comercios/{store.id}/articulos/{prodNombre ? prodNombre.toLowerCase().replace(/[^a-z0-9]/g, '_') : 'articulo'}.jpg
-                </code>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-2 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer transition flex items-center justify-center gap-1.5"
+                disabled={prodImageUploading}
+                className="w-full py-2 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer transition flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>{editingProduct ? 'Actualizar Artículo' : 'Guardar Artículo'}</span>
+                {prodImageUploading ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Guardando artículo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{editingProduct ? 'Actualizar Artículo' : 'Guardar Artículo'}</span>
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -2729,7 +2810,7 @@ export const StoreApp: React.FC = () => {
             <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-2">
               <div className="flex items-center gap-1.5 text-purple-500 font-bold">
                 <FileText className="w-4 h-4" />
-                <span>Comprobante de Pago Digital (SQL)</span>
+                <span>Comprobante de Pago Digital</span>
               </div>
               <button
                 onClick={() => setSelectedWalletTx(null)}
@@ -2769,15 +2850,15 @@ export const StoreApp: React.FC = () => {
             {/* Simulated Receipt Image from Storage */}
             <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 space-y-2 text-center">
               <span className="text-[10px] text-neutral-400 font-bold uppercase block">
-                Archivo Guardado en Sistema Interno
+                Comprobante Digital Registrado
               </span>
-              <div className="w-full h-32 rounded-xl bg-neutral-200 dark:bg-neutral-900 border border-dashed border-neutral-300 dark:border-neutral-700 flex flex-col items-center justify-center p-3 text-neutral-500">
-                <FileImage className="w-8 h-8 text-purple-500 mb-1" />
-                <span className="font-mono text-[9px] break-all">
-                  {selectedWalletTx.comprobanteRuta || `/uploads/comprobantes_pago/${selectedWalletTx.id}.png`}
+              <div className="w-full h-20 rounded-xl bg-neutral-200 dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 flex flex-col items-center justify-center p-3 text-neutral-500">
+                <FileImage className="w-6 h-6 text-purple-500 mb-1" />
+                <span className="text-[10px] font-bold text-neutral-700 dark:text-neutral-300">
+                  Transacción #{selectedWalletTx.id}
                 </span>
-                <span className="text-[9px] text-emerald-500 font-bold mt-1">
-                  ✓ Almacenado con ID único en tabla SQL
+                <span className="text-[9px] text-emerald-500 font-bold mt-0.5">
+                  ✓ Registro oficial confirmado
                 </span>
               </div>
             </div>

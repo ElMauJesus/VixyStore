@@ -11,6 +11,11 @@ $dirs = @(
     "out/store/_next",
     "out/shop",
     "out/shop/backend",
+    "out/admin",
+    "out/comercio",
+    "out/delivery",
+    "out/pedidos",
+    "out/assets",
     "out/registro-comercios",
     "out/registro-comercios/api",
     "out/registro-delivery",
@@ -28,19 +33,13 @@ foreach ($d in $dirs) {
     }
 }
 
-# Limpiar rutas obsoletas de /delivery/ para mantener exclusivamente /shop/
-if (Test-Path "out/delivery") {
-    Remove-Item -Path "out/delivery" -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "[OK] Directorio obsoleto out/delivery eliminado (exclusividad /shop/)"
-}
-
 # Limpiar imagenes vixycard sueltas que hayan quedado en la raiz de out o en out/store
 Remove-Item -Path "out/vixycard*.png" -Force -ErrorAction SilentlyContinue
 Remove-Item -Path "out/store/vixycard*.png" -Force -ErrorAction SilentlyContinue
 
 # 2. Rutas que pertenecen a la tienda: replicar en out/store/ Y mantener en out/
 #    Esto garantiza que el usuario pueda acceder tanto por /auth/login como por /store/auth/login
-$storeSubDirs = @("admin", "auth", "carrito", "checkout", "cuenta", "producto", "404")
+$storeSubDirs = @("auth", "carrito", "checkout", "cuenta", "producto", "404")
 foreach ($sub in $storeSubDirs) {
     if (Test-Path "out/$sub") {
         if (Test-Path "out/store/$sub") { Remove-Item -Path "out/store/$sub" -Recurse -Force }
@@ -138,6 +137,47 @@ if (Test-Path "out/panel-admin") {
 if (Test-Path "out/panel") {
     Remove-Item -Path "out/panel" -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host "[OK] out/panel eliminado - conductores se gestionan dentro de /shop/ admin panel"
+}
+
+# 7c. Copiar Vixy Admin (GPS Flota en vivo), Vixy Comercio (Business), Vixy Delivery, Vixy Pedidos y Assets globales
+if (Test-Path "public/admin") {
+    Copy-Item -Path "public/admin/*" -Destination "out/admin" -Recurse -Force
+    Write-Host "[OK] Panel Admin (GPS Flota en vivo) sincronizado en out/admin"
+}
+if (Test-Path "public/comercio") {
+    Copy-Item -Path "public/comercio/*" -Destination "out/comercio" -Recurse -Force
+    Write-Host "[OK] Panel Comercio (Vixy Business) sincronizado en out/comercio"
+}
+if (Test-Path "public/delivery") {
+    Copy-Item -Path "public/delivery/*" -Destination "out/delivery" -Recurse -Force
+    Write-Host "[OK] Web Vixy Delivery sincronizada en out/delivery"
+}
+if (Test-Path "public/pedidos") {
+    Copy-Item -Path "public/pedidos/*" -Destination "out/pedidos" -Recurse -Force
+    Write-Host "[OK] Web Vixy Pedidos sincronizada en out/pedidos"
+}
+if (Test-Path "public/assets") {
+    Copy-Item -Path "public/assets/*" -Destination "out/assets" -Recurse -Force
+    Write-Host "[OK] Assets web globales sincronizados en out/assets"
+}
+
+# El panel administrativo usa sus propios hashes bajo /admin/assets/.
+# Se conservan en su ruta original y también en /assets/ porque el .htaccess
+# puede servirlos desde el repositorio central de assets.
+if (Test-Path "public/admin/assets") {
+    New-Item -ItemType Directory -Path "out/admin/assets" -Force | Out-Null
+    Copy-Item -Path "public/admin/assets/*" -Destination "out/admin/assets" -Recurse -Force
+    Copy-Item -Path "public/admin/assets/*" -Destination "out/assets" -Recurse -Force
+    Write-Host "[OK] Assets del panel Admin sincronizados en out/admin/assets y out/assets"
+}
+
+# Limpiar carpetas assets redundantes dentro de las sub-apps (los assets se sirven centralizadamente desde out/assets/ sin duplicar 60MB)
+$subAppAssets = @("out/admin/assets", "out/comercio/assets", "out/delivery/assets", "out/pedidos/assets")
+foreach ($sa in $subAppAssets) {
+    if (Test-Path $sa) {
+        Remove-Item -Path $sa -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "[OK] Eliminada carpeta redundante $sa (se sirve desde /assets/)"
+    }
 }
 
 # 8. Copiar backend de Registro de Comercios a out/registro-comercios/api

@@ -82,6 +82,7 @@ export interface Conductor {
   velocidadKmh?: number;
   rumboGrados?: number;
   ubicacionActual: string;
+  hasRealGps?: boolean;
   resenas?: {
     id: string;
     clienteNombre: string;

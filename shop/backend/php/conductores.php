@@ -37,17 +37,15 @@ function normalizarConductor($c, $origen = 'delivery') {
             $estadoReg    = strtolower(trim((string)($c['estado_registro'] ?? '')));
             $verifAdmin   = (int)($c['verificado_por_admin'] ?? 0);
 
-            if ($storedStatus === 'rechazado') {
+            if ($storedStatus === 'rechazado' || $estadoReg === 'rechazado') {
                 $status = 'rechazado';
-            } elseif ($storedStatus === 'suspendido') {
+            } elseif ($storedStatus === 'suspendido' || $estadoReg === 'suspendido') {
                 $status = 'suspendido';
-            } elseif ($storedStatus === 'inactivo') {
+            } elseif ($storedStatus === 'inactivo' || $estadoReg === 'inactivo') {
                 $status = 'inactivo';
-            } elseif ($estadoReg === 'rechazado' || $estadoReg === 'suspendido' || $estadoReg === 'inactivo') {
-                $status = $estadoReg;
-            } elseif ($verifAdmin === 1 && ($estadoReg === 'aprobado' || $estadoReg === '')) {
-                $status = 'aprobado'; // verificado por administración
-            } elseif ($estadoReg === 'pendiente_aprobacion' || $estadoReg === 'pendiente' || $verifAdmin === 0) {
+            } elseif ($storedStatus === 'aprobado' || $estadoReg === 'aprobado' || $verifAdmin === 1) {
+                $status = 'aprobado'; // verificado y aprobado por administración
+            } elseif ($estadoReg === 'pendiente_aprobacion' || $estadoReg === 'pendiente' || $storedStatus === 'pendiente') {
                 $status = 'pendiente'; // registrado desde la app, a la espera de aprobación
             } else {
                 $status = 'aprobado'; // legacy histórico sin estado_registro ni verificación
@@ -55,14 +53,26 @@ function normalizarConductor($c, $origen = 'delivery') {
             $estadoVerif = $status;
             $disponible  = ($status === 'aprobado') ? (bool)($c['disponible'] ?? false) : false;
         } else {
-            // Solo en regist = pre-registro sin verificar
-            $status      = $c['status'] ?? 'pendiente';
-            $estadoVerif = $c['status'] ?? 'pendiente';
-            $disponible  = false;
+            // Origen regist (pre-registro o registro web)
+            $stR = strtolower(trim((string)($c['status'] ?? '')));
+            $status      = ($stR === 'aprobado') ? 'aprobado' : ($stR === 'rechazado' ? 'rechazado' : 'pendiente');
+            $estadoVerif = $status;
+            $disponible  = ($status === 'aprobado');
         }
+
+        // GPS: Telemetría real de APK si existe en la base de datos (latitud_actual, longitud_actual)
+        $gpsUpdatedAt = !empty($c['ultima_actualizacion']) ? strtotime((string)$c['ultima_actualizacion']) : 0;
+        $hasRecentGps = $gpsUpdatedAt > 0 && (time() - $gpsUpdatedAt) <= 180;
+        $isDefaultGps = (float)($c['latitud_actual'] ?? 0) === 10.491 && (float)($c['longitud_actual'] ?? 0) === -66.862;
+        $hasRealGps = $hasRecentGps && !$isDefaultGps && !empty($c['latitud_actual']) && !empty($c['longitud_actual']) && (float)$c['latitud_actual'] != 0 && (float)$c['longitud_actual'] != 0;
+        $rawLat = $hasRealGps ? (float)$c['latitud_actual'] : null;
+        $rawLng = $hasRealGps ? (float)$c['longitud_actual'] : null;
+        $ubiSector = $hasRealGps ? (!empty($c['ubicacion_actual']) ? $c['ubicacion_actual'] : 'Ubicación GPS en vivo') : 'GPS Pendiente (Sin conexión)';
 
         return [
             'id'                    => $code,
+            'has_real_gps'          => $hasRealGps,
+            'hasRealGps'            => $hasRealGps,
             'db_id'                 => $c['id'] ?? null,
             'origen_bd'             => $origen,
             'codigo_conductor'      => $code,
@@ -77,12 +87,13 @@ function normalizarConductor($c, $origen = 'delivery') {
             'fotoUrl'               => $avatar,
             'disponible'            => $disponible,
             'en_carrera'            => (bool)($c['en_carrera'] ?? false),
-            // GPS REAL: si no hay coordenada (NULL/0), se devuelve null para que el
-            // mapa/radar NO invente una posición hardcodeada (antes: 10.49, -66.86).
-            'latitud_actual'        => (($c['latitud_actual'] ?? null) !== null && (float)$c['latitud_actual'] != 0) ? (float)$c['latitud_actual'] : null,
-            'longitud_actual'       => (($c['longitud_actual'] ?? null) !== null && (float)$c['longitud_actual'] != 0) ? (float)$c['longitud_actual'] : null,
-            'lat'                   => (($c['latitud_actual'] ?? null) !== null && (float)$c['latitud_actual'] != 0) ? (float)$c['latitud_actual'] : null,
-            'lng'                   => (($c['longitud_actual'] ?? null) !== null && (float)$c['longitud_actual'] != 0) ? (float)$c['longitud_actual'] : null,
+            'latitud_actual'        => $rawLat,
+            'longitud_actual'       => $rawLng,
+            'ultima_actualizacion'  => $c['ultima_actualizacion'] ?? null,
+            'lat'                   => $rawLat,
+            'lng'                   => $rawLng,
+            'ubicacion_actual'      => $ubiSector,
+            'ubicacionActual'       => $ubiSector,
             'saldo_billetera_usd'   => (float)($c['saldo_billetera_usd'] ?? 0.00),
             'limite_saldo_negativo' => (float)($c['limite_saldo_negativo'] ?? -0.50),
             'bloqueado_por_saldo'   => (bool)($c['bloqueado_por_saldo'] ?? false),
@@ -179,7 +190,7 @@ if ($method === 'GET') {
     $soloDisponibles = isset($_GET['disponibles']) && $_GET['disponibles'] !== 'false' && $_GET['disponibles'] !== '0';
     $conductoresMap = [];
     try {
-        $sql = "SELECT id, nombre, apellido, cedula, telefono, email, foto_url, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo, rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto, licencia_grado, status, carpeta_imagenes, fecha_aprobacion, estado_registro, verificado_por_admin, foto_cedula_url, foto_cedula_reverso_url, foto_licencia_url, foto_certificado_medico_url, foto_carnet_circulacion_url, foto_carnet_url, foto_rcv_url, foto_antecedentes_url, foto_perfil_url, foto_vehiculo_url, foto_placa_url FROM conductores WHERE status IS NULL OR status NOT IN ('rechazado','suspendido','inactivo')";
+        $sql = "SELECT id, nombre, apellido, cedula, telefono, email, foto_url, disponible, en_carrera, latitud_actual, longitud_actual, ultima_actualizacion, saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo, rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto, licencia_grado, status, carpeta_imagenes, fecha_aprobacion, estado_registro, verificado_por_admin, foto_cedula_url, foto_cedula_reverso_url, foto_licencia_url, foto_certificado_medico_url, foto_carnet_circulacion_url, foto_carnet_url, foto_rcv_url, foto_antecedentes_url, foto_perfil_url, foto_vehiculo_url, foto_placa_url FROM conductores WHERE status IS NULL OR status NOT IN ('rechazado','suspendido','inactivo')";
         if ($soloDisponibles) {
             $sql .= " AND disponible = 1 AND bloqueado_por_saldo = 0 AND verificado_por_admin = 1";
         }
@@ -189,7 +200,8 @@ if ($method === 'GET') {
 
         foreach ($conductoresDl as $d) {
             $normalized = normalizarConductor($d, 'delivery');
-            $key = $normalized['cedula'] ?: $normalized['id'];
+            $cedDigits = preg_replace('/[^0-9]/', '', $d['cedula'] ?? '');
+            $key = !empty($cedDigits) ? $cedDigits : ($normalized['codigo_conductor'] ?: $normalized['id']);
             $conductoresMap[$key] = $normalized;
         }
     } catch (Exception $e) {
@@ -206,14 +218,15 @@ if ($method === 'GET') {
             $conductoresRegist = $stmtR->fetchAll();
 
             foreach ($conductoresRegist as $r) {
-                $ced  = strtoupper(trim($r['cedula'] ?? ''));
                 $code = !empty($r['codigo_conductor']) ? $r['codigo_conductor'] : ('DRV-' . $r['id']);
+                $rCedDigits = preg_replace('/[^0-9]/', '', $r['cedula'] ?? '');
+                $rKey = !empty($rCedDigits) ? $rCedDigits : ($code ?: (string)$r['id']);
 
-                if (isset($conductoresMap[$ced])) {
+                if (isset($conductoresMap[$rKey])) {
                     // Ya existe en vixy_dl (aprobado) — solo completar codigo si falta
-                    if (empty($conductoresMap[$ced]['codigo_conductor'])) {
-                        $conductoresMap[$ced]['codigo_conductor'] = $code;
-                        $conductoresMap[$ced]['codigoConductor']  = $code;
+                    if (empty($conductoresMap[$rKey]['codigo_conductor'])) {
+                        $conductoresMap[$rKey]['codigo_conductor'] = $code;
+                        $conductoresMap[$rKey]['codigoConductor']  = $code;
                     }
                     // status 'aprobado' de vixy_dl se mantiene — NO se sobreescribe con regist
                 } else {
@@ -228,8 +241,7 @@ if ($method === 'GET') {
                         'color_moto'       => $r['moto_color'] ?? '',
                         'licencia_grado'   => $r['licencia_grado'] ?: ($r['licencia_conducir'] ?? '2da'),
                     ]), 'regist');
-                    $key = $normalized['cedula'] ?: $normalized['id'];
-                    $conductoresMap[$key] = $normalized;
+                    $conductoresMap[$rKey] = $normalized;
                 }
             }
         } catch (Exception $e) {
@@ -341,18 +353,23 @@ if ($method === 'POST' && ($action === 'pre_registro' || $action === 'registro')
             if (move_uploaded_file($_FILES[$campo]['tmp_name'], $uploadDir . $nombreArchivo)) {
                 $fotoUrls[$columna] = $carpetaImagenes . $nombreArchivo;
                 $archivosAceptados++;
-            }
+                    if (($method === 'POST' || $method === 'PUT') && $action === 'disponibilidad') {
         }
-        // La foto de perfil también se usa como avatar (foto_url)
+                        if (!$driver) {
+                            Database::jsonResponse(['error' => true, 'mensaje' => 'El conductor autenticado no existe en la base operativa.'], 404);
+                        }
         if (!empty($fotoUrls['foto_perfil_url'])) {
             $fotoUrl = $fotoUrls['foto_perfil_url'];
         }
     }
+                            $stmtConfirm = $pdo->prepare('SELECT disponible FROM conductores WHERE id = :id LIMIT 1');
+                            $stmtConfirm->execute(['id' => $driverId]);
+                            $confirmedAvailability = (bool)$stmtConfirm->fetchColumn();
     if ($archivosAceptados === 0) {
         $carpetaImagenes = null;
     }
-
-    try {
+                                'disponible' => $confirmedAvailability,
+                                'mensaje' => $confirmedAvailability ? 'Conductor en línea para recibir viajes' : 'Conductor desconectado'
         $stmtIns = $pdoRegist->prepare("
             INSERT INTO conductores (
                 codigo_conductor, password_hash, nombre, apellido, cedula, telefono, email,
@@ -436,7 +453,7 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {
     }
 
     // 1. Actualizar última ubicación en tabla conductores
-    $stmtUpdate = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng WHERE id = :id");
+    $stmtUpdate = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, ultima_actualizacion = NOW() WHERE id = :id");
     $stmtUpdate->execute(['lat' => $lat, 'lng' => $lng, 'id' => $driverId]);
 
     // 2. Registrar en historial de tracking GPS
@@ -470,12 +487,31 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {
 }
 
 // -----------------------------------------------------------------------------
-// PUT: CAMBIAR DISPONIBILIDAD (ON/OFF)
+// PUT: ACTUALIZAR FOTO DE PERFIL
 // -----------------------------------------------------------------------------
-if ($method === 'PUT' && $action === 'disponibilidad') {
+if ($method === 'PUT' && $action === 'perfil') {
     $authUser = AuthMiddleware::requireAuth(['conductor', 'super_admin']);
     $data = Database::getJsonInput();
-    $driverId = $data['conductor_id'] ?? $authUser['id'];
+    $isSuperAdmin = ($authUser['nivel_acceso'] ?? '') === 'super_admin' || ($authUser['tipo_usuario'] ?? '') === 'super_admin';
+    $driverId = $isSuperAdmin && !empty($data['conductor_id']) ? $data['conductor_id'] : ($authUser['id'] ?? $authUser['sub'] ?? '');
+    $fotoUrl = trim((string)($data['foto_url'] ?? ''));
+
+    if ($driverId === '' || $fotoUrl === '' || strlen($fotoUrl) > 255) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'La URL de la foto no es válida.'], 400);
+    }
+
+    $stmt = $pdo->prepare('UPDATE conductores SET foto_url = :foto_url WHERE id = :id OR codigo_conductor = :id2');
+    $stmt->execute(['foto_url' => $fotoUrl, 'id' => $driverId, 'id2' => $driverId]);
+    Database::jsonResponse(['success' => true, 'foto_url' => $fotoUrl, 'mensaje' => 'Foto de perfil actualizada.']);
+}
+
+// -----------------------------------------------------------------------------
+// PUT: CAMBIAR DISPONIBILIDAD (ON/OFF)
+// -----------------------------------------------------------------------------
+if (($method === 'POST' || $method === 'PUT') && $action === 'disponibilidad') {
+    $authUser = AuthMiddleware::requireAuth(['conductor', 'super_admin']);
+    $data = Database::getJsonInput();
+    $driverId = $data['conductor_id'] ?? ($authUser['id'] ?? $authUser['sub'] ?? '');
     $disponible = isset($data['disponible']) ? (int)$data['disponible'] : 1;
 
     // Verificar si está bloqueado por saldo negativo (< -0.50)
@@ -483,7 +519,11 @@ if ($method === 'PUT' && $action === 'disponibilidad') {
     $stmtCheck->execute(['id' => $driverId]);
     $driver = $stmtCheck->fetch();
 
-    if ($driver && $driver['saldo_billetera_usd'] < -0.50) {
+    if (!$driver) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'El conductor autenticado no existe en la base operativa.'], 404);
+    }
+
+    if ($disponible === 1 && $driver['saldo_billetera_usd'] <= -0.50) {
         $stmtBlock = $pdo->prepare("UPDATE conductores SET bloqueado_por_saldo = 1, disponible = 0 WHERE id = :id");
         $stmtBlock->execute(['id' => $driverId]);
 
@@ -496,6 +536,9 @@ if ($method === 'PUT' && $action === 'disponibilidad') {
 
     $stmt = $pdo->prepare("UPDATE conductores SET disponible = :disp WHERE id = :id");
     $stmt->execute(['disp' => $disponible, 'id' => $driverId]);
+    $stmtConfirm = $pdo->prepare('SELECT disponible FROM conductores WHERE id = :id LIMIT 1');
+    $stmtConfirm->execute(['id' => $driverId]);
+    $confirmedAvailability = (bool)$stmtConfirm->fetchColumn();
 
     // Si el conductor se desconecta (disponible = 0), liberar cualquier carrera asignada y reasignar a conductor cercano
     $carrerasLiberadas = 0;
@@ -528,44 +571,121 @@ if ($method === 'PUT' && $action === 'disponibilidad') {
 
     Database::jsonResponse([
         'success' => true,
-        'disponible' => (bool)$disponible,
+        'disponible' => $confirmedAvailability,
         'carreras_reasignadas' => $carrerasLiberadas,
         'mensaje' => $disponible ? 'Conductor en línea para recibir viajes' : 'Conductor desconectado. Pedidos reasignados a conductores cercanos disponibles.'
     ]);
 }
 
 // -----------------------------------------------------------------------------
-// PUT: APROBAR / VERIFICAR CONDUCTOR DESDE EL ADMIN PANEL
+// PUT / POST: APROBAR / VERIFICAR CONDUCTOR DESDE EL ADMIN PANEL
 // (Marca aprobado en c2861522_regist Y migra/actualiza el conductor en c2861522_vixy_dl)
 // -----------------------------------------------------------------------------
-if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aprobar')) {
+if (($method === 'PUT' || $method === 'POST') && in_array($action, ['aprobar_conductor', 'aprobar', 'approve'], true)) {
     AuthMiddleware::requireAdmin(['super_admin', 'operador']);
-    $driverId = $_GET['id'] ?? null;
+    $data = Database::getJsonInput();
+    $driverId = trim((string)($_GET['id'] ?? $_POST['id'] ?? $data['conductor_id'] ?? $data['id'] ?? $data['cedula'] ?? ''));
     if (!$driverId) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'ID de conductor requerido'], 400);
     }
 
-    // 1. Marcar aprobado en c2861522_regist
+    $idDigits = preg_replace('/[^0-9]/', '', $driverId);
+    $idV      = !empty($idDigits) ? ('V-' . $idDigits) : '';
+
+    // 1. Buscar y marcar aprobado en c2861522_regist
     $regData = null;
     $pdoRegist = Database::getRegistConnection();
     if ($pdoRegist) {
         try {
-            $stR = $pdoRegist->prepare("SELECT * FROM conductores WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3 LIMIT 1");
-            $stR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+            $stR = $pdoRegist->prepare("
+                SELECT * FROM conductores 
+                WHERE codigo_conductor = :id1 
+                   OR id = :id2 
+                   OR cedula = :id3 
+                   OR (:digits != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :digits)
+                   OR (:idV != '' AND cedula = :idV)
+                   OR telefono = :id4
+                   OR (:digits != '' AND REPLACE(REPLACE(telefono, '-', ''), ' ', '') = :digits2)
+                LIMIT 1
+            ");
+            $stR->execute([
+                'id1'    => $driverId,
+                'id2'    => $driverId,
+                'id3'    => $driverId,
+                'id4'    => $driverId,
+                'digits' => $idDigits,
+                'digits2'=> $idDigits,
+                'idV'    => $idV
+            ]);
             $regData = $stR->fetch();
 
-            $updR = $pdoRegist->prepare("UPDATE conductores SET status = 'aprobado', fecha_aprobacion = NOW() WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3");
-            $updR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+            if ($regData) {
+                try {
+                    $updR = $pdoRegist->prepare("UPDATE conductores SET status = 'aprobado', fecha_aprobacion = NOW() WHERE id = :id OR codigo_conductor = :cod OR cedula = :ced");
+                    $updR->execute([
+                        'id'  => $regData['id'],
+                        'cod' => $regData['codigo_conductor'] ?? $driverId,
+                        'ced' => $regData['cedula'] ?? $driverId
+                    ]);
+                } catch (Exception $eUpd) {
+                    $updR = $pdoRegist->prepare("UPDATE conductores SET status = 'aprobado' WHERE id = :id OR codigo_conductor = :cod OR cedula = :ced");
+                    $updR->execute([
+                        'id'  => $regData['id'],
+                        'cod' => $regData['codigo_conductor'] ?? $driverId,
+                        'ced' => $regData['cedula'] ?? $driverId
+                    ]);
+                }
+            }
         } catch (Exception $e) {
             error_log('Error aprobando conductor en regist: ' . $e->getMessage());
         }
     }
 
-    // 2. Verificar si ya existe en c2861522_vixy_dl (por id, cédula o teléfono)
+    // 2. Conocer las columnas físicas REALES de vixy_dl.conductores y asegurar columnas vitales
+    $dlColumns = [];
+    try {
+        $dlColumns = array_column($pdo->query('SHOW COLUMNS FROM conductores')->fetchAll(), 'Field');
+    } catch (Exception $e) {}
+
+    $vitalCols = [
+        'verificado_por_admin' => "TINYINT(1) NOT NULL DEFAULT 1",
+        'estado_registro'      => "VARCHAR(50) NOT NULL DEFAULT 'aprobado'",
+        'status'               => "VARCHAR(50) NOT NULL DEFAULT 'aprobado'",
+        'fecha_aprobacion'     => "DATETIME NULL",
+        'codigo_conductor'     => "VARCHAR(50) NULL"
+    ];
+    foreach ($vitalCols as $colName => $colDef) {
+        if (!in_array($colName, $dlColumns, true)) {
+            try {
+                $pdo->exec("ALTER TABLE conductores ADD COLUMN `{$colName}` {$colDef}");
+                $dlColumns[] = $colName;
+            } catch (Exception $e) {}
+        }
+    }
+
+    // 3. Verificar si ya existe en c2861522_vixy_dl (por id, cédula o teléfono)
     $existingDl = null;
     try {
-        $stCheck = $pdo->prepare("SELECT * FROM conductores WHERE id = :id OR cedula = :c OR telefono = :t LIMIT 1");
-        $stCheck->execute(['id' => $driverId, 'c' => $regData['cedula'] ?? $driverId, 't' => $regData['telefono'] ?? $driverId]);
+        $searchCed = $regData['cedula'] ?? $driverId;
+        $searchTel = $regData['telefono'] ?? $driverId;
+        $stCheck = $pdo->prepare("
+            SELECT * FROM conductores 
+            WHERE id = :id 
+               OR codigo_conductor = :id2 
+               OR cedula = :c 
+               OR telefono = :t
+               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :digits)
+               OR (:digits != '' AND REPLACE(REPLACE(telefono, '-', ''), ' ', '') = :digits2)
+            LIMIT 1
+        ");
+        $stCheck->execute([
+            'id'     => $driverId,
+            'id2'    => $driverId,
+            'c'      => $searchCed,
+            't'      => $searchTel,
+            'digits' => $idDigits,
+            'digits2'=> $idDigits
+        ]);
         $existingDl = $stCheck->fetch();
     } catch (Exception $e) {}
 
@@ -573,7 +693,7 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
         Database::jsonResponse(['error' => true, 'mensaje' => 'Conductor no encontrado en ninguna base de datos'], 404);
     }
 
-    // 3. Extraer datos del conductor (desde vixy_dl existente o regist)
+    // 4. Extraer datos normalizados del conductor
     $cedula       = !empty($existingDl['cedula']) ? $existingDl['cedula'] : trim($regData['cedula'] ?? '');
     $telefono     = !empty($existingDl['telefono']) ? $existingDl['telefono'] : ($regData['telefono'] ?? $driverId);
     $email        = !empty($existingDl['email']) ? $existingDl['email'] : ($regData['email'] ?? ('driver_' . preg_replace('/[^0-9]/', '', $cedula) . '@vixy.com'));
@@ -590,20 +710,16 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
     $licencia     = !empty($existingDl['licencia_grado']) ? $existingDl['licencia_grado'] : ($regData['licencia_conducir'] ?? '2da');
     $carpetaImgs  = !empty($existingDl['carpeta_imagenes']) ? $existingDl['carpeta_imagenes'] : ($regData['carpeta_imagenes'] ?? "/shop/imgs-c-d/deliverys/{$conductorId}");
 
-    // 3.1 Conocer las columnas físicas REALES de vixy_dl.conductores (evita errores
-    //    por columnas que aún no existen: telefono_adicional, punto_referencia,
-    //    tipo_vehiculo, etc.)
-    $dlColumns = [];
-    try {
-        $dlColumns = array_column($pdo->query('SHOW COLUMNS FROM conductores')->fetchAll(), 'Field');
-    } catch (Exception $e) {}
-
-    // 3a. Si el conductor YA existe en vixy_dl (registrado desde la app), basta
-    //     con actualizar los campos de aprobación y los datos migrables presentes.
+    // 5a. Si el conductor YA existe en vixy_dl, actualizar campos de aprobación
     if ($existingDl) {
         try {
-            $updSets = ["estado_registro = 'aprobado'", 'verificado_por_admin = 1', "status = 'aprobado'", 'disponible = 1', 'bloqueado_por_saldo = 0', 'fecha_aprobacion = NOW()'];
+            $updSets = ["disponible = 1", "bloqueado_por_saldo = 0"];
             $updVals = ['id' => $existingDl['id']];
+
+            if (in_array('estado_registro', $dlColumns, true))      $updSets[] = "estado_registro = 'aprobado'";
+            if (in_array('verificado_por_admin', $dlColumns, true)) $updSets[] = "verificado_por_admin = 1";
+            if (in_array('status', $dlColumns, true))               $updSets[] = "status = 'aprobado'";
+            if (in_array('fecha_aprobacion', $dlColumns, true))     $updSets[] = "fecha_aprobacion = NOW()";
 
             $mapSet = [
                 'nombre'             => $nombre,
@@ -620,15 +736,6 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
                 'licencia_grado'     => $licencia,
                 'carpeta_imagenes'   => $carpetaImgs,
             ];
-            if (in_array('telefono_adicional', $dlColumns, true)) {
-                $mapSet['telefono_adicional'] = $existingDl['telefono_adicional'] ?? ($regData['telefono_adicional'] ?? null);
-            }
-            if (in_array('punto_referencia', $dlColumns, true)) {
-                $mapSet['punto_referencia']   = $existingDl['punto_referencia'] ?? ($regData['punto_referencia'] ?? null);
-            }
-            if (in_array('tipo_vehiculo', $dlColumns, true)) {
-                $mapSet['tipo_vehiculo']      = $existingDl['tipo_vehiculo'] ?? 'moto';
-            }
 
             foreach ($mapSet as $col => $val) {
                 if (!in_array($col, $dlColumns, true)) continue;
@@ -637,30 +744,39 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
             }
 
             $sqlUpd = "UPDATE conductores SET " . implode(', ', $updSets) . " WHERE id = :id";
-            $pdo->prepare($sqlUpd)->execute($updVals);
+            $stmtUpd = $pdo->prepare($sqlUpd);
+            $stmtUpd->execute($updVals);
+            if ($stmtUpd->rowCount() === 0) {
+                $chkExist = $pdo->prepare('SELECT id, verificado_por_admin FROM conductores WHERE id = :id LIMIT 1');
+                $chkExist->execute(['id' => $existingDl['id']]);
+                $chkRow = $chkExist->fetch();
+                if (!$chkRow) {
+                    Database::jsonResponse(['error' => true, 'mensaje' => 'El conductor no existe en la base de datos operativa.'], 404);
+                }
+                if (!(bool)$chkRow['verificado_por_admin']) {
+                    Database::jsonResponse(['error' => true, 'mensaje' => 'No se pudo actualizar la aprobación del conductor.'], 500);
+                }
+            }
         } catch (Exception $e) {
             error_log('Error actualizando conductor existente en vixy_dl: ' . $e->getMessage());
         }
     } else {
-        // 3b. No existe en vixy_dl → migrar desde regist con INSERT de columnas existentes.
+        // 5b. No existe en vixy_dl → migrar desde regist con INSERT seguro
         try {
             $mapIns = [
                 'id'                   => $conductorId,
+                'codigo_conductor'     => $conductorId,
                 'nombre'               => $nombre,
                 'apellido'             => $apellido,
                 'cedula'               => $cedula,
                 'telefono'             => $telefono,
-                'telefono_adicional'   => $regData['telefono_adicional'] ?? null,
                 'email'                => $email,
                 'password_hash'        => $pwdHash,
                 'foto_url'             => $foto,
                 'direccion'            => $direccion,
-                'punto_referencia'     => $regData['punto_referencia'] ?? null,
                 'tipo_vehiculo'        => $regData['tipo_vehiculo'] ?? 'moto',
                 'disponible'           => 1,
                 'en_carrera'           => 0,
-                // GPS: 0 = sin coordenada real (el app la manda por action=gps/keep_alive).
-                // NUNCA escribir Caracas (10.49, -66.86) como posición inventada.
                 'latitud_actual'       => 0.00000000,
                 'longitud_actual'      => 0.00000000,
                 'placa_moto'           => $placa,
@@ -669,7 +785,7 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
                 'ano_moto'             => $ano,
                 'licencia_grado'       => $licencia,
                 'saldo_billetera_usd'  => 0.00,
-                'limite_saldo_negativo'=> 0.00,
+                'limite_saldo_negativo'=> -0.50,
                 'bloqueado_por_saldo'  => 0,
                 'rating'               => 5.00,
                 'total_carreras'       => 0,
@@ -678,7 +794,6 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
                 'fecha_aprobacion'     => date('Y-m-d H:i:s'),
                 'estado_registro'      => 'aprobado',
                 'verificado_por_admin' => 1,
-                'motivo_rechazo'       => null,
                 'terminos_aceptados'   => 1,
             ];
             $mapIns = array_intersect_key($mapIns, array_flip($dlColumns));
@@ -692,37 +807,60 @@ if ($method === 'PUT' && ($action === 'aprobar_conductor' || $action === 'aproba
 
     Database::jsonResponse([
         'success' => true,
-        'mensaje' => 'Conductor aprobado, verificado y migrado a la base operativa (vixy_dl). Ahora puede iniciar sesión y recibir viajes.'
+        'mensaje' => 'Conductor aprobado, verificado y activado exitosamente. Ahora puede iniciar sesión en la app y recibir pedidos.'
     ]);
 }
 
 // -----------------------------------------------------------------------------
-// PUT: RECHAZAR CONDUCTOR DESDE EL ADMIN PANEL
-// (Marca rechazado en c2861522_regist y desactiva en c2861522_vixy_dl si existiera)
+// PUT / POST: RECHAZAR CONDUCTOR DESDE EL ADMIN PANEL
 // -----------------------------------------------------------------------------
-if ($method === 'PUT' && ($action === 'rechazar_conductor' || $action === 'rechazar')) {
+if (($method === 'PUT' || $method === 'POST') && in_array($action, ['rechazar_conductor', 'rechazar', 'reject'], true)) {
     AuthMiddleware::requireAdmin(['super_admin', 'operador']);
-    $driverId = $_GET['id'] ?? null;
+    $data = Database::getJsonInput();
+    $driverId = trim((string)($_GET['id'] ?? $_POST['id'] ?? $data['conductor_id'] ?? $data['id'] ?? $data['cedula'] ?? ''));
     if (!$driverId) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'ID de conductor requerido'], 400);
     }
 
+    $idDigits = preg_replace('/[^0-9]/', '', $driverId);
+
     $pdoRegist = Database::getRegistConnection();
     if ($pdoRegist) {
         try {
-            $stR = $pdoRegist->prepare("UPDATE conductores SET status = 'rechazado' WHERE codigo_conductor = :id OR cedula = :id2 OR id = :id3");
-            $stR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+            $stR = $pdoRegist->prepare("
+                UPDATE conductores 
+                SET status = 'rechazado' 
+                WHERE codigo_conductor = :id 
+                   OR id = :id2 
+                   OR cedula = :id3
+                   OR (:digits != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :digits)
+            ");
+            $stR->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId, 'digits' => $idDigits]);
         } catch (Exception $e) {}
     }
 
     try {
-        $st = $pdo->prepare("UPDATE conductores SET status = 'rechazado', estado_registro = 'rechazado', verificado_por_admin = 0, disponible = 0 WHERE id = :id OR cedula = :id2");
-        $st->execute(['id' => $driverId, 'id2' => $driverId]);
+        $st = $pdo->prepare("
+            UPDATE conductores 
+            SET status = 'rechazado', estado_registro = 'rechazado', verificado_por_admin = 0, disponible = 0 
+            WHERE id = :id 
+               OR codigo_conductor = :id2 
+               OR cedula = :id3
+               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :digits)
+        ");
+        $st->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId, 'digits' => $idDigits]);
+        if ($st->rowCount() === 0 && empty($pdoRegist)) {
+            $exists = $pdo->prepare('SELECT id FROM conductores WHERE id = :id OR codigo_conductor = :id2 OR cedula = :id3 LIMIT 1');
+            $exists->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+            if (!$exists->fetch()) {
+                Database::jsonResponse(['error' => true, 'mensaje' => 'El conductor no existe en la base de datos operativa.'], 404);
+            }
+        }
     } catch (Exception $e) {}
 
     Database::jsonResponse([
         'success' => true,
-        'mensaje' => 'Conductor rechazado. Ya no aparecerá en la lista de repartidores.'
+        'mensaje' => 'Conductor rechazado correctamente.'
     ]);
 }
 

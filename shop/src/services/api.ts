@@ -188,6 +188,31 @@ class ApiService {
     });
   }
 
+  // --- PRODUCTOS / CATÁLOGO COMERCIO ---
+  public async getProductos(comercioId: string) {
+    return this.request<{ success: boolean; productos: any[] }>(`/productos.php?comercio_id=${encodeURIComponent(comercioId)}`);
+  }
+
+  public async createProducto(productoData: any) {
+    return this.request<{ success: boolean; producto?: any; id?: string; mensaje?: string }>('/productos.php', {
+      method: 'POST',
+      body: JSON.stringify(productoData)
+    });
+  }
+
+  public async updateProducto(id: string, productoData: any) {
+    return this.request<{ success: boolean; mensaje?: string }>(`/productos.php?id=${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(productoData)
+    });
+  }
+
+  public async deleteProducto(id: string) {
+    return this.request<{ success: boolean; mensaje?: string }>(`/productos.php?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+
   // --- CONDUCTORES / DELIVERYS ---
   public async getConductores(params?: boolean | { disponibles?: boolean }) {
     let soloDisponibles = false;
@@ -205,20 +230,29 @@ class ApiService {
     return this.request<{ success: boolean; conductor: any }>(`/conductores.php?id=${encodeURIComponent(id)}`);
   }
 
-  public async updateConductor(id: string, data: any, action?: string) {
+  public async updateConductor(id: string, data: any = {}, action?: string) {
     const act = action ? `&action=${encodeURIComponent(action)}` : '';
-    return this.request<{ success: boolean; mensaje: string }>(`/conductores.php?id=${encodeURIComponent(id)}${act}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
+    const payload = { conductor_id: id, id, ...data };
+    try {
+      return await this.request<{ success: boolean; mensaje: string }>(`/conductores.php?id=${encodeURIComponent(id)}${act}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      // Fallback a POST por si el servidor o Apache cPanel restringe el método PUT
+      return await this.request<{ success: boolean; mensaje: string }>(`/conductores.php?id=${encodeURIComponent(id)}${act}`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
   }
 
   public async approveConductor(id: string) {
-    return this.updateConductor(id, {}, 'aprobar_conductor');
+    return this.updateConductor(id, { conductor_id: id, id, status: 'aprobado', verificado_por_admin: 1 }, 'aprobar_conductor');
   }
 
   public async rejectConductor(id: string) {
-    return this.updateConductor(id, {}, 'rechazar_conductor');
+    return this.updateConductor(id, { conductor_id: id, id, status: 'rechazado', verificado_por_admin: 0 }, 'rechazar_conductor');
   }
 
   // --- RECLAMOS ---
@@ -306,14 +340,23 @@ class ApiService {
   }
 
   // --- SUBIDA DE ARCHIVOS ---
-  public async uploadImage(file: File, tipo: 'comercios' | 'productos' | 'entregas' | 'reclamos' | 'comprobantes' | 'admin', entityId?: string, campo?: string) {
+  public async uploadImage(
+    file: File, 
+    tipo: 'comercios' | 'productos' | 'entregas' | 'reclamos' | 'comprobantes' | 'admin', 
+    entityId?: string, 
+    campo?: string,
+    comercioId?: string
+  ) {
     const formData = new FormData();
     formData.append('imagen', file);
     formData.append('tipo', tipo);
     if (entityId) formData.append('entity_id', entityId);
     if (campo) formData.append('campo', campo);
+    if (comercioId) formData.append('comercio_id', comercioId);
 
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      'X-Vixy-Admin-Key': ADMIN_PANEL_KEY
+    };
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
 
     const res = await fetch(`${API_BASE_URL}/upload.php`, {

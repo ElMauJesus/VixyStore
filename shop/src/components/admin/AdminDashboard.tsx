@@ -130,8 +130,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
         </div>
 
         <div className="mt-6 pt-4 border-t border-white/20 flex items-center justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-wider opacity-80 font-mono truncate">
-            /uploads/verificaciones/
+          <span className="text-[10px] uppercase tracking-wider opacity-80 font-semibold truncate">
+            Depósito de Comprobantes
           </span>
           <button
             onClick={() => onNavigateTab('recargas')}
@@ -451,7 +451,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           onClick={() => onNavigateTab('backend')}
           className="mt-4 border border-white/20 text-[10px] font-bold uppercase tracking-wider py-2 rounded-xl hover:bg-white/5 transition cursor-pointer"
         >
-          Ver Código Backend & BD
+          Ver Configuración Backend
         </button>
       </div>
     </div>

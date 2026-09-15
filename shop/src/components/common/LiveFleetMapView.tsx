@@ -28,11 +28,19 @@ export const LiveFleetMapView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'todos' | 'disponible' | 'en_ruta'>('todos');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
 
+  const radarDrivers = allDrivers.filter(d => {
+    const lat = Number(d.lat);
+    const lng = Number(d.lng);
+    return Number(d.billetera?.saldoUsd ?? d.saldo_billetera_usd ?? d.saldoUsd ?? 0) > 0
+      && Boolean(d.hasRealGps)
+      && Number.isFinite(lat) && Number.isFinite(lng)
+      && lat !== 0 && lng !== 0;
+  });
   const activeOrdersCount = orders.filter(o => o.estado !== 'entregado' && o.estado !== 'cancelado').length;
-  const availableDriversCount = allDrivers.filter(d => d.disponible).length;
-  const busyDriversCount = allDrivers.filter(d => !d.disponible).length;
+  const availableDriversCount = radarDrivers.filter(d => d.disponible).length;
+  const busyDriversCount = radarDrivers.filter(d => !d.disponible).length;
 
-  const filteredDrivers = allDrivers.filter(driver => {
+  const filteredDrivers = radarDrivers.filter(driver => {
     if (!driver) return false;
     const term = searchTerm.toLowerCase().trim();
     const dNom = (driver.nombre || '').toLowerCase();
@@ -79,7 +87,7 @@ export const LiveFleetMapView: React.FC = () => {
             <div className="px-3 py-1.5 bg-slate-800/90 border border-slate-700 rounded-xl flex items-center gap-2">
               <Bike className="w-4 h-4 text-emerald-400" />
               <span className="text-slate-400">Conductores:</span>
-              <strong className="text-white font-bold">{allDrivers.length}</strong>
+              <strong className="text-white font-bold">{radarDrivers.length}</strong>
             </div>
 
             <div className="px-3 py-1.5 bg-emerald-950/40 border border-emerald-800/40 rounded-xl flex items-center gap-2 text-emerald-300">
@@ -142,7 +150,7 @@ export const LiveFleetMapView: React.FC = () => {
                     : 'bg-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
-                Todos ({allDrivers.length})
+                Todos ({radarDrivers.length})
               </button>
               <button
                 onClick={() => setStatusFilter('disponible')}
@@ -213,35 +221,66 @@ export const LiveFleetMapView: React.FC = () => {
                         </div>
                       </div>
 
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
-                        drv.disponible 
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
-                          : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
-                      }`}>
-                        {drv.disponible ? 'Disponible' : 'En Ruta'}
-                      </span>
+                      {/* Status Badges: Disponibilidad y Control de Saldo */}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {drv.billetera?.bloqueadoPorSaldo || Number(drv.billetera?.saldoUsd ?? drv.saldo_billetera_usd ?? drv.saldoUsd ?? 0) <= 0 ? (
+                          <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                            Bloqueado (Saldo)
+                          </span>
+                        ) : (
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                            drv.disponible 
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
+                              : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
+                          }`}>
+                            {drv.disponible ? 'Disponible' : 'En Ruta'}
+                          </span>
+                        )}
+
+                        {drv.hasRealGps ? (
+                          <span className="text-[8px] font-mono px-1.5 py-0.2 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                            GPS EN VIVO
+                          </span>
+                        ) : (
+                          <span className="text-[8px] font-mono px-1.5 py-0.2 rounded bg-amber-950/60 text-amber-300 border border-amber-800/40">
+                            GPS PENDIENTE
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Vehicle & Telemetry Info */}
                     <div className="p-2 bg-slate-950/60 rounded-xl text-[10px] space-y-1 border border-slate-800/60">
                       <div className="flex justify-between items-center text-slate-300">
-                        <span className="text-slate-400">Moto:</span>
-                        <span className="font-semibold text-slate-200 truncate">
-                          {drv.moto?.marca || 'Bera'} {drv.moto?.modelo || 'SBR'} ({drv.moto?.color || 'N/A'})
+                        <span className="text-slate-400">Billetera / Saldo:</span>
+                        <span className={`font-mono font-bold ${
+                          Number(drv.billetera?.saldoUsd ?? drv.saldo_billetera_usd ?? drv.saldoUsd ?? 0) <= 0 || drv.billetera?.bloqueadoPorSaldo
+                            ? 'text-rose-400'
+                            : 'text-emerald-400'
+                        }`}>
+                          ${Number(drv.billetera?.saldoUsd ?? drv.saldo_billetera_usd ?? drv.saldoUsd ?? 0).toFixed(2)} USD
+                          {(Number(drv.billetera?.saldoUsd ?? drv.saldo_billetera_usd ?? drv.saldoUsd ?? 0) <= 0 || drv.billetera?.bloqueadoPorSaldo) && ' (Sin recarga)'}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-slate-300">
-                        <span className="text-slate-400">Placa:</span>
-                        <span className="font-mono font-bold text-amber-400">[{drv.moto?.placa || 'S/P'}]</span>
+                        <span className="text-slate-400">Moto / Placa:</span>
+                        <span className="font-semibold text-slate-200 truncate">
+                          {drv.moto?.marca || 'Bera'} {drv.moto?.modelo || 'SBR'} <span className="text-amber-400 font-mono">[{drv.moto?.placa || 'S/P'}]</span>
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-slate-300">
-                        <span className="text-slate-400">Ubicación actual:</span>
-                        <span className="font-medium text-slate-300 truncate max-w-[170px]">{drv.ubicacionActual}</span>
+                        <span className="text-slate-400">Ubicación GPS:</span>
+                        <span className={`font-medium truncate max-w-[170px] ${drv.hasRealGps ? 'text-emerald-300' : 'text-amber-400/90'}`}>
+                          {drv.ubicacionActual}
+                        </span>
                       </div>
-                      <div className="flex justify-between items-center text-slate-300 pt-0.5 border-t border-slate-800">
-                        <span className="text-slate-400">Velocidad GPS:</span>
-                        <span className="font-mono font-bold text-emerald-400">{drv.velocidadKmh || 0} km/h • ±{drv.precisionGps || 5}m</span>
-                      </div>
+                      {drv.hasRealGps && (
+                        <div className="flex justify-between items-center text-slate-300 pt-0.5 border-t border-slate-800">
+                          <span className="text-slate-400">Velocidad GPS:</span>
+                          <span className="font-mono font-bold text-emerald-400">{drv.velocidadKmh || 0} km/h • ±{drv.precisionGps || 5}m</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick Action Buttons */}

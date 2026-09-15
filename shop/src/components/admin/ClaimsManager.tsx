@@ -216,8 +216,8 @@ export const ClaimsManager: React.FC = () => {
                           <img src={img} alt="Evidencia cliente" className="w-full h-full object-cover" />
                         </a>
                       ))}
-                      <span className="text-[10px] text-neutral-400 font-mono">
-                        {claim.imagenes.length} imagen(es) subida(s) a /uploads/clientes/{claim.clienteId}/reclamos/
+                      <span className="text-[10px] text-neutral-400">
+                        {claim.imagenes.length} imagen(es) de evidencia adjunta(s)
                       </span>
                     </div>
                   )}

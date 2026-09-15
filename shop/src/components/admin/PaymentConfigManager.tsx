@@ -80,7 +80,7 @@ export const PaymentConfigManager: React.FC = () => {
         {savedSuccess && (
           <span className="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-bounce">
             <Check className="w-4 h-4" />
-            ¡Parámetros y comisión sincronizados en MySQL!
+            ¡Parámetros y comisión sincronizados con éxito!
           </span>
         )}
       </div>
@@ -270,7 +270,7 @@ export const PaymentConfigManager: React.FC = () => {
             className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold rounded-2xl text-xs flex items-center gap-2 shadow-md transition cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>Guardar Parámetros en Base de Datos MySQL</span>
+            <span>Guardar Parámetros de Configuración</span>
           </button>
         </div>
       </form>

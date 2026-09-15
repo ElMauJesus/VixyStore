@@ -1,7 +1,7 @@
 <?php
 /**
  * Vixy Delivery Platform - API de Conductores y GPS en Tiempo Real
- * Actualización periódica de coordenadas, disponibilidad y control de billetera (saldo > $0.00 para recibir viajes)
+ * Actualización periódica de coordenadas, disponibilidad y control de billetera (-$0.50)
  */
 
 require_once __DIR__ . '/config/db.php';
@@ -116,6 +116,17 @@ if ($method === 'PUT' && in_array($action, ['approve', 'reject'], true)) {
     if ($action === 'approve') {
         $stmt = $pdo->prepare("UPDATE conductores SET verificado_por_admin = 1, estado_registro = 'aprobado', disponible = 0 WHERE id = :id");
         $stmt->execute(['id' => $driverId]);
+        if ($stmt->rowCount() === 0) {
+            $exists = $pdo->prepare('SELECT id, verificado_por_admin FROM conductores WHERE id = :id LIMIT 1');
+            $exists->execute(['id' => $driverId]);
+            $driver = $exists->fetch();
+            if (!$driver) {
+                Database::jsonResponse(['error' => true, 'mensaje' => 'El conductor no existe en la base de datos operativa.'], 404);
+            }
+            if (!(bool)$driver['verificado_por_admin']) {
+                Database::jsonResponse(['error' => true, 'mensaje' => 'No se pudo actualizar la aprobación del conductor.'], 500);
+            }
+        }
         Database::jsonResponse(['success' => true, 'estado' => 'aprobado', 'mensaje' => 'Conductor aprobado correctamente.']);
     }
 
@@ -145,9 +156,16 @@ if ($method === 'GET') {
         Database::jsonResponse(['success' => true, 'conductor' => $driver]);
     }
 
-    // Listar conductores disponibles para mapa de administración o asignación
+    // Listar conductores para el mapa administrativo o asignación.
+    // El panel solicita disponibles=0 para incluir también conductores en ruta.
     $soloDisponibles = isset($_GET['disponibles']) ? (bool)$_GET['disponibles'] : true;
-    $sql = "SELECT id, nombre, apellido, cedula, telefono, email, foto_url, disponible, en_carrera, latitud_actual, longitud_actual, saldo_billetera_usd, bloqueado_por_saldo, rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto, licencia_grado, verificado_por_admin, estado_registro, foto_cedula_url, foto_licencia_url, foto_certificado_medico_url, foto_carnet_circulacion_url, foto_vehiculo_url, foto_placa_url FROM conductores WHERE 1=1";
+    $sql = "SELECT id, nombre, apellido, cedula, telefono, email, foto_url, disponible, en_carrera,
+                   latitud_actual, longitud_actual, ultima_actualizacion, saldo_billetera_usd, bloqueado_por_saldo,
+                   rating, total_carreras, placa_moto, marca_moto, modelo_moto, ano_moto,
+                   licencia_grado, verificado_por_admin, estado_registro,
+                   foto_cedula_url, foto_licencia_url, foto_certificado_medico_url,
+                   foto_carnet_circulacion_url, foto_vehiculo_url, foto_placa_url
+            FROM conductores WHERE 1=1";
     
     if ($soloDisponibles) {
         $sql .= " AND disponible = 1 AND bloqueado_por_saldo = 0";
@@ -155,7 +173,24 @@ if ($method === 'GET') {
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute();
-    Database::jsonResponse(['success' => true, 'conductores' => $stmt->fetchAll()]);
+    $drivers = $stmt->fetchAll();
+    foreach ($drivers as &$driver) {
+        $lat = isset($driver['latitud_actual']) ? (float)$driver['latitud_actual'] : 0.0;
+        $lng = isset($driver['longitud_actual']) ? (float)$driver['longitud_actual'] : 0.0;
+        $gpsUpdatedAt = !empty($driver['ultima_actualizacion']) ? strtotime((string)$driver['ultima_actualizacion']) : 0;
+        $isDefaultGps = $lat === 10.491 && $lng === -66.862;
+        $hasGps = ($gpsUpdatedAt > 0 && (time() - $gpsUpdatedAt) <= 180 && !$isDefaultGps && $lat != 0.0 && $lng != 0.0);
+        $driver['latitud_actual'] = $lat;
+        $driver['longitud_actual'] = $lng;
+        $driver['has_real_gps'] = $hasGps;
+        $driver['hasRealGps'] = $hasGps;
+        $driver['disponible'] = (bool)$driver['disponible'];
+        $driver['en_carrera'] = (bool)$driver['en_carrera'];
+        $driver['bloqueado_por_saldo'] = (bool)$driver['bloqueado_por_saldo'];
+        $driver['verificado_por_admin'] = (bool)$driver['verificado_por_admin'];
+    }
+    unset($driver);
+    Database::jsonResponse(['success' => true, 'conductores' => $drivers]);
 }
 
 // -----------------------------------------------------------------------------
@@ -178,30 +213,42 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {
     }
 
     // 1. Actualizar última ubicación en tabla conductores
-    $stmtUpdate = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng WHERE id = :id");
+    $stmtUpdate = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, ultima_actualizacion = NOW() WHERE id = :id");
     $stmtUpdate->execute(['lat' => $lat, 'lng' => $lng, 'id' => $driverId]);
+    if ($stmtUpdate->rowCount() === 0) {
+        $checkDriver = $pdo->prepare('SELECT id FROM conductores WHERE id = :id LIMIT 1');
+        $checkDriver->execute(['id' => $driverId]);
+        if (!$checkDriver->fetch()) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'El conductor autenticado no existe en la base operativa.', 'conductor_id' => $driverId], 404);
+        }
+    }
 
     // 2. Registrar en historial de tracking GPS
-    $stmtHist = $pdo->prepare("
-        INSERT INTO ubicaciones_gps_conductores (
-            conductor_id, pedido_id, latitud, longitud, precision_metros, velocidad_kmh
-        ) VALUES (
-            :cid, :pid, :lat, :lng, :prec, :vel
-        )
-    ");
-    $stmtHist->execute([
-        'cid' => $driverId,
-        'pid' => $pedidoId,
-        'lat' => $lat,
-        'lng' => $lng,
-        'prec' => $precision,
-        'vel' => $velocidad
-    ]);
+    try {
+        $stmtHist = $pdo->prepare("
+            INSERT INTO ubicaciones_gps_conductores (
+                conductor_id, pedido_id, latitud, longitud, precision_metros, velocidad_kmh
+            ) VALUES (
+                :cid, :pid, :lat, :lng, :prec, :vel
+            )
+        ");
+        $stmtHist->execute([
+            'cid' => $driverId,
+            'pid' => $pedidoId,
+            'lat' => $lat,
+            'lng' => $lng,
+            'prec' => $precision,
+            'vel' => $velocidad
+        ]);
+    } catch (Throwable $error) {
+        error_log('Vixy GPS history unavailable: ' . $error->getMessage());
+    }
 
     Database::jsonResponse([
         'success' => true,
         'mensaje' => 'Coordenadas GPS registradas en tiempo real',
         'gps' => [
+            'conductor_id' => $driverId,
             'latitud' => $lat,
             'longitud' => $lng,
             'precision_metros' => $precision,
@@ -211,74 +258,67 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {
     ]);
 }
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // PUT: ACTUALIZAR FOTO DE PERFIL
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 if ($method === 'PUT' && $action === 'perfil') {
     $authUser = AuthMiddleware::requireAuth(['conductor', 'super_admin']);
     $data = Database::getJsonInput();
     $isSuperAdmin = ($authUser['nivel_acceso'] ?? '') === 'super_admin' || ($authUser['tipo_usuario'] ?? '') === 'super_admin';
-    $driverId = $isSuperAdmin && !empty($data['conductor_id']) ? $data['conductor_id'] : $authUser['id'];
+    $driverId = $isSuperAdmin && !empty($data['conductor_id']) ? $data['conductor_id'] : ($authUser['id'] ?? $authUser['sub'] ?? '');
     $fotoUrl = trim((string)($data['foto_url'] ?? ''));
-
-    if ($fotoUrl === '' || strlen($fotoUrl) > 255) {
+    if ($driverId === '' || $fotoUrl === '' || strlen($fotoUrl) > 255) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'La URL de la foto no es válida.'], 400);
     }
-
-    $stmt = $pdo->prepare('UPDATE conductores SET foto_url = :foto_url WHERE id = :id');
-    $stmt->execute(['foto_url' => $fotoUrl, 'id' => $driverId]);
+    $stmt = $pdo->prepare('UPDATE conductores SET foto_url = :foto_url WHERE id = :id OR codigo_conductor = :id2');
+    $stmt->execute(['foto_url' => $fotoUrl, 'id' => $driverId, 'id2' => $driverId]);
     Database::jsonResponse(['success' => true, 'foto_url' => $fotoUrl, 'mensaje' => 'Foto de perfil actualizada.']);
 }
 
-// -----------------------------------------------------------------------------
-// PUT: CAMBIAR DISPONIBILIDAD (ON/OFF)
-// -----------------------------------------------------------------------------
-if ($method === 'PUT' && $action === 'disponibilidad') {
+// ----------------------------------------------------------------------------
+// POST / PUT: CAMBIAR DISPONIBILIDAD (ON/OFF)
+// ----------------------------------------------------------------------------
+if (($method === 'POST' || $method === 'PUT') && $action === 'disponibilidad') {
     $authUser = AuthMiddleware::requireAuth(['conductor', 'super_admin']);
     $data = Database::getJsonInput();
     $isSuperAdmin = ($authUser['nivel_acceso'] ?? '') === 'super_admin' || ($authUser['tipo_usuario'] ?? '') === 'super_admin';
-    $driverId = $isSuperAdmin && !empty($data['conductor_id']) ? $data['conductor_id'] : $authUser['id'];
+    $driverId = $isSuperAdmin && !empty($data['conductor_id']) ? $data['conductor_id'] : ($authUser['id'] ?? $authUser['sub'] ?? '');
     $disponible = isset($data['disponible']) ? (int)$data['disponible'] : 1;
 
     if ($disponible !== 0 && $disponible !== 1) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'El valor de disponibilidad no es válido'], 400);
     }
 
-    // Verificar si está bloqueado por falta de verificación (debe estar aprobado por administración)
-    $stmtVerif = $pdo->prepare("SELECT verificado_por_admin FROM conductores WHERE id = :id");
-    $stmtVerif->execute(['id' => $driverId]);
-    $verifRow = $stmtVerif->fetch();
-
-    if (!$verifRow || !(int)($verifRow['verificado_por_admin'] ?? 0)) {
-        Database::jsonResponse([
-            'error' => true,
-            'mensaje' => 'Tu cuenta aún está pendiente de verificación por administración. No puedes conectarte para recibir viajes hasta ser aprobado.'
-        ], 403);
-    }
-
-    // Verificar si está bloqueado por saldo (debe tener saldo POSITIVO: recargar para recibir viajes)
+    // Verificar si está bloqueado por saldo negativo (<= -0.50)
     $stmtCheck = $pdo->prepare("SELECT saldo_billetera_usd, limite_saldo_negativo, bloqueado_por_saldo FROM conductores WHERE id = :id");
     $stmtCheck->execute(['id' => $driverId]);
     $driver = $stmtCheck->fetch();
 
-    if ($driver && $driver['saldo_billetera_usd'] <= 0.00) {
+    if (!$driver) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'El conductor autenticado no existe en la base operativa.'], 404);
+    }
+
+    if ($disponible === 1 && $driver['saldo_billetera_usd'] <= -0.50) {
         $stmtBlock = $pdo->prepare("UPDATE conductores SET bloqueado_por_saldo = 1, disponible = 0 WHERE id = :id");
         $stmtBlock->execute(['id' => $driverId]);
 
         Database::jsonResponse([
             'error' => true,
             'bloqueado' => true,
-            'mensaje' => 'Debes recargar tu billetera para recibir viajes. Tu saldo actual es: $' . number_format($driver['saldo_billetera_usd'], 2) . ' USD (mínimo requerido: $0.01 USD).'
+            'mensaje' => 'Cuenta bloqueada automáticamente por saldo deudor: $' . number_format($driver['saldo_billetera_usd'], 2) . ' USD (límite: -$0.50 USD). Debes recargar tu billetera para activarte.'
         ], 403);
     }
 
     $stmt = $pdo->prepare("UPDATE conductores SET disponible = :disp WHERE id = :id");
     $stmt->execute(['disp' => $disponible, 'id' => $driverId]);
+    $stmtConfirm = $pdo->prepare('SELECT disponible FROM conductores WHERE id = :id LIMIT 1');
+    $stmtConfirm->execute(['id' => $driverId]);
+    $confirmedAvailability = (bool)$stmtConfirm->fetchColumn();
 
     Database::jsonResponse([
         'success' => true,
-        'disponible' => (bool)$disponible,
-        'mensaje' => $disponible ? 'Conductor en línea para recibir viajes' : 'Conductor desconectado'
+        'disponible' => $confirmedAvailability,
+        'mensaje' => $confirmedAvailability ? 'Conductor en línea para recibir viajes' : 'Conductor desconectado'
     ]);
 }
 

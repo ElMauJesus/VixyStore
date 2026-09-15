@@ -50,28 +50,68 @@ $ext = $allowedMimes[$mime];
 // 2. Determinar categoría de almacenamiento
 $tipo = $_POST['tipo'] ?? 'general'; // comercios, productos, entregas, reclamos, comprobantes
 $entityId = $_POST['entity_id'] ?? null; // ID del comercio, producto, pedido, reclamo, etc.
+$comercioId = $_POST['comercio_id'] ?? $_POST['comercioId'] ?? null;
 $campoEspecifico = $_POST['campo'] ?? null; // ej: 'logo', 'banner'
 
-$validTypes = ['comercios', 'productos', 'entregas', 'reclamos', 'comprobantes', 'admin'];
+$validTypes = ['comercios', 'productos', 'articulos', 'entregas', 'reclamos', 'comprobantes', 'admin'];
 if (!in_array($tipo, $validTypes)) {
     $tipo = 'general';
 }
 
-$uploadDir = __DIR__ . "/uploads/{$tipo}/";
-if (!is_dir($uploadDir)) {
-    mkdir($uploadDir, 0755, true);
+// Si es producto pero no se pasó comercio_id, verificar si entity_id es un comercio o buscar el producto
+if (($tipo === 'productos' || $tipo === 'articulos') && !$comercioId) {
+    if ($entityId && !str_starts_with($entityId, 'prod-')) {
+        $comercioId = $entityId;
+    } elseif ($entityId && str_starts_with($entityId, 'prod-')) {
+        try {
+            $stCp = $pdo->prepare("SELECT comercio_id FROM productos WHERE id = :id LIMIT 1");
+            $stCp->execute(['id' => $entityId]);
+            $comercioId = $stCp->fetchColumn();
+        } catch (Exception $e) {}
+    }
 }
 
-// Generar nombre de archivo único no colisionable
-$filename = $tipo . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-$targetPath = $uploadDir . $filename;
+// Generar nombre de archivo único
+$filename = ($tipo === 'productos' || $tipo === 'articulos')
+    ? ('art_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext)
+    : ($tipo . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(8)) . '.' . $ext);
 
-if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
-    Database::jsonResponse(['error' => true, 'mensaje' => 'Error al mover el archivo al disco de almacenamiento'], 500);
+if (($tipo === 'productos' || $tipo === 'articulos') && !empty($comercioId)) {
+    // Almacenar en la carpeta individual del comercio respectivo
+    $dirShop    = dirname(dirname(__DIR__)) . "/shop/imgs-c-d/comercios/{$comercioId}/articulos/";
+    $dirRoot    = dirname(dirname(__DIR__)) . "/imgs-c-d/comercios/{$comercioId}/articulos/";
+    $dirUploads = __DIR__ . "/uploads/comercios/{$comercioId}/articulos/";
+
+    foreach ([$dirShop, $dirRoot, $dirUploads] as $d) {
+        if (!is_dir($d)) @mkdir($d, 0755, true);
+    }
+
+    $targetPath = is_dir($dirShop) ? ($dirShop . $filename) : ($dirUploads . $filename);
+    if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Error al guardar la foto del artículo en el comercio'], 500);
+    }
+
+    // Replicar en las rutas hermanas para disponibilidad inmediata
+    if (file_exists($targetPath)) {
+        @copy($targetPath, $dirShop . $filename);
+        @copy($targetPath, $dirRoot . $filename);
+        @copy($targetPath, $dirUploads . $filename);
+    }
+
+    $publicUrl = "/shop/imgs-c-d/comercios/{$comercioId}/articulos/" . $filename;
+} else {
+    $uploadDir = __DIR__ . "/uploads/{$tipo}/";
+    if (!is_dir($uploadDir)) {
+        @mkdir($uploadDir, 0755, true);
+    }
+    $targetPath = $uploadDir . $filename;
+    if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Error al mover el archivo al disco de almacenamiento'], 500);
+    }
+
+    $baseUrl = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+    $publicUrl = "{$baseUrl}/uploads/{$tipo}/" . $filename;
 }
-
-$baseUrl = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-$publicUrl = "{$baseUrl}/uploads/{$tipo}/" . $filename;
 
 // 3. EJECUTAR CONSULTAS SQL INDIVIDUALES SEGÚN ENTIDAD Y TIPO
 $sqlExecuted = false;
@@ -90,15 +130,18 @@ if ($entityId) {
 
         // --- B. IMAGEN DE PRODUCTO / ITEM DEL CATÁLOGO ---
         case 'productos':
-            try {
-                $stmt = $pdo->prepare("UPDATE productos SET imagen_url = :url WHERE id = :id");
-                $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
-            } catch (Exception $e) {
-                $stmt = $pdo->prepare("UPDATE productos_catalogo SET imagen_url = :url WHERE id = :id");
-                $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
+        case 'articulos':
+            if (str_starts_with($entityId, 'prod-')) {
+                try {
+                    $stmt = $pdo->prepare("UPDATE productos SET imagen_url = :url WHERE id = :id");
+                    $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
+                } catch (Exception $e) {
+                    $stmt = $pdo->prepare("UPDATE productos_catalogo SET imagen_url = :url WHERE id = :id");
+                    $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
+                }
+                $sqlExecuted = true;
+                $sqlMessage = "Producto [{$entityId}]: Imagen de catálogo vinculada.";
             }
-            $sqlExecuted = true;
-            $sqlMessage = "Producto [{$entityId}]: Imagen de catálogo vinculada.";
             break;
 
         // --- C. FOTO DE CONFIRMACIÓN DE ENTREGA ---

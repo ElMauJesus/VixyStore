@@ -116,7 +116,7 @@ export const AdminPanel: React.FC = () => {
         setLoginError(res?.error || 'Credenciales de acceso inválidas');
       }
     } catch (err: any) {
-      setLoginError('Error de conexión con el servidor MySQL.');
+      setLoginError('Error de conexión con el servidor.');
     } finally {
       setIsSubmitting(false);
     }
@@ -161,7 +161,7 @@ export const AdminPanel: React.FC = () => {
             </p>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">
               <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
-              <span>Autenticación Segura MySQL / PHP</span>
+              <span>Autenticación Segura</span>
             </div>
           </div>
 
@@ -408,7 +408,7 @@ export const AdminPanel: React.FC = () => {
               {allMenuItems.find(m => m.id === activeTab)?.label || 'Panel de Control'}
             </h2>
             <span className="text-[11px] text-slate-400">
-              Acceso RBAC con MySQL 8.0 & PHP • Sesión: <strong className="text-slate-600 dark:text-slate-300">{currentAdminUser.nombre}</strong> ({currentAdminUser.nivelAcceso})
+              Sesión: <strong className="text-slate-600 dark:text-slate-300">{currentAdminUser.nombre}</strong> ({currentAdminUser.nivelAcceso})
             </span>
           </div>
 

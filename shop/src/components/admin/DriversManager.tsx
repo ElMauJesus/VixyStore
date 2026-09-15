@@ -1073,7 +1073,7 @@ export const DriversManager: React.FC = () => {
                         <span>Expediente Documental Registrado</span>
                       </h4>
                       <p className="text-xs text-neutral-400 mt-0.5">
-                        Documentos auditables guardados en la carpeta del repartidor (uploads/conductores/{selectedDriver.id}/) o en imgs-c-d/deliverys/{selectedDriver.id}.
+                        Documentos auditables guardados en el expediente digital del conductor.
                       </p>
                     </div>
                     {getDriverStatusBadge(selectedDriver)}

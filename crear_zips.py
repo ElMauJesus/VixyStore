@@ -47,8 +47,15 @@ if __name__ == "__main__":
             print(f"[-] Eliminado ZIP innecesario: {z}")
 
     # 1. vixy_servidor.zip: TODO el public_html (Tienda + Portal + Shop + Delivery API)
+    # Excluyendo carpetas assets redundantes en sub-apps (se sirven centralizadamente desde /assets/)
     print("-> Generando vixy_servidor.zip (COMPLETO: Tienda + Portal + Shop + Delivery API)...")
-    create_zip("out", "vixy_servidor.zip")
+    sub_app_assets_excludes = [
+        "admin/assets",
+        "comercio/assets",
+        "delivery/assets",
+        "pedidos/assets"
+    ]
+    create_zip("out", "vixy_servidor.zip", exclude_dirs=sub_app_assets_excludes)
 
     # 2. vixy_shop.zip: Solo lo que pertenece a /shop/ (frontend + backend tienda)
     print("-> Generando vixy_shop.zip (Frontend + Backend para /shop/)...")

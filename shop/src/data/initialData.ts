@@ -38,6 +38,29 @@ export const RUBROS_COMERCIO_DISPONIBLES = [
   'Otro (Personalizado)'
 ];
 
+// Categorías de artículos sugeridas por rubro (fallback cuando el comercio aún no
+// ha configurado sus categorías personalizadas de catálogo).
+export const CATEGORIAS_PRODUCTO_POR_RUBRO: Record<string, string[]> = {
+  'Hamburguesas & Comida Rápida': ['Hamburguesas', 'Perros Calientes', 'Pollo', 'Arepas', 'Sándwiches', 'Combos', 'Acompañantes', 'Bebidas', 'Postres'],
+  'Pizzas & Comida Italiana': ['Pizzas', 'Pastas', 'Lasagna', 'Ensaladas', 'Pan', 'Bebidas', 'Postres'],
+  'Sushi & Comida Asiática': ['Sushi & Rolls', 'Temaki', 'Wok & Salteados', 'Sopas', 'Entradas', 'Bebidas'],
+  'Carnes, Parrillas & Grill': ['Parrillas', 'Carnes', 'Lomos', 'Pollo', 'Acompañantes', 'Salsas', 'Bebidas'],
+  'Cafetería, Desayunos & Brunch': ['Desayunos', 'Cafés', 'Espressos', 'Brunch', 'Pastelería', 'Jugos Naturales'],
+  'Panadería, Pastelería & Dulces': ['Panes', 'Tortas', 'Postres', 'Galletería', 'Empanadas', 'Repostería'],
+  'Farmacia, Salud & Medicinas': ['Medicamentos', 'Vitaminas', 'Higiene Personal', 'Primeros Auxilios', 'Cuidado del Bebé', 'Salud'],
+  'Supermercado, Víveres & Minimarket': ['Despensa', 'Lácteos', 'Carnes', 'Bebidas', 'Limpieza', 'Hogar', 'Snacks'],
+  'Ferretería, Hogar & Pinturas': ['Herramientas', 'Pinturas', 'Electricidad', 'Fontanería', 'Hogar', 'Construcción'],
+  'Tecnología, Teléfonos & Computación': ['Celulares', 'Computadoras', 'Periféricos', 'Sonido', 'Accesorios', 'Gaming'],
+  'Repuestos & Accesorios de Moto y Auto': ['Repuestos Motor', 'Repuestos Carro', 'Accesorios', 'Aceites', 'Baterías', 'Llantas'],
+  'Ropa, Calzado & Moda': ['Ropa Hombre', 'Ropa Mujer', 'Calzado', 'Accesorios', 'Bolsos & Carteras', 'Deportivo'],
+  'Cosméticos, Belleza & Cuidado Personal': ['Maquillaje', 'Cuidado Facial', 'Cabello', 'Perfumería', 'Cuidado Personal', 'Uñas'],
+  'Mascotas, Alimentos & Veterinaria': ['Alimento para Mascotas', 'Accesorios', 'Higiene', 'Salud y Veterinaria', 'Juguetes'],
+  'Licores, Vinos & Cervezas': ['Ron & Whisky', 'Vinos', 'Cervezas', 'Vodka y Gin', 'Bebidas Premium', 'Mezcladores'],
+  'Librería, Papelería & Oficina': ['Libros', 'Cuadernos y Papel', 'Escritura', 'Artículos de Oficina', 'Escolar', 'Arte'],
+  'Floristería, Regalos & Novedades': ['Flores', 'Arreglos', 'Globos', 'Regalos', 'Novedades', 'Dulces y Chocolates'],
+  'Otro (Personalizado)': ['General', 'Ofertas', 'Promociones', 'Nuevos', 'Bebidas', 'Otros']
+};
+
 export const TASA_BCV_ACTUAL = 78.50; // Tasa de contingencia si no responde API
 
 export const INITIAL_TARIFAS_CONFIG: TarifasDeliveryConfig = {

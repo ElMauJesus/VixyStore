@@ -43,11 +43,9 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
     || CARTO_DEFAULT_KEY;
 
   const getTileUrl = (style: 'dark' | 'voyager') => {
-    const base = style === 'dark'
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-    const activeKey = encodeURIComponent(effectiveApiKey || CARTO_DEFAULT_KEY);
-    return `${base}?key=${activeKey}&api_key=${activeKey}`;
+    const stylePath = style === 'dark' ? 'dark_all' : 'voyager';
+    const key = (effectiveApiKey && effectiveApiKey.trim()) ? effectiveApiKey.trim() : CARTO_DEFAULT_KEY;
+    return `https://basemaps.cartocdn.com/rastertiles/${stylePath}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(key)}`;
   };
 
   useEffect(() => {
@@ -171,14 +169,30 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
     const effectiveDriverLng = driverLng ?? anchorLng;
 
     if (driverLat != null && driverLng != null && driverLat !== 0 && driverLng !== 0) {
+      // Calcular distancia restante y ETA estimado
+      let distKm = 0;
+      let etaMin = 5;
+      if (hasClient) {
+        const rad = (deg: number) => (deg * Math.PI) / 180;
+        const dLat = rad(clientLat - effectiveDriverLat);
+        const dLng = rad(clientLng - effectiveDriverLng);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(rad(effectiveDriverLat)) * Math.cos(rad(clientLat)) *
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        distKm = Math.round((6371 * c) * 10) / 10;
+        etaMin = Math.max(2, Math.round((distKm / 25) * 60));
+      }
+
       const driverIconHtml = `
         <div class="relative cursor-pointer transition hover:scale-110">
           <div class="absolute -inset-2 rounded-full bg-emerald-500/30 animate-ping"></div>
           <div class="relative w-10 h-10 rounded-full border-2 border-emerald-400 bg-slate-900 overflow-hidden shadow-emerald-500/50 shadow-xl flex items-center justify-center">
             <img src="${driverPhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" alt="${driverName}" class="w-full h-full object-cover" />
           </div>
-          <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1 rounded-full bg-emerald-500 text-slate-950 font-black text-[8px] whitespace-nowrap">
-            🏍️ En Moto
+          <div class="absolute -bottom-2.5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[8px] whitespace-nowrap shadow-md border border-slate-900 flex items-center gap-1">
+            <span>🏍️ En camino</span>
+            ${distKm > 0 ? `<span class="bg-emerald-950 text-emerald-200 px-1 rounded text-[7.5px]">${distKm}km • ~${etaMin}m</span>` : ''}
           </div>
         </div>
       `;
@@ -191,7 +205,7 @@ export const OrderTrackingMap: React.FC<OrderTrackingMapProps> = ({
           iconAnchor: [20, 20]
         }),
         zIndexOffset: 1000
-      }).bindTooltip(`<strong>${driverName}</strong><br/><span style="font-size:10px; color:#34d399;">Repartidor en camino</span>`, { direction: 'top' });
+      }).bindTooltip(`<strong>${driverName}</strong><br/><span style="font-size:10px; color:#34d399;">🏍️ En camino ${distKm > 0 ? `• ${distKm} km restantes • ETA: ~${etaMin} min` : ''}</span>`, { direction: 'top' });
       driverMarker.addTo(map);
       bounds.push([effectiveDriverLat, effectiveDriverLng]);
 

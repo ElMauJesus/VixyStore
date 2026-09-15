@@ -86,8 +86,8 @@ interface DeliveryContextType {
   rechargeRequests: SolicitudRecarga[];
   solicitarRecargaCliente: (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string) => { success: boolean; error?: string };
   solicitarRecargaConductor: (montoUsd: number, metodoPago: MetodoPagoTipo, referencia: string, comprobanteUrl?: string) => { success: boolean; error?: string };
-  aprobarRecarga: (solicitudId: string, nota?: string) => void;
-  rechazarRecarga: (solicitudId: string, motivo: string) => void;
+  aprobarRecarga: (solicitudId: string, nota?: string) => Promise<void> | void;
+  rechazarRecarga: (solicitudId: string, motivo: string) => Promise<void> | void;
   // Confirmación y Calificación de Entrega
   confirmDeliveryByClient: (orderId: string, calificacionComercio: number, calificacionConductor: number, comentario: string) => void;
   // Reclamos y Quejas
@@ -232,7 +232,22 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [store, setStore] = useState<Comercio>(() => {
     try {
       const saved = localStorage.getItem('vixy_store_session');
-      return saved ? JSON.parse(saved) : DEMO_COMERCIO;
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s && s.id) {
+          try {
+            const cachedProds = localStorage.getItem(`vixy_store_productos_${s.id}`);
+            if (cachedProds) {
+              const prods = JSON.parse(cachedProds);
+              if (Array.isArray(prods) && prods.length > 0) {
+                s.productos = prods;
+              }
+            }
+          } catch (err) {}
+        }
+        return s;
+      }
+      return DEMO_COMERCIO;
     } catch {
       return DEMO_COMERCIO;
     }
@@ -270,52 +285,92 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const condRes = await api.getConductores(false).catch(() => null);
       if (condRes?.success && Array.isArray(condRes.conductores)) {
-        const loadedDrivers: Conductor[] = condRes.conductores.map((d: any) => ({
-          ...d,
-          id: String(d.id || d.codigo_conductor || ('drv-' + Math.random())),
-          nombre: d.nombre || 'Conductor',
-          apellido: d.apellido || '',
-          cedula: d.cedula || '',
-          telefono: d.telefono || '',
-          fotoUrl: d.avatar_url || d.foto_url || d.fotoUrl || '',
-          status: (d.status || d.estado_verificacion || 'pendiente') as any,
-          estadoVerificacion: (d.estado_verificacion || d.status || 'pendiente') as any,
-          codigoSolicitud: d.codigo_conductor || d.id,
-          moto: (d.moto && typeof d.moto === 'object') ? d.moto : {
-            marca: d.marca_moto || d.marca || 'Moto',
-            modelo: d.modelo_moto || d.modelo || '',
-            color: d.color_moto || d.color || '',
-            placa: d.placa_moto || d.placa || '',
-            ano: Number(d.ano_moto || d.ano || 0)
-          },
-          legal: (d.legal && typeof d.legal === 'object') ? d.legal : {
+        const loadedDrivers = condRes.conductores.map((d: any) => {
+          const rawLat = d.latitud_actual ?? d.lat;
+          const rawLng = d.longitud_actual ?? d.lng;
+          const parsedLat = rawLat === null || rawLat === undefined || rawLat === '' ? null : Number(rawLat);
+          const parsedLng = rawLng === null || rawLng === undefined || rawLng === '' ? null : Number(rawLng);
+          const hasRealGps = Boolean(d.has_real_gps || d.hasRealGps)
+            && parsedLat !== null && parsedLng !== null
+            && Number.isFinite(parsedLat) && Number.isFinite(parsedLng)
+            && parsedLat !== 0 && parsedLng !== 0;
+
+          // Sin lectura GPS no hay una ubicación confiable: se conserva como pendiente y no se inventa un pin.
+          const latVal = hasRealGps ? parsedLat : null;
+          const lngVal = hasRealGps ? parsedLng : null;
+          const ubicacionVal = hasRealGps 
+            ? (d.ubicacion_actual || d.ubicacionActual || `${parsedLat.toFixed(4)}, ${parsedLng.toFixed(4)}`)
+            : 'GPS Pendiente (Esperando señal)';
+
+          const isApproved = Number(d.verificado_por_admin) === 1 
+            || String(d.status).toLowerCase() === 'aprobado' 
+            || String(d.estado_registro).toLowerCase() === 'aprobado' 
+            || String(d.estado_verificacion).toLowerCase() === 'aprobado'
+            || d.validado === true;
+          const isRejected = String(d.status).toLowerCase() === 'rechazado' 
+            || String(d.estado_registro).toLowerCase() === 'rechazado' 
+            || String(d.estado_verificacion).toLowerCase() === 'rechazado';
+          const resolvedStatus = isRejected ? 'rechazado' : (isApproved ? 'aprobado' : 'pendiente');
+
+          // Verificación de billetera y saldo mínimo:
+          // Un conductor con saldo negativo <= -0.50$ o bloqueado por saldo no puede operar ni recibir viajes
+          const saldoUsd = Number(d.saldo_billetera_usd ?? d.saldoUsd ?? d.billetera?.saldoUsd ?? 0);
+          const limiteNegativo = Number(d.limite_saldo_negativo ?? -0.50);
+          const isBlockedByBalance = Boolean(d.bloqueado_por_saldo) || saldoUsd <= limiteNegativo;
+          const isAvailableForServices = isApproved && saldoUsd > 0 && !isBlockedByBalance && Boolean(d.disponible);
+
+          return {
+            ...d,
+            id: String(d.id || d.codigo_conductor || ('drv-' + Math.random())),
+            nombre: d.nombre || 'Conductor',
+            apellido: d.apellido || '',
             cedula: d.cedula || '',
-            licenciaGrado: d.licencia_grado || '2da',
-            licenciaNumero: d.licencia_numero || '',
-            licenciaVencimiento: '2026-12-31',
-            licenciaValida: true,
-            certificadoMedicoNumero: d.certificado_medico || '',
-            certificadoMedicoVencimiento: '2026-12-31',
-            certificadoMedicoValido: true,
-            rcvAseguradora: 'Seguros Caracas',
-            rcvPolizaNumero: d.rcv_poliza || '',
-            rcvVencimiento: '2026-12-31'
-          },
-          disponible: Boolean(d.disponible),
-          ubicacionActual: d.ubicacion_actual || d.ubicacionActual || 'Caracas',
-          lat: d.latitud_actual ?? d.lat ?? null,
-          lng: d.longitud_actual ?? d.lng ?? null,
-          calificacion: Number(d.rating || d.calificacion || 5.0),
-          totalViajes: Number(d.total_carreras || d.totalViajes || 0),
-          billetera: (d.billetera && typeof d.billetera === 'object') ? d.billetera : {
-            saldoUsd: Number(d.saldo_billetera_usd || 0),
-            limiteSaldoNegativo: Number(d.limite_saldo_negativo || -0.50),
-            bloqueadoPorSaldo: Boolean(d.bloqueado_por_saldo),
-            totalGanadoUsd: 0,
-            totalComisionesPagadasUsd: 0,
-            historialTransacciones: []
-          }
-        }));
+            telefono: d.telefono || '',
+            fotoUrl: d.avatar_url || d.foto_url || d.fotoUrl || '',
+            status: resolvedStatus as any,
+            estadoVerificacion: resolvedStatus as any,
+            verificado_por_admin: isApproved ? 1 : 0,
+            codigoSolicitud: d.codigo_conductor || d.id,
+            moto: (d.moto && typeof d.moto === 'object') ? d.moto : {
+              marca: d.marca_moto || d.marca || 'Moto',
+              modelo: d.modelo_moto || d.modelo || '',
+              color: d.color_moto || d.color || '',
+              placa: d.placa_moto || d.placa || '',
+              ano: Number(d.ano_moto || d.ano || 0)
+            },
+            legal: (d.legal && typeof d.legal === 'object') ? d.legal : {
+              cedula: d.cedula || '',
+              licenciaGrado: d.licencia_grado || '2da',
+              licenciaNumero: d.licencia_numero || '',
+              licenciaVencimiento: '2026-12-31',
+              licenciaValida: true,
+              certificadoMedicoNumero: d.certificado_medico || '',
+              certificadoMedicoVencimiento: '2026-12-31',
+              certificadoMedicoValido: true,
+              rcvAseguradora: 'Seguros Caracas',
+              rcvPolizaNumero: d.rcv_poliza || '',
+              rcvVencimiento: '2026-12-31'
+            },
+            disponible: isAvailableForServices,
+            hasRealGps: hasRealGps,
+            ubicacionActual: ubicacionVal,
+            lat: latVal,
+            lng: lngVal,
+            velocidadKmh: hasRealGps ? Number(d.velocidad_kmh ?? d.velocidadKmh ?? 0) : 0,
+            precisionGps: hasRealGps ? Number(d.precision_metros ?? d.precisionGps ?? 5) : 0,
+            calificacion: Number(d.rating || d.calificacion || 5.0),
+            totalViajes: Number(d.total_carreras || d.totalViajes || 0),
+            billetera: {
+              ...((d.billetera && typeof d.billetera === 'object') ? d.billetera : {}),
+              saldoUsd: saldoUsd,
+              limiteSaldoNegativo: limiteNegativo,
+              bloqueadoPorSaldo: isBlockedByBalance,
+              totalGanadoUsd: 0,
+              totalComisionesPagadasUsd: 0,
+              historialTransacciones: []
+            }
+          };
+        });
 
         // Conservar el conductor local activo (el que tiene la web abierta del lado driver)
         setAllDrivers(loadedDrivers);
@@ -348,6 +403,29 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const loadedStores: Comercio[] = storesRes.comercios.map((c: any) => {
           const storeName = c.nombre || c.nombre_comercial || c.nombreComercial || 'Comercio';
 
+          let parsedStoreLat: number | null = null;
+          let parsedStoreLng: number | null = null;
+          if (c.lat !== null && c.lat !== undefined && c.lat !== '' && Number(c.lat) !== 0) {
+            parsedStoreLat = Number(c.lat);
+          } else if (c.latitud !== null && c.latitud !== undefined && c.latitud !== '' && Number(c.latitud) !== 0) {
+            parsedStoreLat = Number(c.latitud);
+          }
+          if (c.lng !== null && c.lng !== undefined && c.lng !== '' && Number(c.lng) !== 0) {
+            parsedStoreLng = Number(c.lng);
+          } else if (c.longitud !== null && c.longitud !== undefined && c.longitud !== '' && Number(c.longitud) !== 0) {
+            parsedStoreLng = Number(c.longitud);
+          }
+          if ((parsedStoreLat === null || parsedStoreLng === null) && c.ubicacion_gps) {
+            const gpsParts = String(c.ubicacion_gps).split(',');
+            if (gpsParts.length >= 2) {
+              const pLat = Number(gpsParts[0].trim());
+              const pLng = Number(gpsParts[1].trim());
+              if (!isNaN(pLat) && !isNaN(pLng) && pLat !== 0 && pLng !== 0) {
+                parsedStoreLat = pLat;
+                parsedStoreLng = pLng;
+              }
+            }
+          }
           return {
             ...c,
             id: String(c.id || c.codigo_comercio || c.codigoComercio || ''),
@@ -357,41 +435,41 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             rif: c.rif || c.rif_cedula_juridica || '',
             categoria: c.categoria || 'Comercio General',
             categoriaPrincipal: c.categoria_principal || c.categoriaPrincipal || 'comida_rapida',
-          rubroPersonalizado: c.rubro_personalizado || '',
-          direccion: c.direccion || '',
-          telefono: c.telefono || '',
-          email: c.email || '',
-          logoUrl: c.logo_url || c.logoUrl || '/banners/banner_comercios.jpg',
-          bannerUrl: c.banner_url || c.bannerUrl || '/banners/banner_comercios.jpg',
-          calificacion: Number(c.calificacion || 5.0),
-          totalCalificaciones: Number(c.total_calificaciones || 0),
-          tiempoEstimadoMin: Number(c.tiempo_estimado_min || 20),
-          tiempoEstimadoMax: Number(c.tiempo_estimado_max || 45),
-          costoEnvioUsd: Number(c.costo_envio_base_usd || c.costoEnvioUsd || 2.00),
-          horarioApertura: c.horarios || c.horarioApertura || '08:00 AM - 10:00 PM',
-          horaApertura: c.hora_apertura || c.horaApertura || '08:00:00',
-          horaCierre: c.hora_cierre || c.horaCierre || '22:00:00',
-          diasOperacion: Array.isArray(c.dias_operacion) ? c.dias_operacion : (Array.isArray(c.diasOperacion) ? c.diasOperacion : ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']),
-          activo: c.activo !== false,
-          abierto: c.activo !== false && c.abierto_manual !== false,
-          abiertoManual: c.abierto_manual !== false,
-          status: c.status || (c.origen_bd === 'delivery' ? 'aprobado' : 'pendiente'),
-          validado: c.validado === true || c.status === 'aprobado' || c.origen_bd === 'delivery',
-          origen_bd: c.origen_bd || 'delivery',
-          lat: c.lat ?? c.latitud ?? 0,
-          lng: c.lng ?? c.longitud ?? 0,
-          productos: Array.isArray(c.productos) ? c.productos : [],
-          categoriasCatalogo: Array.isArray(c.categorias_catalogo) ? c.categorias_catalogo : [],
-          metodosPagoAceptados: c.metodos_pago || {
-            pagoMovil: { activo: true },
-            carteraVixy: { activo: true },
-            efectivoUsd: { activo: true },
-            zelle: { activo: false },
-            binancePay: { activo: false },
-            zinli: { activo: false }
-          },
-          billetera: c.billetera || DEMO_COMERCIO_BILLETERA
-        };
+            rubroPersonalizado: c.rubro_personalizado || '',
+            direccion: c.direccion || '',
+            telefono: c.telefono || '',
+            email: c.email || '',
+            logoUrl: c.logo_url || c.logoUrl || '/banners/banner_comercios.jpg',
+            bannerUrl: c.banner_url || c.bannerUrl || '/banners/banner_comercios.jpg',
+            calificacion: Number(c.calificacion || 5.0),
+            totalCalificaciones: Number(c.total_calificaciones || 0),
+            tiempoEstimadoMin: Number(c.tiempo_estimado_min || 20),
+            tiempoEstimadoMax: Number(c.tiempo_estimado_max || 45),
+            costoEnvioUsd: Number(c.costo_envio_base_usd || c.costoEnvioUsd || 2.00),
+            horarioApertura: c.horarios || c.horarioApertura || '08:00 AM - 10:00 PM',
+            horaApertura: c.hora_apertura || c.horaApertura || '08:00:00',
+            horaCierre: c.hora_cierre || c.horaCierre || '22:00:00',
+            diasOperacion: Array.isArray(c.dias_operacion) ? c.dias_operacion : (Array.isArray(c.diasOperacion) ? c.diasOperacion : ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']),
+            activo: c.activo !== false,
+            abierto: c.activo !== false && c.abierto_manual !== false,
+            abiertoManual: c.abierto_manual !== false,
+            status: c.status || (c.origen_bd === 'delivery' ? 'aprobado' : 'pendiente'),
+            validado: c.validado === true || c.status === 'aprobado' || c.origen_bd === 'delivery',
+            origen_bd: c.origen_bd || 'delivery',
+            lat: parsedStoreLat,
+            lng: parsedStoreLng,
+            productos: Array.isArray(c.productos) ? c.productos : [],
+            categoriasCatalogo: Array.isArray(c.categorias_catalogo) ? c.categorias_catalogo : [],
+            metodosPagoAceptados: c.metodos_pago || {
+              pagoMovil: { activo: true },
+              carteraVixy: { activo: true },
+              efectivoUsd: { activo: true },
+              zelle: { activo: false },
+              binancePay: { activo: false },
+              zinli: { activo: false }
+            },
+            billetera: c.billetera || DEMO_COMERCIO_BILLETERA
+          };
       });
 
         setStores(loadedStores);
@@ -400,11 +478,15 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setStore(curr => {
           if (!curr || !curr.id) return curr;
           const found = loadedStores.find(s => s.id === curr.id || (s.rif && s.rif === curr.rif));
-          return found ? { 
+          if (!found) return curr;
+          const prodsToKeep = (Array.isArray(found.productos) && found.productos.length > 0)
+            ? found.productos
+            : (Array.isArray(curr.productos) && curr.productos.length > 0 ? curr.productos : []);
+          return { 
             ...curr, 
             ...found, 
-            productos: Array.isArray(found.productos) ? found.productos : (Array.isArray(curr.productos) ? curr.productos : []) 
-          } : curr;
+            productos: prodsToKeep
+          };
         });
       }
 
@@ -596,15 +678,78 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     refreshBackendData();
   }, []);
 
-  // Polling GPS en vivo: refresca conductores cada 10s para que el radar/mapa
+  // Polling GPS en vivo: refresca conductores cada 5s para que el radar/mapa
   // muestre la posición real de los deliverys sin necesidad de recargar la página.
   useEffect(() => {
     cargarConductores();
     const interval = setInterval(() => {
       cargarConductores();
-    }, 10000);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Polling central de Tasa BCV y configuración cada 5 segundos
+  useEffect(() => {
+    const syncCentralConfig = async () => {
+      try {
+        const cfg = await api.getConfig().catch(() => null);
+        if (cfg?.success && cfg.config) {
+          const nuevaTasa = Number(cfg.config.tasa_bcv);
+          if (Number.isFinite(nuevaTasa) && nuevaTasa > 0) {
+            setTasaBcv(nuevaTasa);
+            setDeliveryRates(prev => ({
+              ...prev,
+              tasaBcvBs: nuevaTasa,
+              tarifaBaseMinimaUsd: Number(cfg.config.tarifa_base_usd || prev.tarifaBaseMinimaUsd),
+              distanciaBaseKm: Number(cfg.config.km_base || prev.distanciaBaseKm),
+              costoPorFraccionUsd: Number(cfg.config.precio_km_adicional_usd || prev.costoPorFraccionUsd),
+              porcentajeComisionDelivery: Number(cfg.config.comision_plataforma_porcentaje || prev.porcentajeComisionDelivery)
+            }));
+          }
+        }
+      } catch (e) {}
+    };
+
+    const cfgInterval = setInterval(syncCentralConfig, 5000);
+    return () => clearInterval(cfgInterval);
+  }, []);
+
+  // Recargar catálogo real persistido del comercio desde MySQL
+  useEffect(() => {
+    if (!store?.id || !storeLoggedIn) return;
+    api.getProductos(store.id).then(res => {
+      if (res?.success && Array.isArray(res.productos)) {
+        const prods: Producto[] = res.productos.map((e: any) => ({
+          id: String(e.id ?? ''),
+          nombre: String(e.nombre ?? ''),
+          descripcion: String(e.descripcion ?? ''),
+          precioUsd: Number(e.precioUsd ?? e.precio_usd ?? 0),
+          precioBs: Number(e.precioBs ?? e.precio_bs ?? Math.round(Number(e.precioUsd ?? e.precio_usd ?? 0) * tasaBcv)),
+          categoria: String(e.categoria ?? 'General'),
+          imagenUrl: e.imagenUrl ?? e.imagen_url ?? e.imagenPath ?? e.imagen_path ?? '',
+          imagenPath: e.imagenPath ?? e.imagen_path ?? e.imagenUrl ?? '',
+          disponible: e.disponible !== false && e.disponible !== 0
+        }));
+        setStore(prev => {
+          try {
+            localStorage.setItem(`vixy_store_productos_${prev.id}`, JSON.stringify(prods));
+          } catch (err) {}
+          return { ...prev, productos: prods };
+        });
+      }
+    }).catch(err => {
+      console.warn('[Vixy] No se pudo recargar el catálogo del comercio:', err);
+      try {
+        const cached = localStorage.getItem(`vixy_store_productos_${store.id}`);
+        if (cached) {
+          const prods = JSON.parse(cached);
+          if (Array.isArray(prods) && prods.length > 0) {
+            setStore(prev => ({ ...prev, productos: prods }));
+          }
+        }
+      } catch (err) {}
+    });
+  }, [store?.id, storeLoggedIn]);
   const [cartoApiKey, setCartoApiKeyState] = useState<string>(() => {
     const defaultKey = 'cb1_2or2_1_cfdc8f91393881d023074657';
     try {
@@ -656,7 +801,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       usuarioRol: 'admin',
       modulo: 'tarifas',
       accion: 'Actualización Tasa Oficial BCV',
-      detalles: `Tasa oficial del BCV establecida en ${newVal.toFixed(2)} Bs/USD. Precios de productos de comercios y saldos de carteras sincronizados con la base de datos SQL.`,
+      detalles: `Tasa oficial del BCV establecida en ${newVal.toFixed(2)} Bs/USD. Precios de productos de comercios y saldos de carteras sincronizados exitosamente.`,
       ip: '190.202.88.14 (Caracas, CANTV)',
       severidad: 'exito'
     });
@@ -710,7 +855,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const existeCedula = registeredClients.some(c => c.cedula.toLowerCase().replace(/[^a-z0-9]/g, '') === cedulaLimpia);
     if (existeCedula) {
-      return { success: false, error: `La cédula de identidad "${data.cedula}" ya se encuentra registrada en la base de datos SQL.` };
+      return { success: false, error: `La cédula de identidad "${data.cedula}" ya se encuentra registrada en el sistema.` };
     }
 
     const existeTlf = registeredClients.some(c => c.telefono.replace(/\s+/g, '') === tlfLimpio);
@@ -761,8 +906,8 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       usuarioNombre: `${newClient.nombre} ${newClient.apellido}`,
       usuarioRol: 'cliente',
       modulo: 'seguridad',
-      accion: 'Nuevo Cliente Registrado (SQL)',
-      detalles: `Registro de cliente C.I. ${newClient.cedula}, Tel: ${newClient.telefono}, Usuario: @${newClient.username}. Cartera ID asignada en BD.`,
+      accion: 'Nuevo Cliente Registrado',
+      detalles: `Registro de cliente C.I. ${newClient.cedula}, Tel: ${newClient.telefono}, Usuario: @${newClient.username}. Cartera digital asignada.`,
       ip: '190.202.88.15',
       severidad: 'info'
     });
@@ -892,10 +1037,22 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return { success: true };
   };
 
-  const aprobarRecarga = (solicitudId: string, nota?: string) => {
+  const aprobarRecarga = async (solicitudId: string, nota?: string) => {
     const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const sol = rechargeRequests.find(s => s.id === solicitudId);
     if (!sol) return;
+
+    try {
+      const res = await api.processRecarga(solicitudId, 'aprobar', nota);
+      if (res && (res as any).error) {
+        alert((res as any).mensaje || 'Error al aprobar recarga en el servidor');
+        return;
+      }
+    } catch (err: any) {
+      console.error('Error aprobando recarga en backend:', err);
+      alert('Error en servidor al procesar aprobación: ' + (err.message || ''));
+      return;
+    }
 
     setRechargeRequests(prev => prev.map(s => s.id === solicitudId ? {
       ...s,
@@ -985,8 +1142,21 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
-  const rechazarRecarga = (solicitudId: string, motivo: string) => {
+  const rechazarRecarga = async (solicitudId: string, motivo: string) => {
     const timeStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    try {
+      const res = await api.processRecarga(solicitudId, 'rechazar', motivo);
+      if (res && (res as any).error) {
+        alert((res as any).mensaje || 'Error al rechazar recarga en el servidor');
+        return;
+      }
+    } catch (err: any) {
+      console.error('Error rechazando recarga en backend:', err);
+      alert('Error en servidor al procesar rechazo: ' + (err.message || ''));
+      return;
+    }
+
     setRechargeRequests(prev => prev.map(s => s.id === solicitudId ? {
       ...s,
       estado: 'rechazada',
@@ -2020,44 +2190,123 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addProduct = (prod: Omit<Producto, 'id' | 'precioBs'>) => {
-    const id = 'prod-' + Date.now();
+    const tempId = 'prod-' + Date.now();
     const cleanFileName = prod.nombre.toLowerCase().replace(/[^a-z0-9]/g, '-');
     const imagenPath = prod.imagenPath || `/uploads/comercios/${store.id}/articulos/${cleanFileName}.jpg`;
     const newProd: Producto = {
       ...prod,
-      id,
+      id: tempId,
       precioBs: Math.round(prod.precioUsd * tasaBcv),
-      imagenPath
+      imagenPath,
+      imagenUrl: prod.imagenUrl || imagenPath
     };
-    setStore(prev => ({
-      ...prev,
-      productos: [newProd, ...prev.productos]
-    }));
-    addNotification('comercio', '🍔 Nuevo Artículo Registrado', `"${prod.nombre}" ingresado al catálogo. Ruta imagen: ${imagenPath}`);
+
+    // 1. Guardar de inmediato en estado y en localStorage
+    setStore(prev => {
+      const updated = [newProd, ...prev.productos];
+      try {
+        localStorage.setItem(`vixy_store_productos_${prev.id}`, JSON.stringify(updated));
+      } catch (e) {}
+      return {
+        ...prev,
+        productos: updated
+      };
+    });
+
+    // 2. Persistir en el Backend MySQL
+    if (store && store.id) {
+      api.createProducto({
+        comercio_id: store.id,
+        nombre: prod.nombre,
+        descripcion: prod.descripcion,
+        precio_usd: prod.precioUsd,
+        categoria: prod.categoria,
+        imagen_url: prod.imagenUrl || imagenPath,
+        imagen_path: imagenPath,
+        disponible: prod.disponible !== false ? 1 : 0
+      }).then(res => {
+        if (res?.success && (res.id || res.producto?.id)) {
+          const realId = String(res.id || res.producto?.id);
+          const returnedImg = res.imagen_url || res.producto?.imagen_url || prod.imagenUrl || imagenPath;
+          setStore(prev => {
+            const mapped = prev.productos.map(p => p.id === tempId ? { ...p, id: realId, imagenUrl: returnedImg, imagenPath: returnedImg } : p);
+            try {
+              localStorage.setItem(`vixy_store_productos_${prev.id}`, JSON.stringify(mapped));
+            } catch (e) {}
+            return { ...prev, productos: mapped };
+          });
+        }
+      }).catch(err => {
+        console.warn('[Vixy] Error guardando producto en MySQL:', err);
+      });
+    }
+
+    addNotification('comercio', '🍔 Nuevo Artículo Registrado', `"${prod.nombre}" ingresado al catálogo.`);
   };
 
   const updateProduct = (id: string, prod: Partial<Producto>) => {
-    setStore(prev => ({
-      ...prev,
-      productos: prev.productos.map(p => {
+    setStore(prev => {
+      const updated = prev.productos.map(p => {
         if (p.id === id) {
-          const updated = { ...p, ...prod };
+          const updatedProd = { ...p, ...prod };
           if (prod.precioUsd !== undefined) {
-            updated.precioBs = Math.round(prod.precioUsd * tasaBcv);
+            updatedProd.precioBs = Math.round(prod.precioUsd * tasaBcv);
           }
-          return updated;
+          return updatedProd;
         }
         return p;
-      })
-    }));
+      });
+      try {
+        localStorage.setItem(`vixy_store_productos_${prev.id}`, JSON.stringify(updated));
+      } catch (e) {}
+      return {
+        ...prev,
+        productos: updated
+      };
+    });
+
+    // Persistir en MySQL
+    if (id) {
+      api.updateProducto(id, {
+        comercio_id: store.id,
+        nombre: prod.nombre,
+        descripcion: prod.descripcion,
+        precio_usd: prod.precioUsd,
+        categoria: prod.categoria,
+        imagen_url: prod.imagenUrl,
+        disponible: prod.disponible !== undefined ? (prod.disponible ? 1 : 0) : undefined
+      }).then(res => {
+        if (res?.success && res.imagen_url) {
+          setStore(prev => {
+            const mapped = prev.productos.map(p => p.id === id ? { ...p, imagenUrl: res.imagen_url, imagenPath: res.imagen_url } : p);
+            try {
+              localStorage.setItem(`vixy_store_productos_${prev.id}`, JSON.stringify(mapped));
+            } catch (e) {}
+            return { ...prev, productos: mapped };
+          });
+        }
+      }).catch(err => console.warn('Error actualizando producto en MySQL:', err));
+    }
+
     addNotification('comercio', '✏️ Artículo Actualizado', `Cambios aplicados en el catálogo comercial.`);
   };
 
   const deleteProduct = (id: string) => {
-    setStore(prev => ({
-      ...prev,
-      productos: prev.productos.filter(p => p.id !== id)
-    }));
+    setStore(prev => {
+      const filtered = prev.productos.filter(p => p.id !== id);
+      try {
+        localStorage.setItem(`vixy_store_productos_${prev.id}`, JSON.stringify(filtered));
+      } catch (e) {}
+      return {
+        ...prev,
+        productos: filtered
+      };
+    });
+
+    if (id) {
+      api.deleteProducto(id).catch(err => console.warn('Error eliminando producto en MySQL:', err));
+    }
+
     addNotification('comercio', '🗑️ Artículo Eliminado', `El producto fue retirado de la carta.`);
   };
 
@@ -2763,7 +3012,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             {
               id: 'hist-' + Date.now(),
               estado: 'entregado',
-              descripcion: `Entrega completada. Foto de comprobante guardada en /uploads/verificaciones/: "${comentario}".`,
+              descripcion: `Entrega completada. Foto de comprobante registrada: "${comentario}".`,
               actor: 'conductor',
               timestamp: timeStr
             }

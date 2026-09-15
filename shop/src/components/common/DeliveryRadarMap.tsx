@@ -88,21 +88,17 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
 
   // Get tile URL for the chosen CARTO basemap style
   const getCartoTileUrl = (style: CartoMapStyle) => {
-    let baseUrl = '';
+    let stylePath = 'dark_all';
     if (style === 'dark') {
-      // CARTO Dark Matter
-      baseUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+      stylePath = 'dark_all';
     } else if (style === 'voyager') {
-      // CARTO Voyager (detailed streets & landmarks)
-      baseUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      stylePath = 'voyager';
     } else {
-      // CARTO Positron (light minimal)
-      baseUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+      stylePath = 'light_all';
     }
 
-    // CARTO Basemaps requires "key" parameter to remove the watermark
-    const activeKey = encodeURIComponent(effectiveApiKey || CARTO_DEFAULT_KEY);
-    return `${baseUrl}?key=${activeKey}&api_key=${activeKey}`;
+    const key = (effectiveApiKey && effectiveApiKey.trim()) ? effectiveApiKey.trim() : CARTO_DEFAULT_KEY;
+    return `https://basemaps.cartocdn.com/rastertiles/${stylePath}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(key)}`;
   };
 
   // Coordenadas efectivas: prioridad al sensor GPS del dispositivo para el conductor activo
@@ -253,14 +249,18 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
 
     if (!showComercios) return;
 
-    // Use real stores from context (with fallback coords)  
-    const activeStores = stores.filter(s => s.activo !== false);
+    // Los comercios sin coordenadas no tienen una ubicación verificable.
+    const activeStores = stores.filter(s => {
+      const lat = Number(s.lat);
+      const lng = Number(s.lng);
+      return s.activo !== false
+        && Number.isFinite(lat) && Number.isFinite(lng)
+        && lat !== 0 && lng !== 0;
+    });
 
     activeStores.forEach(com => {
-      const lat = com.lat || 0;
-      const lng = com.lng || 0;
-      // Sin GPS real del comercio: no se inventa una posición hardcodeada
-      if (!lat || !lng) return;
+      let lat = Number(com.lat);
+      let lng = Number(com.lng);
       const pendingOrders = 0; // Will be populated from orders context in a future update
 
       // Create rich HTML icon for store
@@ -318,6 +318,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
           ...d,
           lat: realGpsCoords.lat,
           lng: realGpsCoords.lng,
+          hasRealGps: true,
           velocidadKmh: realGpsCoords.speed || d.velocidadKmh || 0,
           precisionGps: realGpsCoords.accuracy || d.precisionGps || 5
         };
@@ -327,34 +328,62 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
       if (!showAllDrivers && d.id !== driver?.id) return false;
       if (driverFilter === 'disponibles') return d.disponible;
       if (driverFilter === 'en_ruta') return !d.disponible;
-      // Sin GPS real (NULL/0): no aparece en el radar para no inventar Caracas
-      if (!d.lat || !d.lng) return false;
       return true;
+    }).filter(d => {
+      const lat = Number(d.lat);
+      const lng = Number(d.lng);
+      const hasGps = Boolean(d.hasRealGps) && Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
+      const saldoUsd = Number(d.billetera?.saldoUsd ?? d.saldo_billetera_usd ?? d.saldoUsd ?? 0);
+      return saldoUsd > 0 && hasGps;
     });
 
     driversToRender.forEach(drv => {
-      const drvLat = Number(drv.lat);
-      const drvLng = Number(drv.lng);
-      if (!drvLat || !drvLng) return; // Sin GPS real: no marcar en el mapa
+      let drvLat = Number(drv.lat);
+      let drvLng = Number(drv.lng);
+      const hasRealGps = Boolean(drv.hasRealGps) && drvLat !== 0 && drvLng !== 0 && !isNaN(drvLat) && !isNaN(drvLng);
+      
       const isSelected = activeDriverId === drv.id;
-      const isAvailable = drv.disponible;
-      const ringColor = isAvailable ? '#10b981' : '#3b82f6';
-      const badgeBg = isAvailable ? 'bg-emerald-500' : 'bg-blue-500';
+      const saldoUsd = Number(drv.billetera?.saldoUsd ?? drv.saldo_billetera_usd ?? drv.saldoUsd ?? 0);
+      const isBlocked = Boolean(drv.billetera?.bloqueadoPorSaldo) || saldoUsd <= 0;
+      const isAvailable = drv.disponible && !isBlocked;
+
+      // Colores de borde y pines:
+      // Rojo: Bloqueado por saldo
+      // Verde: Disponible y con señal
+      // Azul: En ruta
+      // Ámbar: GPS pendiente
+      let ringBorderColor = 'border-blue-400 shadow-blue-500/40';
+      let pingColor = 'bg-blue-500/30';
+      let badgeBg = 'bg-blue-500';
+
+      if (isBlocked) {
+        ringBorderColor = 'border-rose-500 shadow-rose-500/50';
+        pingColor = 'bg-rose-500/30';
+        badgeBg = 'bg-rose-500 text-white';
+      } else if (isAvailable && hasRealGps) {
+        ringBorderColor = 'border-emerald-400 shadow-emerald-500/40';
+        pingColor = 'bg-emerald-500/30';
+        badgeBg = 'bg-emerald-500';
+      } else if (!hasRealGps) {
+        ringBorderColor = 'border-amber-400/80 shadow-amber-500/30';
+        pingColor = 'bg-amber-500/20';
+        badgeBg = 'bg-amber-500/90 text-slate-950';
+      }
 
       const driverHtml = `
         <div class="relative cursor-pointer transition-all duration-300 ${isSelected ? 'scale-125 z-50' : 'hover:scale-115'}">
           <!-- Pulse animation for live tracking -->
-          <div class="absolute -inset-1.5 rounded-full ${isAvailable ? 'bg-emerald-500/30' : 'bg-blue-500/30'} animate-ping pointer-events-none"></div>
+          ${hasRealGps ? `<div class="absolute -inset-1.5 rounded-full ${pingColor} animate-ping pointer-events-none"></div>` : ''}
           
           <!-- Outer circular avatar pin -->
-          <div class="relative w-10 h-10 rounded-full border-2 ${isSelected ? 'border-amber-400 shadow-amber-500/50 shadow-xl' : (isAvailable ? 'border-emerald-400 shadow-emerald-500/40 shadow-lg' : 'border-blue-400 shadow-blue-500/40 shadow-lg')} bg-slate-900 overflow-hidden flex items-center justify-center">
+          <div class="relative w-10 h-10 rounded-full border-2 ${isSelected ? 'border-amber-400 shadow-amber-500/50 shadow-xl' : ringBorderColor} bg-slate-900 overflow-hidden flex items-center justify-center">
             <img src="${drv.fotoUrl}" alt="${drv.nombre}" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'" />
           </div>
 
           <!-- Bottom Bike Badge -->
-          <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full ${badgeBg} text-slate-950 font-black text-[8px] flex items-center gap-0.5 shadow-md border border-slate-900 whitespace-nowrap">
+          <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full ${badgeBg} font-black text-[8px] flex items-center gap-0.5 shadow-md border border-slate-900 whitespace-nowrap">
             <span>🏍️</span>
-            <span>${drv.velocidadKmh || 0}k</span>
+            <span>${hasRealGps ? (drv.velocidadKmh || 0) + 'k' : 'GPS ⏳'}</span>
           </div>
 
           ${isSelected ? `
@@ -386,12 +415,26 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
         mapInstanceRef.current?.flyTo([drvLat, drvLng], 15, { duration: 0.8 });
       });
 
+      const statusText = isBlocked 
+        ? '🔴 BLOQUEADO POR SALDO' 
+        : (isAvailable ? '🟢 DISPONIBLE' : '🔵 EN RUTA');
+
+      const gpsText = hasRealGps 
+        ? `📡 GPS EN VIVO • ⚡ ${drv.velocidadKmh || 0} km/h` 
+        : '⏳ GPS PENDIENTE (Esperando app)';
+
       marker.bindTooltip(`
-        <div style="padding: 2px 4px;">
-          <strong style="color: ${ringColor}; font-size: 11px;">${drv.nombre} ${drv.apellido}</strong><br/>
+        <div style="padding: 2px 4px; min-width: 130px;">
+          <strong style="color: #f8fafc; font-size: 11px;">${drv.nombre} ${drv.apellido}</strong><br/>
           <span style="font-size: 10px; color: #cbd5e1;">${drv.moto?.marca || 'Moto'} ${drv.moto?.modelo || ''} [${drv.moto?.placa || 'S/P'}]</span><br/>
-          <span style="font-size: 9px; color: ${isAvailable ? '#34d399' : '#60a5fa'}; font-weight: bold;">
-            ${isAvailable ? '● DISPONIBLE' : '● EN RUTA A ENTREGA'} • ⚡ ${drv.velocidadKmh || 0} km/h
+          <span style="font-size: 9px; font-weight: bold; color: ${isBlocked ? '#fb7185' : (isAvailable ? '#34d399' : '#60a5fa')};">
+            ${statusText}
+          </span><br/>
+          <span style="font-size: 9px; color: #94a3b8;">
+            Saldo: $${(drv.billetera?.saldoUsd ?? 0).toFixed(2)} USD
+          </span><br/>
+          <span style="font-size: 8px; color: ${hasRealGps ? '#38bdf8' : '#fbbf24'}; font-weight: bold;">
+            ${gpsText}
           </span>
         </div>
       `, { direction: 'top' });

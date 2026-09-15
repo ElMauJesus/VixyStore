@@ -55,6 +55,31 @@ function normalizarComercio($c, $origen = 'delivery') {
     }
     $abiertoManual = isset($c['abierto_manual']) ? (bool)$c['abierto_manual'] : true;
 
+    // Extracción robusta de coordenadas GPS
+    $lat = null;
+    $lng = null;
+    if (!empty($c['latitud']) && (float)$c['latitud'] != 0) {
+        $lat = (float)$c['latitud'];
+    } elseif (!empty($c['lat']) && (float)$c['lat'] != 0) {
+        $lat = (float)$c['lat'];
+    }
+    if (!empty($c['longitud']) && (float)$c['longitud'] != 0) {
+        $lng = (float)$c['longitud'];
+    } elseif (!empty($c['lng']) && (float)$c['lng'] != 0) {
+        $lng = (float)$c['lng'];
+    }
+    if (($lat === null || $lng === null) && !empty($c['ubicacion_gps'])) {
+        $parts = explode(',', (string)$c['ubicacion_gps']);
+        if (count($parts) >= 2) {
+            $pLat = (float)trim($parts[0]);
+            $pLng = (float)trim($parts[1]);
+            if ($pLat != 0 && $pLng != 0) {
+                $lat = $pLat;
+                $lng = $pLng;
+            }
+        }
+    }
+
     return [
         'id' => (string)$idKey,
         'db_id' => $c['id'] ?? null,
@@ -115,6 +140,10 @@ function normalizarComercio($c, $origen = 'delivery') {
         'costo_envio_base_usd' => floatval($c['costo_envio_base_usd'] ?? 2.00),
         'costoEnvioUsd' => floatval($c['costo_envio_base_usd'] ?? 2.00),
         'saldo_billetera_usd' => floatval($c['saldo_billetera_usd'] ?? 0.00),
+        'lat' => $lat,
+        'lng' => $lng,
+        'latitud' => $lat,
+        'longitud' => $lng,
         'productos' => []
     ];
 }

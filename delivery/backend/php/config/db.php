@@ -71,10 +71,12 @@ class Database {
 
     public static function getJsonInput(): array {
         $raw = file_get_contents('php://input');
-        if (empty($raw)) {
-            return [];
+        if (!empty($raw)) {
+            $data = json_decode($raw, true);
+            if (is_array($data)) {
+                return $data;
+            }
         }
-        $data = json_decode($raw, true);
-        return is_array($data) ? $data : [];
+        return !empty($_POST) ? $_POST : [];
     }
 }

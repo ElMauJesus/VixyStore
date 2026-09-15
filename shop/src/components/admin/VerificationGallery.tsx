@@ -13,17 +13,11 @@ export const VerificationGallery: React.FC = () => {
         <div>
           <h2 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
             <FolderCheck className="w-4 h-4 text-emerald-500" />
-            Galería de Verificación de Entregas (/uploads/verificaciones/)
+            Galería de Verificación de Entregas
           </h2>
           <p className="text-xs text-neutral-400 mt-0.5">
             Depósito de comprobantes fotográficos tomados por los motorizados al momento de la entrega en destino
           </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-3 py-1 rounded-xl border border-neutral-200 dark:border-neutral-700">
-            Directorio: /var/www/html/uploads/verificaciones/
-          </span>
         </div>
       </div>
 

@@ -114,9 +114,8 @@ export const ActivityLogsManager: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              Auditoría & Trazabilidad MySQL
+              Auditoría & Trazabilidad
             </span>
-            <span className="text-xs text-neutral-400 font-mono">Tabla: logs_actividades_sistema</span>
           </div>
           <h2 className="text-xl font-bold text-neutral-900 dark:text-white mt-1 flex items-center gap-2">
             <FileText className="w-5 h-5 text-amber-500" />
@@ -139,7 +138,7 @@ export const ActivityLogsManager: React.FC = () => {
           {activityLogs.length > 0 && (
             <button
               onClick={() => {
-                if (window.confirm('¿Desea vaciar el buffer de auditoría local? (En servidor MySQL los registros permanecen archivados).')) {
+                if (window.confirm('¿Desea vaciar el visor de auditoría local? (En el servidor los registros permanecen archivados).')) {
                   clearActivityLogs();
                 }
               }}

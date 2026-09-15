@@ -87,13 +87,23 @@ class AuthMiddleware {
     }
 
     public static function requireAuth(array $rolesPermitidos = []): array {
+        // 1. PRIORIDAD MAESTRA: Clave interna del panel de administración
+        if (self::hasAdminKey()) {
+            return [
+                'tipo_usuario' => 'super_admin',
+                'nivel_acceso' => 'super_admin',
+                'via' => 'admin_key'
+            ];
+        }
+
+        // 2. Token JWT
         $user = self::verifyToken();
 
         if ($user) {
             $userRole  = $user['tipo_usuario'] ?? '';
             $userLevel = $user['nivel_acceso'] ?? $user['rol'] ?? $userRole;
 
-            // Super admin siempre permitido (el token de admin viene con nivel_acceso='super_admin')
+            // Super admin siempre permitido
             if ($userRole === 'super_admin' || $userLevel === 'super_admin') {
                 return $user;
             }
@@ -108,15 +118,6 @@ class AuthMiddleware {
                 'error' => true,
                 'mensaje' => 'Permisos insuficientes para realizar esta acción'
             ], 403);
-        }
-
-        // Fallback: clave interna del panel de administración
-        if (self::hasAdminKey()) {
-            return [
-                'tipo_usuario' => 'super_admin',
-                'nivel_acceso' => 'super_admin',
-                'via' => 'admin_key'
-            ];
         }
 
         Database::jsonResponse([

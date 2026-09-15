@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <rect width="600" height="400" rx="20" fill="#0f172a"/>
+  <rect x="20" y="20" width="560" height="360" rx="16" fill="#1e293b" stroke="#6366f1" stroke-width="2" stroke-dasharray="6,6"/>
+  <circle cx="300" cy="140" r="45" fill="#6366f1" fill-opacity="0.2" stroke="#6366f1" stroke-width="2"/>
+  <text x="300" y="150" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#6366f1" text-anchor="middle">VIXY DOC</text>
+  <text x="300" y="230" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#ffffff" text-anchor="middle">Fachada Comercial</text>
+  <text x="300" y="265" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8" text-anchor="middle">Supermercado Central • Local Principal</text>
+  <rect x="200" y="300" width="200" height="36" rx="8" fill="#6366f1"/>
+  <text x="300" y="323" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">VERIFICADO DIGITALMENTE</text>
+</svg>

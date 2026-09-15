@@ -30,14 +30,13 @@ Options -Indexes
     RewriteCond %{REQUEST_URI} ^/store/(banners|logo|payment-icons|qr|cards)/(.*)$ [NC]
     RewriteRule ^store/(banners|logo|payment-icons|qr|cards)/(.*)$ $1/$2 [L]
 
-    # Reescritura transparente de /panel-admin/ a /panel/ (evita duplicar 21MB en disco)
+    # Reescritura para assets estaticos compartidos de sub-apps (admin, comercio, delivery, pedidos) evitando duplicidad
+    RewriteCond %{REQUEST_URI} ^/(admin|comercio|delivery|pedidos)/assets/(.*)$ [NC]
+    RewriteRule ^(admin|comercio|delivery|pedidos)/assets/(.*)$ assets/$2 [L]
+
+    # Reescritura transparente de /panel-admin/ a /panel/
     RewriteCond %{REQUEST_URI} ^/panel-admin/(.*)$ [NC]
     RewriteRule ^panel-admin/(.*)$ panel/$1 [L]
-
-    # Reescritura para assets de panel cuando se solicitan directamente
-    RewriteCond %{REQUEST_URI} ^/assets/(.*)$ [NC]
-    RewriteCond %{DOCUMENT_ROOT}/panel/assets/$1 -f
-    RewriteRule ^assets/(.*)$ panel/assets/$1 [L]
 
     # Reescritura para uploads de comercios y archivos cargados desde formularios
     # 1. Si se solicita /uploads/comercios/ y existe en registro-comercios/uploads/comercios/

@@ -184,7 +184,7 @@ export const ClientApp: React.FC = () => {
       setAuthError(res?.error || 'Error al registrar cliente.');
     } else {
       setAuthError('');
-      alert('¡Cuenta registrada exitosamente en la base de datos SQL! Tu cartera única ya está lista.');
+      alert('¡Cuenta registrada exitosamente! Tu cartera digital ya está lista.');
     }
   };
 
@@ -298,7 +298,7 @@ export const ClientApp: React.FC = () => {
                 authMode === 'register' ? 'bg-white dark:bg-neutral-700 text-amber-600 dark:text-amber-400 shadow-xs' : 'text-neutral-500'
               }`}
             >
-              Crear Cuenta (SQL)
+              Crear Cuenta
             </button>
           </div>
 
@@ -445,7 +445,7 @@ export const ClientApp: React.FC = () => {
                 className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
-                <span>Registrarme con Cartera Única SQL</span>
+                <span>Registrarme en Vixy</span>
               </button>
             </form>
           )}
@@ -1232,16 +1232,16 @@ export const ClientApp: React.FC = () => {
               </div>
             </div>
 
-            {/* SQL Sync Banner */}
+            {/* Wallet Banner */}
             <div className="p-3 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="w-4 h-4 text-emerald-500 shrink-0" />
                 <div>
                   <p className="font-bold text-neutral-800 dark:text-neutral-200 text-xs">
-                    Tabla SQL: <code className="text-amber-500 font-mono">cliente_billeteras</code>
+                    Cartera Digital Vixy
                   </p>
                   <p className="text-[10px] text-neutral-400">
-                    Saldos vinculados al C.I. {client.cedula} con acreditación directa a comercios
+                    Saldos vinculados al C.I. {client.cedula} con pagos directos a comercios
                   </p>
                 </div>
               </div>
@@ -1530,7 +1530,7 @@ export const ClientApp: React.FC = () => {
                           <h4 className="text-xs font-bold text-neutral-900 dark:text-white">
                             {latestOrder.conductor.nombre} {latestOrder.conductor.apellido}
                           </h4>
-                          <span className="p-0.5 rounded-full bg-emerald-500/10 text-emerald-600" title="Verificado SQL">
+                          <span className="p-0.5 rounded-full bg-emerald-500/10 text-emerald-600" title="Usuario Verificado">
                             <ShieldCheck className="w-3 h-3" />
                           </span>
                         </div>
@@ -1735,7 +1735,7 @@ export const ClientApp: React.FC = () => {
                 <span className="text-emerald-700 dark:text-emerald-300 font-bold block">
                   Seguridad Vixy Delivery
                 </span>
-                <span className="text-[10px] text-neutral-500">ID Conductor: VIXY-REP-01 • Certificado SQL</span>
+                <span className="text-[10px] text-neutral-500">ID Conductor: VIXY-REP-01 • Conductor Certificado</span>
               </div>
               <span className="px-2 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold font-mono">
                 SEGURO
@@ -1894,9 +1894,6 @@ export const ClientApp: React.FC = () => {
                     placeholder="Ej. 84920194 o correo remitente"
                     className="w-full p-2 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold"
                   />
-                  <span className="text-[9px] text-neutral-400 block font-mono">
-                    📁 Se guardará en: /uploads/comprobantes_pago/recargas/cli_{client.id}.jpg
-                  </span>
                 </div>
 
                 <button
@@ -1960,18 +1957,18 @@ export const ClientApp: React.FC = () => {
               </div>
             </div>
 
-            {/* Simulated Receipt File */}
+            {/* Comprobante Digital */}
             <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 space-y-2 text-center">
               <span className="text-[10px] text-neutral-400 font-bold uppercase block">
-                Archivo Guardado en Sistema Interno
+                Comprobante Digital
               </span>
-              <div className="w-full h-28 rounded-xl bg-neutral-200 dark:bg-neutral-900 border border-dashed border-neutral-300 dark:border-neutral-700 flex flex-col items-center justify-center p-3 text-neutral-500">
-                <FileImage className="w-7 h-7 text-amber-500 mb-1" />
-                <span className="font-mono text-[9px] break-all">
-                  {selectedWalletTx.comprobanteRuta || `/uploads/comprobantes_pago/${selectedWalletTx.id}.jpg`}
+              <div className="w-full h-20 rounded-xl bg-neutral-200 dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 flex flex-col items-center justify-center p-3 text-neutral-500">
+                <FileImage className="w-6 h-6 text-amber-500 mb-1" />
+                <span className="text-[10px] font-bold text-neutral-700 dark:text-neutral-300">
+                  Transacción #{selectedWalletTx.id}
                 </span>
-                <span className="text-[9px] text-emerald-500 font-bold mt-1">
-                  ✓ Almacenado con ID único en tabla SQL
+                <span className="text-[9px] text-emerald-500 font-bold mt-0.5">
+                  ✓ Comprobante oficial registrado
                 </span>
               </div>
             </div>

@@ -232,7 +232,7 @@ export const DriverApp: React.FC = () => {
     );
     setShowRechargeModal(false);
     setRechargeReference('');
-    alert(`✓ Solicitud de recarga de $${rechargeAmount.toFixed(2)} enviada al Backend Central.\n\nUn operador de finanzas autorizará la recarga tras validar el comprobante en su carpeta /uploads/conductores/${driver.id}/comprobantes/.`);
+    alert(`✓ Solicitud de recarga de $${rechargeAmount.toFixed(2)} enviada con éxito.\n\nUn operador de finanzas autorizará la recarga tras validar el comprobante de pago.`);
   };
 
   const isBlocked = driverWallet.bloqueadoPorSaldo;
@@ -1767,7 +1767,7 @@ export const DriverApp: React.FC = () => {
             <div className="p-3 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 space-y-2">
               <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-2">
                 <span className="text-[10px] uppercase font-bold text-neutral-400 block">
-                  Historial de Movimientos (SQL: transacciones_cartera_conductor)
+                  Historial de Movimientos de Cartera
                 </span>
                 <span className="text-[10px] text-neutral-400 font-mono">
                   {(driverWallet.historialTransacciones || driverWallet.transacciones || []).length} registros
@@ -2146,14 +2146,14 @@ export const DriverApp: React.FC = () => {
               </div>
 
               <p className="text-[10px] text-neutral-400">
-                El comprobante se registra en <code className="text-amber-500 font-mono">/backend/php/uploads/entregas/</code> y se asocia al pedido en MySQL.
+                El comprobante fotográfico se registrará como respaldo de la entrega.
               </p>
 
               <button
                 onClick={() => handleFinishDelivery(showDeliveryModal)}
                 className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md transition cursor-pointer"
               >
-                Confirmar y Registrar Entrega en Base de Datos
+                Confirmar Entrega
               </button>
             </div>
           </div>

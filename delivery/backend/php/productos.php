@@ -83,43 +83,118 @@ if ($method === 'GET') {
     Database::jsonResponse(['error' => true, 'mensaje' => 'Debe especificar id o comercio_id'], 400);
 }
 
+function procesarYGuardarImagenArticulo($imgInput, string $comercioId, string $nombreArticulo = 'articulo'): string {
+    $fallbackUrl = "/shop/imgs-c-d/comercios/{$comercioId}/logo.svg";
+
+    if (empty($imgInput)) {
+        return $fallbackUrl;
+    }
+
+    // Si ya es una URL relativa limpia en imgs-c-d o uploads o URL externa https://
+    if (is_string($imgInput) && !str_starts_with($imgInput, 'data:image')) {
+        return $imgInput;
+    }
+
+    // Si viene como base64 data URI (ej: data:image/jpeg;base64,....)
+    if (is_string($imgInput) && preg_match('/^data:image\/(\w+);base64,(.+)$/s', $imgInput, $matches)) {
+        $rawExt = strtolower($matches[1]);
+        $ext = ($rawExt === 'jpeg' || $rawExt === 'jpg') ? 'jpg' : (($rawExt === 'png') ? 'png' : 'webp');
+        $binaryData = base64_decode($matches[2]);
+        if ($binaryData === false) {
+            return $fallbackUrl;
+        }
+
+        $slug = preg_replace('/[^a-z0-9]/', '_', strtolower(trim($nombreArticulo)));
+        if (empty($slug)) $slug = 'item';
+        $filename = "art_{$slug}_" . time() . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
+
+        $dirs = [
+            dirname(dirname(__DIR__)) . "/shop/imgs-c-d/comercios/{$comercioId}/articulos/",
+            dirname(dirname(__DIR__)) . "/imgs-c-d/comercios/{$comercioId}/articulos/",
+            __DIR__ . "/uploads/comercios/{$comercioId}/articulos/"
+        ];
+
+        foreach ($dirs as $dir) {
+            try {
+                if (!is_dir($dir)) {
+                    @mkdir($dir, 0755, true);
+                }
+                @file_put_contents($dir . $filename, $binaryData);
+            } catch (Exception $e) {}
+        }
+
+        return "/shop/imgs-c-d/comercios/{$comercioId}/articulos/{$filename}";
+    }
+
+    return $fallbackUrl;
+}
+
 // -----------------------------------------------------------------------------
-// POST: CREAR PRODUCTO CON IMAGEN
+// POST: CREAR PRODUCTO CON IMAGEN EN CARPETA DEL COMERCIO
 // -----------------------------------------------------------------------------
 if ($method === 'POST') {
     AuthMiddleware::requireAuth(['super_admin', 'operador', 'comercio']);
     $data = Database::getJsonInput();
+    if (empty($data) && !empty($_POST)) {
+        $data = $_POST;
+    }
 
     if (empty($data['comercio_id']) || empty($data['nombre']) || !isset($data['precio_usd'])) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'Faltan campos obligatorios: comercio_id, nombre, precio_usd'], 400);
     }
 
+    $comId = trim((string)$data['comercio_id']);
     $newId = 'prod-' . bin2hex(random_bytes(6));
     
     // Consultar tasa BCV actual de la configuración si existe
     $tasaBcv = 78.50;
     try {
-        $stRate = $pdo->query("SELECT valor_parametro FROM configuracion_sistema WHERE clave_parametro = 'tasa_bcv_oficial' LIMIT 1");
+        $stRate = $pdo->query("SELECT valor FROM configuracion_sistema WHERE clave = 'tasa_bcv' LIMIT 1");
         if ($rowRate = $stRate->fetch()) {
-            $tasaBcv = (float)$rowRate['valor_parametro'];
+            $tasaBcv = (float)$rowRate['valor'];
         }
     } catch (Exception $e) {}
 
     $precioUsd = (float)$data['precio_usd'];
     $precioBs = $precioUsd * $tasaBcv;
 
+    // Procesar imagen (archivo multipart o base64 o URL)
+    $rawImg = $data['imagen_url'] ?? $data['imagen_base64'] ?? $data['imagenPath'] ?? $data['foto'] ?? '';
+    if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK) {
+        $file = $_FILES['imagen'];
+        $ext = pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'jpg';
+        $slug = preg_replace('/[^a-z0-9]/', '_', strtolower(trim($data['nombre'])));
+        $fn = "art_{$slug}_" . time() . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
+        $d1 = dirname(dirname(__DIR__)) . "/shop/imgs-c-d/comercios/{$comId}/articulos/";
+        $d2 = dirname(dirname(__DIR__)) . "/imgs-c-d/comercios/{$comId}/articulos/";
+        $d3 = __DIR__ . "/uploads/comercios/{$comId}/articulos/";
+        foreach ([$d1, $d2, $d3] as $d) {
+            if (!is_dir($d)) @mkdir($d, 0755, true);
+        }
+        $target = is_dir($d1) ? ($d1 . $fn) : ($d3 . $fn);
+        if (move_uploaded_file($file['tmp_name'], $target)) {
+            @copy($target, $d1 . $fn);
+            @copy($target, $d2 . $fn);
+            @copy($target, $d3 . $fn);
+            $rawImg = "/shop/imgs-c-d/comercios/{$comId}/articulos/{$fn}";
+        }
+    }
+
+    $finalImg = procesarYGuardarImagenArticulo($rawImg, $comId, $data['nombre']);
+
     $params = [
         'id' => $newId,
-        'cid' => $data['comercio_id'],
+        'cid' => $comId,
         'cat' => $data['categoria'] ?? 'General',
         'nombre' => $data['nombre'],
         'desc' => $data['descripcion'] ?? '',
         'pusd' => $precioUsd,
         'pbs' => $precioBs,
-        'img' => $data['imagen_url'] ?? '/uploads/productos/default.jpg',
+        'img' => $finalImg,
         'disp' => isset($data['disponible']) ? (int)$data['disponible'] : 1,
         'stock' => isset($data['stock']) ? (int)$data['stock'] : 50
     ];
+
     try {
         $pdo->prepare("INSERT INTO productos (id, comercio_id, categoria, nombre, descripcion, precio_usd, precio_bs, imagen_url, disponible, stock) VALUES (:id, :cid, :cat, :nombre, :desc, :pusd, :pbs, :img, :disp, :stock)")->execute($params);
     } catch (Throwable $error) {
@@ -135,7 +210,18 @@ if ($method === 'POST') {
         }
     }
 
-    Database::jsonResponse(['success' => true, 'mensaje' => 'Producto agregado con éxito', 'id' => $newId], 201);
+    Database::jsonResponse([
+        'success' => true, 
+        'mensaje' => 'Producto agregado con éxito', 
+        'id' => $newId,
+        'imagen_url' => $finalImg,
+        'producto' => [
+            'id' => $newId,
+            'comercio_id' => $comId,
+            'nombre' => $params['nombre'],
+            'imagen_url' => $finalImg
+        ]
+    ], 201);
 }
 
 // -----------------------------------------------------------------------------
@@ -145,6 +231,22 @@ if ($method === 'PUT' && $id) {
     AuthMiddleware::requireAuth(['super_admin', 'operador', 'comercio']);
     $data = Database::getJsonInput();
 
+    // Obtener comercio_id del producto si no viene en el payload
+    $comId = $data['comercio_id'] ?? null;
+    if (!$comId) {
+        try {
+            $stCp = $pdo->prepare("SELECT comercio_id FROM productos WHERE id = :id LIMIT 1");
+            $stCp->execute(['id' => $id]);
+            $comId = $stCp->fetchColumn();
+            if (!$comId) {
+                $stCp = $pdo->prepare("SELECT comercio_id FROM productos_catalogo WHERE id = :id LIMIT 1");
+                $stCp->execute(['id' => $id]);
+                $comId = $stCp->fetchColumn();
+            }
+        } catch (Exception $e) {}
+    }
+    if (!$comId) $comId = 'general';
+
     $fields = [];
     $params = ['id' => $id];
 
@@ -152,12 +254,25 @@ if ($method === 'PUT' && $id) {
     if (isset($data['descripcion'])) { $fields[] = "descripcion = :desc"; $params['desc'] = $data['descripcion']; }
     if (isset($data['precio_usd'])) { 
         $pusd = (float)$data['precio_usd'];
+        $tasaBcv = 78.50;
+        try {
+            $stRate = $pdo->query("SELECT valor FROM configuracion_sistema WHERE clave = 'tasa_bcv' LIMIT 1");
+            if ($rowRate = $stRate->fetch()) $tasaBcv = (float)$rowRate['valor'];
+        } catch (Throwable $error) {}
         $fields[] = "precio_usd = :pusd, precio_bs = :pbs"; 
         $params['pusd'] = $pusd;
-        $params['pbs'] = $pusd * 78.50;
+        $params['pbs'] = $pusd * $tasaBcv;
     }
     if (isset($data['categoria'])) { $fields[] = "categoria = :cat"; $params['cat'] = $data['categoria']; }
-    if (isset($data['imagen_url'])) { $fields[] = "imagen_url = :img"; $params['img'] = $data['imagen_url']; }
+    
+    $finalImg = null;
+    if (isset($data['imagen_url']) || isset($data['imagen_base64']) || isset($data['foto'])) {
+        $rawImg = $data['imagen_url'] ?? $data['imagen_base64'] ?? $data['foto'] ?? '';
+        $prodName = $data['nombre'] ?? 'articulo';
+        $finalImg = procesarYGuardarImagenArticulo($rawImg, $comId, $prodName);
+        $fields[] = "imagen_url = :img";
+        $params['img'] = $finalImg;
+    }
     if (isset($data['disponible'])) { $fields[] = "disponible = :disp"; $params['disp'] = (int)$data['disponible']; }
     if (isset($data['stock'])) { $fields[] = "stock = :stock"; $params['stock'] = (int)$data['stock']; }
 
@@ -173,12 +288,22 @@ if ($method === 'PUT' && $id) {
         $catalogParams = ['id' => $id];
         foreach ($data as $field => $value) {
             $column = ['categoria' => 'categoria_interna', 'imagen_url' => 'imagen_url', 'nombre' => 'nombre', 'descripcion' => 'descripcion', 'precio_usd' => 'precio_usd', 'disponible' => 'disponible'][$field] ?? null;
-            if ($column) { $catalogFields[] = "{$column} = :{$field}"; $catalogParams[$field] = $value; }
+            if ($column) { 
+                $catalogFields[] = "{$column} = :{$field}"; 
+                $catalogParams[$field] = ($field === 'imagen_url' && $finalImg) ? $finalImg : $value; 
+            }
         }
-        $pdo->prepare('UPDATE productos_catalogo SET ' . implode(', ', $catalogFields) . ' WHERE id = :id')->execute($catalogParams);
+        if (!empty($catalogFields)) {
+            $pdo->prepare('UPDATE productos_catalogo SET ' . implode(', ', $catalogFields) . ' WHERE id = :id')->execute($catalogParams);
+        }
     }
 
-    Database::jsonResponse(['success' => true, 'mensaje' => 'Producto actualizado']);
+    Database::jsonResponse([
+        'success' => true, 
+        'mensaje' => 'Producto actualizado',
+        'id' => $id,
+        'imagen_url' => $finalImg
+    ]);
 }
 
 // -----------------------------------------------------------------------------

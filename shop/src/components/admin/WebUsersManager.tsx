@@ -26,7 +26,7 @@ const ALL_TABS: { id: string; label: string; description: string; icon: string }
   { id: 'comercios', label: 'Comercios (Vixy Store)', description: 'Catálogos, menú, coordenadas y cobros', icon: '🏪' },
   { id: 'incidencias', label: 'Incidencias en Ruta', description: 'Resolución de contratiempos y disputas', icon: '⚠️' },
   { id: 'soporte', label: 'Soporte en Vivo', description: 'Atención al cliente, mensajería y llamadas', icon: '🎧' },
-  { id: 'verificaciones', label: 'Galería de Entregas', description: 'Fotos de comprobante en uploads/verificaciones', icon: '📸' },
+  { id: 'verificaciones', label: 'Galería de Entregas', description: 'Fotos de comprobante de entrega en destino', icon: '📸' },
   { id: 'pagos', label: 'Tasa BCV & Tarifas', description: 'Ajuste de tasa oficial y márgenes de entrega', icon: '💵' },
   { id: 'usuarios_web', label: 'Usuarios Web & RBAC', description: 'Gestión de accesos, roles y permisos por pestaña', icon: '👥' },
   { id: 'backend', label: 'Código PHP & MySQL', description: 'Archivos Namecheap, consultas SQL y arquitectura', icon: '💾' },
@@ -113,9 +113,8 @@ export const WebUsersManager: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20">
-              Seguridad & RBAC MySQL
+              Seguridad & RBAC
             </span>
-            <span className="text-xs text-slate-400 font-mono">Tabla: usuarios_administracion_web</span>
           </div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white mt-1">
             Usuarios del Panel Administrativo Web
@@ -334,9 +333,6 @@ export const WebUsersManager: React.FC = () => {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Registrar Nuevo Usuario Administrativo Web
                 </h3>
-                <p className="text-xs text-slate-400">
-                  Se guardará en la tabla MySQL <code className="text-orange-500">usuarios_administracion_web</code>
-                </p>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -500,7 +496,7 @@ export const WebUsersManager: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold shadow-md cursor-pointer"
                 >
-                  Guardar en MySQL
+                  Guardar Usuario
                 </button>
               </div>
             </form>
