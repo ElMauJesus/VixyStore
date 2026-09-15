@@ -9,7 +9,7 @@
  * 3. Temporizador de Conductor (15 segundos) y Aceptación/Rechazo
  * 4. Reasignación automática inmediata al conductor libre más cercano al comercio
  * 5. Bloqueo de conductores con saldo inferior a -$0.50 USD
- * 6. Finalización con foto de entrega y acreditación de ganancias netas
+ * 6. Finalización con foto de entrega y liberación de disponibilidad del conductor
  */
 
 require_once __DIR__ . '/config/db.php';
@@ -303,7 +303,7 @@ if ($method === 'PUT' && $id) {
         Database::jsonResponse(['success' => true, 'mensaje' => 'Carrera aceptada por el conductor']);
     }
 
-    // 3. ACEPTAR PEDIDO POR COMERCIO (dentro de 60 segundos)
+    // 3. ACEPTAR PEDIDO POR COMERCIO (dentro de los 60 segundos)
     if ($subAction === 'aceptar_comercio') {
         $stmtPed = $pdo->prepare("SELECT comercio_id FROM pedidos WHERE id = :id");
         $stmtPed->execute(['id' => $id]);
@@ -341,24 +341,18 @@ if ($method === 'PUT' && $id) {
                 $params['foto'] = $data['foto_entrega_url'];
             }
 
-            // Liberar conductor y sumar ganancias netas
-            $stmtEnt = $pdo->prepare("SELECT conductor_id, costo_envio_usd FROM pedidos WHERE id = :id");
+            // Liberar conductor (el trigger SQL se encarga de saldo, comisiones y total_carreras)
+            $stmtEnt = $pdo->prepare("SELECT conductor_id FROM pedidos WHERE id = :id");
             $stmtEnt->execute(['id' => $id]);
             $pData = $stmtEnt->fetch();
 
             if ($pData && !empty($pData['conductor_id'])) {
-                $costoEnvio = (float)$pData['costo_envio_usd'];
-                $comision = round($costoEnvio * 0.15, 2);
-                $gananciaNeta = round($costoEnvio - $comision, 2);
-
                 $pdo->prepare("
                     UPDATE conductores 
-                    SET saldo_billetera_usd = saldo_billetera_usd + :neto,
-                        total_carreras = total_carreras + 1,
-                        en_carrera = 0,
+                    SET en_carrera = 0,
                         disponible = 1
                     WHERE id = :cid
-                ")->execute(['neto' => $gananciaNeta, 'cid' => $pData['conductor_id']]);
+                ")->execute(['cid' => $pData['conductor_id']]);
             }
         }
 
