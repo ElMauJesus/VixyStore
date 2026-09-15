@@ -412,7 +412,11 @@ INSERT INTO `configuracion_sistema` (`clave`, `valor`, `descripcion`) VALUES
 ('km_base', '3.0', 'Distancia base en kilómetros incluida en tarifa mínima'),
 ('precio_km_adicional_usd', '0.50', 'Monto adicional en USD por cada kilómetro adicional'),
 ('limite_saldo_negativo_conductor_usd', '-0.50', 'Límite máximo de saldo negativo antes de pausar asignación'),
-('comision_plataforma_porcentaje', '15.00', 'Porcentaje de comisión administrativa sobre el envío')
+('comision_plataforma_porcentaje', '15.00', 'Porcentaje de comisión administrativa sobre el envío'),
+('porcentaje_comision_comercio', '0.00', 'Comisión comercio primer año (%)'),
+('porcentaje_comision_delivery', '5.00', 'Comisión conductor primeros 3 meses (%)'),
+('comision_comercio_despues_primer_ano', '3.00', 'Comisión comercio después del primer año (%)'),
+('comision_conductor_despues_3_meses', '10.00', 'Comisión conductor después de 3 meses (%)')
 ON DUPLICATE KEY UPDATE `valor` = VALUES(`valor`);
 
 -- ------------------------------------------------------------------------------
@@ -424,7 +428,7 @@ CREATE TABLE IF NOT EXISTS `telemetria_dispositivos` (
     `tipo_usuario` ENUM('conductor', 'comercio', 'cliente') NOT NULL,
     `nombre` VARCHAR(120) NOT NULL,
     `latitud` DECIMAL(10, 7) NOT NULL DEFAULT 0.0,
-    `longitud` DECIMAL(10, 7) NOT NULL DEFAULT 0.0,
+    `longitud` DECIMAL(11, 7) NOT NULL DEFAULT 0.0,
     `bateria` INT NULL,
     `online` TINYINT(1) NOT NULL DEFAULT 1,
     `app_version` VARCHAR(30) NULL,

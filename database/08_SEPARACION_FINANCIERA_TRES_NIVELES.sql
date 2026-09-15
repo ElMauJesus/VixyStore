@@ -123,20 +123,61 @@ AFTER UPDATE ON pedidos
 FOR EACH ROW
 BEGIN
   DECLARE v_pct_comercio DECIMAL(5,2) DEFAULT 0.00;
-  DECLARE v_pct_delivery DECIMAL(5,2) DEFAULT 15.00;
+  DECLARE v_pct_delivery DECIMAL(5,2) DEFAULT 5.00;
   DECLARE v_com_comercio DECIMAL(12,2) DEFAULT 0.00;
   DECLARE v_com_delivery DECIMAL(12,2) DEFAULT 0.00;
   DECLARE v_neto_comercio DECIMAL(12,2) DEFAULT 0.00;
   DECLARE v_neto_conductor DECIMAL(12,2) DEFAULT 0.00;
   DECLARE v_tasa DECIMAL(10,4) DEFAULT 0.0000;
+  DECLARE v_conductor_antiguedad_meses INT DEFAULT 0;
+  DECLARE v_comercio_antiguedad_dias INT DEFAULT 0;
+  DECLARE v_pct_conductor_3m DECIMAL(5,2) DEFAULT 5.00;
+  DECLARE v_pct_conductor_10m DECIMAL(5,2) DEFAULT 10.00;
+  DECLARE v_pct_comercio_1a DECIMAL(5,2) DEFAULT 0.00;
+  DECLARE v_pct_comercio_3a DECIMAL(5,2) DEFAULT 3.00;
 
   IF NEW.estado = 'pago_verificado' AND OLD.estado <> 'pago_verificado' THEN
+    -- Leer los 4 porcentajes editables
     SELECT
       COALESCE(MAX(CASE WHEN clave = 'porcentaje_comision_comercio' THEN CAST(valor AS DECIMAL(5,2)) END), 0.00),
-      COALESCE(MAX(CASE WHEN clave = 'porcentaje_comision_delivery' THEN CAST(valor AS DECIMAL(5,2)) END), 15.00)
-    INTO v_pct_comercio, v_pct_delivery
+      COALESCE(MAX(CASE WHEN clave = 'porcentaje_comision_delivery' THEN CAST(valor AS DECIMAL(5,2)) END), 5.00),
+      COALESCE(MAX(CASE WHEN clave = 'comision_comercio_despues_primer_ano' THEN CAST(valor AS DECIMAL(5,2)) END), 3.00),
+      COALESCE(MAX(CASE WHEN clave = 'comision_conductor_despues_3_meses' THEN CAST(valor AS DECIMAL(5,2)) END), 10.00)
+    INTO v_pct_comercio_1a, v_pct_conductor_3m, v_pct_comercio_3a, v_pct_conductor_10m
     FROM configuracion_sistema
-    WHERE clave IN ('porcentaje_comision_comercio', 'porcentaje_comision_delivery');
+    WHERE clave IN (
+      'porcentaje_comision_comercio',
+      'porcentaje_comision_delivery',
+      'comision_comercio_despues_primer_ano',
+      'comision_conductor_despues_3_meses'
+    );
+
+    -- Calcular antigüedad del conductor
+    IF NEW.conductor_id IS NOT NULL THEN
+      SELECT TIMESTAMPDIFF(MONTH, creado_en, NOW())
+      INTO v_conductor_antiguedad_meses
+      FROM conductores
+      WHERE id = NEW.conductor_id;
+    END IF;
+
+    -- Calcular antigüedad del comercio
+    SELECT TIMESTAMPDIFF(DAY, creado_en, NOW())
+    INTO v_comercio_antiguedad_dias
+    FROM comercios
+    WHERE id = NEW.comercio_id;
+
+    -- Elegir % según antigüedad
+    IF v_conductor_antiguedad_meses >= 3 THEN
+      SET v_pct_delivery = v_pct_conductor_10m;
+    ELSE
+      SET v_pct_delivery = v_pct_conductor_3m;
+    END IF;
+
+    IF v_comercio_antiguedad_dias >= 365 THEN
+      SET v_pct_comercio = v_pct_comercio_3a;
+    ELSE
+      SET v_pct_comercio = v_pct_comercio_1a;
+    END IF;
 
     SET v_tasa = COALESCE(NEW.tasa_bcv_bs, 0.0000);
     SET v_com_comercio = ROUND(COALESCE(NEW.monto_subtotal_usd, 0) * v_pct_comercio / 100, 2);
@@ -162,10 +203,41 @@ BEGIN
   IF NEW.estado = 'entregado' AND OLD.estado <> 'entregado' THEN
     SELECT
       COALESCE(MAX(CASE WHEN clave = 'porcentaje_comision_comercio' THEN CAST(valor AS DECIMAL(5,2)) END), 0.00),
-      COALESCE(MAX(CASE WHEN clave = 'porcentaje_comision_delivery' THEN CAST(valor AS DECIMAL(5,2)) END), 15.00)
-    INTO v_pct_comercio, v_pct_delivery
+      COALESCE(MAX(CASE WHEN clave = 'porcentaje_comision_delivery' THEN CAST(valor AS DECIMAL(5,2)) END), 5.00),
+      COALESCE(MAX(CASE WHEN clave = 'comision_comercio_despues_primer_ano' THEN CAST(valor AS DECIMAL(5,2)) END), 3.00),
+      COALESCE(MAX(CASE WHEN clave = 'comision_conductor_despues_3_meses' THEN CAST(valor AS DECIMAL(5,2)) END), 10.00)
+    INTO v_pct_comercio_1a, v_pct_conductor_3m, v_pct_comercio_3a, v_pct_conductor_10m
     FROM configuracion_sistema
-    WHERE clave IN ('porcentaje_comision_comercio', 'porcentaje_comision_delivery');
+    WHERE clave IN (
+      'porcentaje_comision_comercio',
+      'porcentaje_comision_delivery',
+      'comision_comercio_despues_primer_ano',
+      'comision_conductor_despues_3_meses'
+    );
+
+    IF NEW.conductor_id IS NOT NULL THEN
+      SELECT TIMESTAMPDIFF(MONTH, creado_en, NOW())
+      INTO v_conductor_antiguedad_meses
+      FROM conductores
+      WHERE id = NEW.conductor_id;
+    END IF;
+
+    SELECT TIMESTAMPDIFF(DAY, creado_en, NOW())
+    INTO v_comercio_antiguedad_dias
+    FROM comercios
+    WHERE id = NEW.comercio_id;
+
+    IF v_conductor_antiguedad_meses >= 3 THEN
+      SET v_pct_delivery = v_pct_conductor_10m;
+    ELSE
+      SET v_pct_delivery = v_pct_conductor_3m;
+    END IF;
+
+    IF v_comercio_antiguedad_dias >= 365 THEN
+      SET v_pct_comercio = v_pct_comercio_3a;
+    ELSE
+      SET v_pct_comercio = v_pct_comercio_1a;
+    END IF;
 
     INSERT INTO distribuciones_pedido (
       id, pedido_id, codigo_seguimiento, cliente_id, comercio_id, conductor_id,
@@ -179,11 +251,13 @@ BEGIN
 
     UPDATE distribuciones_pedido
     SET conductor_id = NEW.conductor_id,
-        comision_comercio_usd = ROUND(subtotal_productos_usd * porcentaje_comercio / 100, 2),
-        neto_comercio_usd = subtotal_productos_usd - ROUND(subtotal_productos_usd * porcentaje_comercio / 100, 2),
-        comision_delivery_usd = ROUND(tarifa_delivery_usd * porcentaje_delivery / 100, 2),
-        neto_conductor_usd = tarifa_delivery_usd - ROUND(tarifa_delivery_usd * porcentaje_delivery / 100, 2),
-        ingreso_vixy_usd = ROUND(subtotal_productos_usd * porcentaje_comercio / 100, 2) + ROUND(tarifa_delivery_usd * porcentaje_delivery / 100, 2),
+        porcentaje_comercio = v_pct_comercio,
+        porcentaje_delivery = v_pct_delivery,
+        comision_comercio_usd = ROUND(subtotal_productos_usd * v_pct_comercio / 100, 2),
+        neto_comercio_usd = subtotal_productos_usd - ROUND(subtotal_productos_usd * v_pct_comercio / 100, 2),
+        comision_delivery_usd = ROUND(tarifa_delivery_usd * v_pct_delivery / 100, 2),
+        neto_conductor_usd = tarifa_delivery_usd - ROUND(tarifa_delivery_usd * v_pct_delivery / 100, 2),
+        ingreso_vixy_usd = ROUND(subtotal_productos_usd * v_pct_comercio / 100, 2) + ROUND(tarifa_delivery_usd * v_pct_delivery / 100, 2),
         estado = 'distribuido', fecha_distribucion = NOW()
     WHERE pedido_id = NEW.id;
 
