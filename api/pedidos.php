@@ -3,13 +3,8 @@
  * ==============================================================================
  * VIXY DELIVERY PLATFORM - CONTROLADOR PRINCIPAL DE PEDIDOS (PHP 8.0+ / cPanel)
  * ==============================================================================
- * Maneja el ciclo completo del pedido:
- * 1. Creación por cliente con cálculo de tarifa: $2.00 USD hasta 3 km + $0.50/km adicional
- * 2. Temporizador de Comercio (60 segundos) y Aceptación/Rechazo
- * 3. Temporizador de Conductor (15 segundos) y Aceptación/Rechazo
- * 4. Reasignación automática inmediata al conductor libre más cercano al comercio
- * 5. Bloqueo de conductores con saldo inferior a -$0.50 USD
- * 6. Finalización con foto de entrega y liberación de disponibilidad del conductor
+ * Maneja el ciclo completo del pedido con comisiones dinámicas por antigüedad
+ * y sincronización con el trigger contable de la base de datos.
  */
 
 require_once __DIR__ . '/config/db.php';
@@ -20,16 +15,24 @@ $method = $_SERVER['REQUEST_METHOD'];
 $id = $_GET['id'] ?? null;
 $action = $_GET['action'] ?? null;
 
+// Helper: Cargar la configuración global del sistema en un arreglo asociativo
+function obtenerConfiguracionesSistema($pdo) {
+    $stmt = $pdo->query("SELECT clave, valor FROM configuracion_sistema");
+    $config = [];
+    while ($row = $stmt->fetch()) {
+        $config[$row['clave']] = (float)$row['valor'];
+    }
+    return $config;
+}
+
 // Helper: Buscar el conductor libre más cercano al comercio que no haya rechazado
 function buscarConductorMasCercano($pdo, $comercioId, $excluidos = []) {
-    // Coordenadas del comercio
     $stmtC = $pdo->prepare("SELECT latitud, longitud FROM comercios WHERE id = :id LIMIT 1");
     $stmtC->execute(['id' => $comercioId]);
     $com = $stmtC->fetch();
     $lat = $com ? (float)$com['latitud'] : 10.4880;
     $lng = $com ? (float)$com['longitud'] : -66.8533;
 
-    // Buscar conductores activos, solventes y disponibles (NO en carrera)
     $stmt = $pdo->prepare("
         SELECT id, nombre, apellido, telefono, placa_moto, latitud_actual, longitud_actual, saldo_billetera_usd,
                (6371 * acos(
@@ -132,7 +135,15 @@ if ($method === 'POST') {
         Database::jsonResponse(['error' => true, 'mensaje' => 'Faltan datos obligatorios del pedido'], 400);
     }
 
-    $stmtStore = $pdo->prepare("SELECT id, activo, abierto_manual FROM comercios WHERE id = :id");
+    // Cargar parámetros dinámicos del sistema
+    $config = obtenerConfiguracionesSistema($pdo);
+
+    // Consultar comercio y antigüedad en meses desde 'creado_en'
+    $stmtStore = $pdo->prepare("
+        SELECT id, activo, abierto_manual, 
+               TIMESTAMPDIFF(MONTH, creado_en, NOW()) AS meses_antiguedad 
+        FROM comercios WHERE id = :id
+    ");
     $stmtStore->execute(['id' => $data['comercio_id']]);
     $store = $stmtStore->fetch();
 
@@ -143,20 +154,27 @@ if ($method === 'POST') {
     $newId = 'ped-' . strtoupper(substr(uniqid(), -6));
     $codigoSeguimiento = 'VXY-' . rand(100000, 999999);
 
-    $stmtBcv = $pdo->query("SELECT valor FROM configuracion_sistema WHERE clave = 'tasa_bcv'");
-    $tasaRow = $stmtBcv->fetch();
-    $tasaBcv = $tasaRow ? (float)$tasaRow['valor'] : 48.50;
+    // Parámetros de tarifas dinámicas
+    $tasaBcv = $config['tasa_bcv'] ?? 48.50;
+    $kmBase = $config['km_base'] ?? 3.0;
+    $tarifaBase = $config['tarifa_base_usd'] ?? 2.00;
+    $precioKmAdicional = $config['precio_km_adicional_usd'] ?? 0.50;
 
-    // Regla de despacho: $2.00 USD base hasta 3 km + $0.50 por km adicional
     $distanciaKm = (float)($data['distancia_km'] ?? 2.5);
-    $kmBase = 3.0;
-    $tarifaBase = 2.00;
-    $precioKmAdicional = 0.50;
     $excedenteKm = max(0, $distanciaKm - $kmBase);
     $costoEnvio = $tarifaBase + ($excedenteKm * $precioKmAdicional);
 
-    $subtotal = (float)$data['monto_subtotal_usd'];
-    $totalUsd = $subtotal + $costoEnvio;
+    // Regla de comisión dinámicas de Comercio (< 12 meses vs >= 12 meses)
+    $mesesComercio = (int)($store['meses_antiguedad'] ?? 0);
+    $pctComisionComercio = ($mesesComercio >= 12) 
+        ? ($config['comision_comercio_despues_primer_ano'] ?? 3.00)
+        : ($config['porcentaje_comision_comercio'] ?? 0.00);
+
+    // Descuento de comisión al subtotal para acreditar el monto neto al comercio
+    $subtotalBruto = (float)$data['monto_subtotal_usd'];
+    $subtotalNetoComercio = $subtotalBruto * (1 - ($pctComisionComercio / 100));
+
+    $totalUsd = $subtotalBruto + $costoEnvio;
     $totalBs = $totalUsd * $tasaBcv;
 
     $stmt = $pdo->prepare("
@@ -178,7 +196,7 @@ if ($method === 'POST') {
         'code' => $codigoSeguimiento,
         'client' => $data['cliente_id'] ?? 'cli-001',
         'store' => $data['comercio_id'],
-        'sub' => $subtotal,
+        'sub' => $subtotalNetoComercio,
         'env' => $costoEnvio,
         'bcv' => $tasaBcv,
         'tot_usd' => $totalUsd,
@@ -247,7 +265,6 @@ if ($method === 'PUT' && $id) {
             $rechazaron[] = $conductorId;
         }
 
-        // Buscar próximo conductor más cercano
         $proximo = buscarConductorMasCercano($pdo, $ped['comercio_id'], $rechazaron);
 
         $upd = $pdo->prepare("
@@ -276,8 +293,15 @@ if ($method === 'PUT' && $id) {
     if ($subAction === 'aceptar_conductor') {
         $conductorId = $data['conductor_id'] ?? null;
 
-        // Validar saldo
-        $stmtCond = $pdo->prepare("SELECT disponible, saldo_billetera_usd, bloqueado_por_saldo FROM conductores WHERE id = :cid");
+        $config = obtenerConfiguracionesSistema($pdo);
+
+        // Validar saldo y calcular antigüedad del repartidor en meses desde 'creado_en'
+        $stmtCond = $pdo->prepare("
+            SELECT disponible, saldo_billetera_usd, bloqueado_por_saldo,
+                   TIMESTAMPDIFF(MONTH, creado_en, NOW()) AS meses_antiguedad 
+            FROM conductores 
+            WHERE id = :cid
+        ");
         $stmtCond->execute(['cid' => $conductorId]);
         $cond = $stmtCond->fetch();
 
@@ -288,14 +312,35 @@ if ($method === 'PUT' && $id) {
             ], 403);
         }
 
+        // Obtener costo de envío asignado a la carrera
+        $stmtPed = $pdo->prepare("SELECT costo_envio_usd FROM pedidos WHERE id = :id");
+        $stmtPed->execute(['id' => $id]);
+        $pedInfo = $stmtPed->fetch();
+        $costoEnvio = $pedInfo ? (float)$pedInfo['costo_envio_usd'] : 0.00;
+
+        // Regla de comisión dinámicas de Conductor (< 3 meses vs >= 3 meses)
+        $mesesCond = (int)($cond['meses_antiguedad'] ?? 0);
+        $pctComisionConductor = ($mesesCond >= 3) 
+            ? ($config['comision_conductor_despues_3_meses'] ?? 10.00)
+            : ($config['porcentaje_comision_delivery'] ?? 5.00);
+
+        // Ganancia neta repartidor reteniendo la comisión de la app
+        $gananciaConductor = $costoEnvio * (1 - ($pctComisionConductor / 100));
+
+        // Asignar conductor y congelar ganancia neta en la orden
         $upd = $pdo->prepare("
             UPDATE pedidos 
             SET conductor_id = :cid,
+                ganancia_conductor_usd = :ganancia,
                 conductor_ofrecido_id = NULL,
                 estado = 'en_camino_al_comercio'
             WHERE id = :id
         ");
-        $upd->execute(['cid' => $conductorId, 'id' => $id]);
+        $upd->execute([
+            'cid' => $conductorId,
+            'ganancia' => $gananciaConductor,
+            'id' => $id
+        ]);
 
         $pdo->prepare("UPDATE conductores SET en_carrera = 1, disponible = 0 WHERE id = :cid")
             ->execute(['cid' => $conductorId]);
@@ -309,7 +354,6 @@ if ($method === 'PUT' && $id) {
         $stmtPed->execute(['id' => $id]);
         $ped = $stmtPed->fetch();
 
-        // Buscar conductor más cercano al comercio
         $proximo = buscarConductorMasCercano($pdo, $ped['comercio_id'], []);
 
         $upd = $pdo->prepare("
@@ -341,7 +385,7 @@ if ($method === 'PUT' && $id) {
                 $params['foto'] = $data['foto_entrega_url'];
             }
 
-            // Liberar conductor (el trigger SQL se encarga de saldo, comisiones y total_carreras)
+            // Liberar disponibilidad del repartidor (El trigger SQL distribuye los saldos automáticamente)
             $stmtEnt = $pdo->prepare("SELECT conductor_id FROM pedidos WHERE id = :id");
             $stmtEnt->execute(['id' => $id]);
             $pData = $stmtEnt->fetch();

@@ -1,33 +1,33 @@
 import React, { useState } from 'react';
-import { 
-  DollarSign, 
-  Save, 
-  Sliders, 
-  Database, 
-  ShieldAlert, 
-  Check, 
-  Info, 
-  Bike, 
-  Navigation, 
-  Calculator, 
-  Percent, 
-  Sparkles,
-  AlertCircle
+import {
+  DollarSign,
+  Save,
+  Bike,
+  Calculator,
+  AlertCircle,
+  Check,
+  Store
 } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
 
 export const PaymentConfigManager: React.FC = () => {
-  const { 
-    tasaBcv, 
-    deliveryRates, 
-    updateDeliveryRates, 
-    calculateDeliveryTripCost 
+  const {
+    tasaBcv,
+    deliveryRates,
+    updateDeliveryRates,
+    calculateDeliveryTripCost
   } = useDelivery();
 
   const [localTasa, setLocalTasa] = useState(tasaBcv.toString());
-  const [comisionDelivery, setComisionDelivery] = useState(deliveryRates.porcentajeComisionDelivery.toString());
   const [tarifaBaseMinima, setTarifaBaseMinima] = useState(deliveryRates.tarifaBaseMinimaUsd.toString());
   const [costoPorFraccion, setCostoPorFraccion] = useState(deliveryRates.costoPorFraccionUsd.toString());
+
+  // Estados para comisiones diferenciadas por antigüedad
+  const [comisionDeliveryAntes3Meses, setComisionDeliveryAntes3Meses] = useState('5');
+  const [comisionDeliveryDespues3Meses, setComisionDeliveryDespues3Meses] = useState('10');
+  const [comisionComercioAntesAnio, setComisionComercioAntesAnio] = useState('0');
+  const [comisionComercioDespuesAnio, setComisionComercioDespuesAnio] = useState('3');
+
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Simulation State
@@ -36,19 +36,19 @@ export const PaymentConfigManager: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const tVal = parseFloat(localTasa);
-    const comVal = parseFloat(comisionDelivery);
     const baseVal = parseFloat(tarifaBaseMinima);
     const fracVal = parseFloat(costoPorFraccion);
+    const comDelPost = parseFloat(comisionDeliveryDespues3Meses);
 
-    if (!isNaN(tVal) && !isNaN(comVal) && !isNaN(baseVal) && !isNaN(fracVal)) {
+    if (!isNaN(tVal) && !isNaN(baseVal) && !isNaN(fracVal) && !isNaN(comDelPost)) {
       updateDeliveryRates({
         tasaBcvBs: tVal,
-        porcentajeComisionDelivery: comVal,
+        porcentajeComisionDelivery: comDelPost,
         tarifaBaseMinimaUsd: baseVal,
         distanciaBaseKm: 3.0,
         fraccionCalculoKm: 1.0,
         costoPorFraccionUsd: fracVal,
-        comisionMotorizadoPorcentaje: 100 - comVal
+        comisionMotorizadoPorcentaje: 100 - comDelPost
       });
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3500);
@@ -70,17 +70,17 @@ export const PaymentConfigManager: React.FC = () => {
           </div>
           <h2 className="text-xl font-bold text-neutral-900 dark:text-white mt-1 flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-amber-500" />
-            Tasas BCV & Tarifas de Servicio Delivery
+            Tasas BCV & Comisiones por Antigüedad
           </h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-            Configuración de la tasa cambiaria oficial, comisión de servicio de plataforma y cálculo de viaje mínimo (3 km) con tramos de 0.5 km.
+            Configuración de la tasa cambiaria oficial, retenciones escalonadas y cálculo de viaje mínimo (3 km).
           </p>
         </div>
 
         {savedSuccess && (
           <span className="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-bounce">
             <Check className="w-4 h-4" />
-            ¡Parámetros y comisión sincronizados con éxito!
+            ¡Parámetros y comisiones sincronizados con éxito!
           </span>
         )}
       </div>
@@ -93,20 +93,21 @@ export const PaymentConfigManager: React.FC = () => {
             Regla de Alcance Estricto: Comisión de Delivery vs Precios de Comercios
           </span>
           <p className="leading-relaxed opacity-90">
-            Los porcentajes y márgenes configurados en esta pestaña <strong>aplican exclusivamente al costo del servicio de transporte/delivery</strong>. 
-            Esta pestaña <strong>NO maneja, no interfiere ni modifica los precios de venta de los artículos o productos</strong> ofrecidos por los comercios afiliados (Vixy Store), los cuales son administrados de manera soberana e individual por cada establecimiento en su respectivo catálogo.
+            Los porcentajes configurados aplican estrictamente a las retenciones por antigüedad del servicio de delivery y comercios.
+            Esta pestaña <strong>NO modifica ni interfiere con los precios de venta de los artículos</strong> de los establecimientos afiliados (Vixy Store).
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Box 1: Tasa Oficial BCV & Comisión Delivery */}
+
+          {/* Box 1: Tasa Oficial BCV & Comisiones por Antigüedad */}
           <div className="p-6 bg-white dark:bg-neutral-850 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-5">
             <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
               <h3 className="text-xs font-bold text-neutral-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-emerald-500" />
-                1. Tasa Oficial BCV y Comisión de Servicio
+                1. Tasa Oficial BCV y Comisiones Escalonadas
               </h3>
               <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded text-[10px] font-bold font-mono">
                 USD / VED
@@ -134,56 +135,104 @@ export const PaymentConfigManager: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-white rounded-xl border border-neutral-200 dark:border-neutral-700 text-base font-mono font-bold outline-hidden focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
-              <p className="text-[10px] text-neutral-500">
-                Se propaga automáticamente a todos los cobros en Bolívares por Pago Móvil y efectivo.
-              </p>
             </div>
 
-            {/* Comisión Delivery Porcentaje */}
-            <div className="space-y-2 pt-3 border-t border-neutral-100 dark:border-neutral-800">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
-                  <Percent className="w-3.5 h-3.5 text-amber-500" />
-                  Porcentaje de Comisión por Servicio de Delivery:
-                </label>
-                <span className="text-sm font-black font-mono text-amber-500">
-                  {comisionDelivery}%
-                </span>
-              </div>
+            {/* COMISIONES POR ANTIGÜEDAD (REEMPLAZO DE LA BARRA) */}
+            <div className="space-y-4 pt-2 border-t border-neutral-100 dark:border-neutral-800">
 
-              <input
-                type="range"
-                min="5"
-                max="30"
-                step="1"
-                value={comisionDelivery}
-                onChange={(e) => setComisionDelivery(e.target.value)}
-                className="w-full accent-amber-500 cursor-pointer"
-              />
-
-              <div className="flex justify-between text-[10px] text-neutral-400 font-mono">
-                <span>5% (Mínimo)</span>
-                <span>12% (Estándar Vixy)</span>
-                <span>30% (Máximo)</span>
-              </div>
-
-              {/* Reparto de Ingresos Delivery */}
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 space-y-1.5 text-xs">
-                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
-                  Distribución del Flete de Delivery
-                </span>
-                <div className="flex justify-between items-center text-neutral-700 dark:text-neutral-300">
-                  <span>Comisión Vixy Plataforma:</span>
-                  <span className="font-bold text-amber-500 font-mono">{comisionDelivery}% del flete</span>
-                </div>
-                <div className="flex justify-between items-center text-neutral-700 dark:text-neutral-300">
-                  <span>Ganancia Neta del Motorizado:</span>
-                  <span className="font-bold text-emerald-500 font-mono">
-                    {(100 - (parseFloat(comisionDelivery) || 0)).toFixed(0)}% del flete
+              {/* Delivery por Antigüedad con Distribución integrada */}
+              <div className="p-3.5 bg-neutral-50 dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                    <Bike className="w-3.5 h-3.5 text-amber-500" />
+                    Comisión Delivery según Antigüedad
                   </span>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold text-neutral-500 block">Antes de los 3 meses</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={comisionDeliveryAntes3Meses}
+                        onChange={(e) => setComisionDeliveryAntes3Meses(e.target.value)}
+                        className="w-full pl-3 pr-8 py-2 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-mono font-bold"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">%</span>
+                    </div>
+                    <span className="text-[9px] text-emerald-600 font-mono block">Motorizado: {100 - (parseFloat(comisionDeliveryAntes3Meses) || 0)}%</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold text-neutral-500 block">Después de los 3 meses</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={comisionDeliveryDespues3Meses}
+                        onChange={(e) => setComisionDeliveryDespues3Meses(e.target.value)}
+                        className="w-full pl-3 pr-8 py-2 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-mono font-bold"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">%</span>
+                    </div>
+                    <span className="text-[9px] text-emerald-600 font-mono block">Motorizado: {100 - (parseFloat(comisionDeliveryDespues3Meses) || 0)}%</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-neutral-200/60 dark:border-neutral-800 text-[11px] space-y-1">
+                  <div className="flex justify-between items-center text-neutral-700 dark:text-neutral-300">
+                    <span>Comisión Vixy Plataforma (&gt;3m):</span>
+                    <span className="font-bold text-amber-500 font-mono">{comisionDeliveryDespues3Meses}% del flete</span>
+                  </div>
+                  <div className="flex justify-between items-center text-neutral-700 dark:text-neutral-300">
+                    <span>Ganancia Neta del Motorizado (&gt;3m):</span>
+                    <span className="font-bold text-emerald-500 font-mono">
+                      {(100 - (parseFloat(comisionDeliveryDespues3Meses) || 0))}% del flete
+                    </span>
+                  </div>
+                </div>
               </div>
+
+              {/* Comercio por Antigüedad */}
+              <div className="p-3.5 bg-neutral-50 dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-indigo-500" />
+                    Comisión Comercio según Antigüedad
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold text-neutral-500 block">Antes del año</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={comisionComercioAntesAnio}
+                        onChange={(e) => setComisionComercioAntesAnio(e.target.value)}
+                        className="w-full pl-3 pr-8 py-2 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-mono font-bold"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">%</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold text-neutral-500 block">Después del año</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={comisionComercioDespuesAnio}
+                        onChange={(e) => setComisionComercioDespuesAnio(e.target.value)}
+                        className="w-full pl-3 pr-8 py-2 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-mono font-bold"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
+
           </div>
 
           {/* Box 2: Viaje Mínimo (3 km) y Tramos de 0.5 km */}
@@ -220,7 +269,7 @@ export const PaymentConfigManager: React.FC = () => {
                 />
               </div>
               <p className="text-[10px] text-neutral-500">
-                Tarifa mínima fija: <strong>$2.00 USD</strong> que cubren los primeros <strong>3.0 km de recorrido</strong>.
+                Tarifa mínima fija que cubre los primeros <strong>3.0 km de recorrido</strong>.
               </p>
             </div>
 
@@ -245,9 +294,6 @@ export const PaymentConfigManager: React.FC = () => {
                   className="w-full pl-8 pr-4 py-2.5 bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-white rounded-xl border border-neutral-200 dark:border-neutral-700 text-base font-mono font-bold outline-hidden focus:ring-2 focus:ring-amber-500"
                 />
               </div>
-              <p className="text-[10px] text-neutral-500">
-                A partir de los 3 km de recorrido, se suma exactamente <strong>$0.50 USD por cada kilómetro adicional</strong>.
-              </p>
             </div>
 
             {/* Mathematical explanation */}
@@ -346,8 +392,8 @@ export const PaymentConfigManager: React.FC = () => {
               <span className="text-[10px] text-neutral-400">USD</span>
             </div>
             <span className="text-[10px] text-neutral-500 mt-0.5 block">
-              {simulation.distanciaExcedenteKm > 0 
-                ? `+${simulation.distanciaExcedenteKm.toFixed(1)} km a $0.50/km` 
+              {simulation.distanciaExcedenteKm > 0
+                ? `+${simulation.distanciaExcedenteKm.toFixed(1)} km a $0.50/km`
                 : 'Sin excedente (dentro de 3 km)'}
             </span>
           </div>
