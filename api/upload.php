@@ -14,6 +14,43 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Database::jsonResponse(['error' => true, 'mensaje' => 'Método debe ser POST'], 405);
 }
 
+// 0. Autenticación y control de acceso
+$authUser = null;
+if (AuthMiddleware::hasAdminKey()) {
+    $authUser = ['tipo_usuario' => 'super_admin', 'id' => 'admin', 'nivel_acceso' => 'super_admin'];
+} else {
+    $authUser = AuthMiddleware::verifyToken();
+}
+
+$tipoPeticion = $_POST['tipo'] ?? 'general';
+$entityIdPeticion = trim((string)($_POST['entity_id'] ?? ''));
+
+// Subidas públicas permitidas solo para comprobantes de pago previo o pre-registro sin reemplazar entidades existentes
+$esSubidaPublicaPermitida = in_array($tipoPeticion, ['comprobantes', 'conductores', 'comercios', 'general'], true) && empty($entityIdPeticion);
+
+if (!$authUser && !$esSubidaPublicaPermitida) {
+    Database::jsonResponse([
+        'error' => true,
+        'mensaje' => 'Acceso no autorizado: Se requiere token de sesión o credenciales válidas para subir archivos'
+    ], 401);
+}
+
+// Si se intenta modificar una entidad existente, verificar que sea el usuario propietario o administrador
+if ($authUser && !empty($entityIdPeticion)) {
+    $userRole = strtolower(trim((string)($authUser['role'] ?? $authUser['tipo_usuario'] ?? '')));
+    $isAdmin = in_array($userRole, ['super_admin', 'admin', 'administrador', 'operador', 'finanzas'], true);
+    $userId = $authUser['id'] ?? ($authUser['sub'] ?? '');
+    if (!$isAdmin && $userId !== '' && $userId !== $entityIdPeticion) {
+        // En productos o entregas, verificar si pertenece al comercio del usuario
+        if (in_array($tipoPeticion, ['comercios', 'conductores'], true)) {
+            Database::jsonResponse([
+                'error' => true,
+                'mensaje' => 'No tiene permisos para modificar la información de esta entidad'
+            ], 403);
+        }
+    }
+}
+
 // 1. Validar archivo recibido
 if (!isset($_FILES['imagen']) || $_FILES['imagen']['error'] !== UPLOAD_ERR_OK) {
     Database::jsonResponse([

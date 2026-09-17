@@ -354,27 +354,15 @@ export default function RegistroDeliveryPage() {
                     cedula: data.cedula || cedulaCompleta,
                 });
                 setSubmitted(true);
-            } else if (data?.message) {
-                setErrorMessage(data.message);
             } else {
-                const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-                const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
-                setRepartidorCreado({
-                    codigo: `DRV-${today}-${rand}`,
-                    nombre: `${form.nombre} ${form.apellido}`,
-                    cedula: cedulaCompleta,
-                });
-                setSubmitted(true);
+                // Mostrar error real del servidor — NO generar código falso
+                const msg = data?.message || data?.mensaje || data?.error
+                    || 'No se pudo completar el registro. Por favor verifica tu conexión e intenta de nuevo.';
+                setErrorMessage(msg);
             }
-        } catch {
-            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-            const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
-            setRepartidorCreado({
-                codigo: `DRV-${today}-${rand}`,
-                nombre: `${form.nombre} ${form.apellido}`,
-                cedula: cedulaCompleta,
-            });
-            setSubmitted(true);
+        } catch (err: any) {
+            // Error de red: mostrar mensaje real
+            setErrorMessage('Error de conexión con el servidor. Por favor verifica tu internet e intenta de nuevo.');
         } finally {
             setLoading(false);
         }

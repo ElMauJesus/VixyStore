@@ -30,6 +30,9 @@ if (!$pdo) {
     exit;
 }
 
+// Conexión secundaria a c2861522_vixy_dl para sincronización dual
+$pdoDl = getDeliveryDbConnection();
+
 // Función para generar documentos SVG del expediente digital del comercio
 function generateStoreExpedienteDocs($codigo, $nombre, $rif) {
     $name = !empty($nombre) ? htmlspecialchars($nombre) : 'Comercio Registrado';
@@ -244,7 +247,7 @@ $sql = "INSERT INTO comercios (
             telefono_comercio, telefono_adicional, horarios_atencion,
             ubicacion_gps, punto_referencia, cantidad_sucursales,
             direccion_negocio, categoria_negocio, descripcion_negocio,
-            redes_sociales, foto_comercio_url
+            redes_sociales, foto_comercio_url, status, activo
         ) VALUES (
             :codigo, :tipo_comercio, :password_hash,
             :nombre_comercial, :nombre_representante,
@@ -252,7 +255,7 @@ $sql = "INSERT INTO comercios (
             :telefono, :telefono_adicional, :horarios,
             :gps, :referencia, :sucursales,
             :direccion, :categoria, :descripcion,
-            :redes, :foto
+            :redes, :foto, 'pendiente', 0
         )";
 
 try {
@@ -280,7 +283,56 @@ try {
     ]);
     
     $comercioId = $pdo->lastInsertId();
-    
+
+    // ─── Sincronización dual: insertar en c2861522_vixy_dl ───────────────
+    if ($pdoDl) {
+        try {
+            $dlCols = [];
+            try {
+                $colSt = $pdoDl->query('SHOW COLUMNS FROM comercios');
+                $dlCols = array_column($colSt->fetchAll(PDO::FETCH_ASSOC), 'Field');
+            } catch (Throwable $_t) {}
+
+            if (!empty($dlCols)) {
+                $fields = [
+                    'codigo_comercio'      => $codigoComercio,
+                    'tipo_comercio'        => $tipoComercio,
+                    'nombre_comercial'     => $nombreComercial,
+                    'nombre_representante' => $nombreRepresentante,
+                    'rif_cedula_juridica'  => $rifParaGuardar,
+                    'cedula_representante' => $cedulaRepresentante,
+                    'email'               => $email,
+                    'telefono_comercio'   => $telefonoComercio,
+                    'telefono_adicional'  => $telefonoAdicional,
+                    'horarios_atencion'   => $horariosAtencion,
+                    'ubicacion_gps'       => $ubicacionGps,
+                    'punto_referencia'    => $puntoReferencia,
+                    'cantidad_sucursales' => $cantidadSucursales,
+                    'direccion_negocio'   => $direccionNegocio,
+                    'categoria_negocio'   => $categoriaNegocio,
+                    'descripcion_negocio' => $descripcionNegocio,
+                    'redes_sociales'      => $redesSociales,
+                    'foto_comercio_url'   => $fotoUrl ?? '',
+                    'status'              => 'pendiente',
+                    'activo'             => 0,
+                ];
+                $filteredFields = array_filter(
+                    $fields,
+                    fn($key) => in_array($key, $dlCols, true),
+                    ARRAY_FILTER_USE_KEY
+                );
+                if (!empty($filteredFields)) {
+                    $colNames = implode(', ', array_keys($filteredFields));
+                    $colParams = implode(', ', array_map(fn($k) => ":$k", array_keys($filteredFields)));
+                    $pdoDl->prepare("INSERT IGNORE INTO comercios ($colNames) VALUES ($colParams)")->execute($filteredFields);
+                }
+            }
+        } catch (Throwable $eDl) {
+            error_log("[Vixy] Error sync vixy_dl comercio: " . $eDl->getMessage());
+        }
+    }
+    // ─── Fin sincronización dual ──────────────────────────────────────────────
+
     http_response_code(201);
     echo json_encode([
         "success" => true,
@@ -292,14 +344,11 @@ try {
         "tipo_comercio" => $tipoComercio,
         "identificador" => $identificadorFinal
     ]);
-    
+
 } catch (PDOException $e) {
-    // Si falla el INSERT, borrar la foto subida si existiera
     if ($fotoUrl) {
         $filePath = __DIR__ . "/.." . $fotoUrl;
-        if (file_exists($filePath)) {
-            unlink($filePath);
-        }
+        if (file_exists($filePath)) { unlink($filePath); }
     }
     error_log("[Vixy] Error al registrar comercio: " . $e->getMessage());
     http_response_code(500);

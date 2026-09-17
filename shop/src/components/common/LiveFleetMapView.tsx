@@ -23,22 +23,33 @@ import { DeliveryRadarMap } from './DeliveryRadarMap';
 import { Conductor } from '../../types/delivery';
 
 export const LiveFleetMapView: React.FC = () => {
-  const { allDrivers, openCall, openChat, realGpsActive, realGpsCoords, orders } = useDelivery();
+  const { allDrivers, openCall, openChat, realGpsActive, realGpsCoords, orders, addNotification } = useDelivery();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'disponible' | 'en_ruta'>('todos');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
 
   const radarDrivers = allDrivers.filter(d => {
-    const lat = Number(d.lat);
-    const lng = Number(d.lng);
-    return Number(d.billetera?.saldoUsd ?? d.saldo_billetera_usd ?? d.saldoUsd ?? 0) > 0
-      && Boolean(d.hasRealGps)
-      && Number.isFinite(lat) && Number.isFinite(lng)
-      && lat !== 0 && lng !== 0;
+    const isApproved = d.verificado_por_admin === 1 || 
+      String(d.status).toLowerCase() === 'aprobado' || 
+      String(d.estadoVerificacion).toLowerCase() === 'aprobado' ||
+      String(d.estado_registro).toLowerCase() === 'aprobado' ||
+      d.validado === true;
+    if (!isApproved) return false;
+
+    const isOnline = Boolean(d.disponible || d.enCarrera || d.en_carrera);
+    if (!isOnline) return false;
+
+    // Control de recarga mínima
+    const saldoUsd = Number(d.billetera?.saldoUsd ?? d.saldo_billetera_usd ?? d.saldoUsd ?? 0);
+    const limiteNegativo = Number(d.billetera?.limiteSaldoNegativo ?? d.limite_saldo_negativo ?? -0.50);
+    const isBlocked = Boolean(d.billetera?.bloqueadoPorSaldo || d.bloqueado_por_saldo) || (saldoUsd <= limiteNegativo);
+    if (isBlocked && !d.enCarrera && !d.en_carrera) return false;
+
+    return true;
   });
   const activeOrdersCount = orders.filter(o => o.estado !== 'entregado' && o.estado !== 'cancelado').length;
   const availableDriversCount = radarDrivers.filter(d => d.disponible).length;
-  const busyDriversCount = radarDrivers.filter(d => !d.disponible).length;
+  const busyDriversCount = radarDrivers.filter(d => d.enCarrera || d.en_carrera).length;
 
   const filteredDrivers = radarDrivers.filter(driver => {
     if (!driver) return false;
@@ -290,6 +301,10 @@ export const LiveFleetMapView: React.FC = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedDriverId(drv.id);
+                          const hasCoords = drv.hasRealGps && Number(drv.lat) !== 0 && Number(drv.lng) !== 0;
+                          if (!hasCoords && addNotification) {
+                            addNotification('comercio', '📍 GPS Pendiente', `${drv.nombre} está en línea pero su dispositivo móvil aún no ha emitido señal GPS.`);
+                          }
                         }}
                         className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-xl flex items-center justify-center gap-1 transition cursor-pointer border border-slate-700"
                       >

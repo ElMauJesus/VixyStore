@@ -148,13 +148,13 @@ export const ClientApp: React.FC = () => {
   const totalUsd = subtotalUsd > 0 ? subtotalUsd + store.costoEnvioUsd : 0;
   const totalBs = totalUsd * tasaBcv;
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginIdentifier.trim() || !loginPassword.trim()) {
       setAuthError('Por favor ingresa tu identificador (cédula o teléfono) y contraseña.');
       return;
     }
-    const res = loginClient(loginIdentifier.trim(), loginPassword);
+    const res = await loginClient(loginIdentifier.trim(), loginPassword);
     if (!res?.success) {
       setAuthError(res?.error || 'Credenciales inválidas.');
     } else {
@@ -162,14 +162,14 @@ export const ClientApp: React.FC = () => {
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regCedula.trim() || !regTelefono.trim() || !regNombre.trim() || !regClave.trim()) {
       setAuthError('Cédula, Teléfono, Nombre y Contraseña son campos obligatorios.');
       return;
     }
 
-    const res = registerClient({
+    const res = await registerClient({
       cedula: regCedula.trim(),
       nombre: regNombre.trim(),
       apellido: regApellido.trim() || 'Cliente',

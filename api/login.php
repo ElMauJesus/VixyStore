@@ -302,6 +302,18 @@ if ($driverFound) {
         'equipment_info' => $vehicleInfo
     ]);
 
+    // Sincronizar disponibilidad activa en la BD de delivery si no está bloqueado
+    try {
+        if ($pdoDriver) {
+            $pdoDriver->prepare("
+                UPDATE conductores 
+                SET disponible = 1, ultima_actualizacion = NOW() 
+                WHERE (codigo_conductor = :id OR id = :id2 OR cedula = :id3)
+                  AND (bloqueado_por_saldo = 0 OR bloqueado_por_saldo IS NULL)
+            ")->execute(['id' => $driverId, 'id2' => $driverId, 'id3' => $driverId]);
+        }
+    } catch (Throwable $_t) {}
+
     echo json_encode([
         "success" => true,
         "message" => "Bienvenido a Vixy Store, Conductor " . htmlspecialchars($firstName),
