@@ -196,9 +196,9 @@ export const DEMO_CONDUCTOR: Conductor = {
   totalEntregas: 0,
   calificacion: 5.0,
   totalViajes: 0,
-  ubicacionActual: 'Caracas',
-  lat: 10.4910,
-  lng: -66.8620,
+  ubicacionActual: 'GPS Pendiente',
+  lat: 0,
+  lng: 0,
   resenas: [],
   billetera: DEMO_CONDUCTOR_BILLETERA
 };

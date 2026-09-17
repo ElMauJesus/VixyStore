@@ -14,7 +14,8 @@ Options -Indexes
     RewriteCond %{HTTP:Authorization} ^(.*)
     RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
 
-    # Permitir peticiones a APIs directamente
+    # Permitir peticiones a APIs y assets Next.js directamente
+    RewriteCond %{REQUEST_URI} ^/_next/ [NC,OR]
     RewriteCond %{REQUEST_URI} ^/api/ [NC,OR]
     RewriteCond %{REQUEST_URI} ^/store/api/ [NC,OR]
     RewriteCond %{REQUEST_URI} ^/shop/backend/ [NC,OR]
@@ -29,6 +30,10 @@ Options -Indexes
     # Reescritura para assets estaticos compartidos de Store (evita duplicar 15MB en disco)
     RewriteCond %{REQUEST_URI} ^/store/(banners|logo|payment-icons|qr|cards)/(.*)$ [NC]
     RewriteRule ^store/(banners|logo|payment-icons|qr|cards)/(.*)$ $1/$2 [L]
+
+    # Reescritura para assets de Next.js si se solicitan con prefijo /store/
+    RewriteCond %{REQUEST_URI} ^/store/_next/(.*)$ [NC]
+    RewriteRule ^store/_next/(.*)$ _next/$1 [L]
 
     # Reescritura para assets estaticos compartidos de sub-apps (admin, comercio, delivery, pedidos) evitando duplicidad
     RewriteCond %{REQUEST_URI} ^/(admin|comercio|delivery|pedidos)/assets/(.*)$ [NC]

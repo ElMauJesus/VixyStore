@@ -59,7 +59,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
   
   // Basemap & Filter state
   const [mapStyle, setMapStyle] = useState<CartoMapStyle>(defaultStyle);
-  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [showComercios, setShowComercios] = useState(true);
   const [selectedComercio, setSelectedComercio] = useState<{ id: string; nombre: string; lat: number; lng: number; categoria?: string; [key: string]: any } | null>(null);
   const [selectedZona, setSelectedZona] = useState<typeof ZONAS_CALOR_CARACAS[0] | null>(null);
@@ -249,11 +249,12 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
 
     if (!showComercios) return;
 
-    // Los comercios sin coordenadas no tienen una ubicación verificable.
+    // Solo comercios EN LÍNEA (activo y abierto) con ubicación GPS válida
     const activeStores = stores.filter(s => {
       const lat = Number(s.lat);
       const lng = Number(s.lng);
-      return s.activo !== false
+      const isOnline = Boolean(s.activo) && s.abierto !== false;
+      return isOnline
         && Number.isFinite(lat) && Number.isFinite(lng)
         && lat !== 0 && lng !== 0;
     });
@@ -311,41 +312,77 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
 
     const activeDriverId = externalSelectedDriverId || selectedDriverOnMap?.id;
 
+    const matchesCurrentDriver = (candidate: any) => {
+      if (!driver) return false;
+      const candidateIds = [candidate.id, candidate.db_id, candidate.codigo_conductor, candidate.codigoConductor, candidate.cedula]
+        .filter(Boolean)
+        .map(String);
+      const currentDriver = driver as any;
+      const currentIds = [currentDriver.id, currentDriver.db_id, currentDriver.codigo_conductor, currentDriver.codigoConductor, currentDriver.cedula]
+        .filter(Boolean)
+        .map(String);
+      return candidateIds.some(id => currentIds.includes(id));
+    };
+
     // Filter drivers
     const driversToRender = allDrivers.map(d => {
-      if (d.id === driver?.id && realGpsCoords) {
-        return {
-          ...d,
-          lat: realGpsCoords.lat,
-          lng: realGpsCoords.lng,
-          hasRealGps: true,
-          velocidadKmh: realGpsCoords.speed || d.velocidadKmh || 0,
-          precisionGps: realGpsCoords.accuracy || d.precisionGps || 5
-        };
+      // Solo sobreescribir con GPS local del dispositivo si es vista individual del conductor (showAllDrivers = false)
+      // En el radar general de flota (showAllDrivers = true), respetar las coordenadas reales enviadas por cada teléfono
+      if (!showAllDrivers) {
+        const isCurrentDriver = matchesCurrentDriver(d);
+        if (isCurrentDriver && realGpsCoords && realGpsCoords.lat !== 0 && realGpsCoords.lng !== 0) {
+          return {
+            ...d,
+            lat: realGpsCoords.lat,
+            lng: realGpsCoords.lng,
+            hasRealGps: true,
+            velocidadKmh: realGpsCoords.speed || d.velocidadKmh || 0,
+            precisionGps: realGpsCoords.accuracy || d.precisionGps || 5
+          };
+        }
       }
       return d;
     }).filter(d => {
-      if (!showAllDrivers && d.id !== driver?.id) return false;
-      if (driverFilter === 'disponibles') return d.disponible;
-      if (driverFilter === 'en_ruta') return !d.disponible;
+      if (!showAllDrivers && !matchesCurrentDriver(d)) return false;
+      if (driverFilter === 'disponibles') return Boolean(d.disponible);
+      if (driverFilter === 'en_ruta') return Boolean(d.enCarrera || d.en_carrera);
       return true;
     }).filter(d => {
+      // REGLA CRÍTICA EN TIEMPO REAL:
+      // 1. Debe estar aprobado por el administrador
+      const isApproved = d.verificado_por_admin === 1 || 
+        String(d.status).toLowerCase() === 'aprobado' || 
+        String(d.estadoVerificacion).toLowerCase() === 'aprobado' ||
+        String(d.estado_registro).toLowerCase() === 'aprobado' ||
+        d.validado === true;
+      if (!isApproved) return false;
+
+      // 2. Debe estar en línea (disponible o en carrera activa)
+      const isOnline = Boolean(d.disponible || d.enCarrera || d.en_carrera);
+      if (!isOnline) return false;
+
+      // 3. Control de saldo: Debe tener la recarga mínima y no estar bloqueado por saldo negativo
+      const saldoUsd = Number(d.billetera?.saldoUsd ?? d.saldo_billetera_usd ?? d.saldoUsd ?? 0);
+      const limiteNegativo = Number(d.billetera?.limiteSaldoNegativo ?? d.limite_saldo_negativo ?? -0.50);
+      const isBlocked = Boolean(d.billetera?.bloqueadoPorSaldo || d.bloqueado_por_saldo) || (saldoUsd <= limiteNegativo);
+      if (isBlocked && !d.enCarrera && !d.en_carrera) return false;
+
+      // 4. Coordenadas GPS válidas reales (no nulas ni en 0,0)
       const lat = Number(d.lat);
       const lng = Number(d.lng);
-      const hasGps = Boolean(d.hasRealGps) && Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
-      const saldoUsd = Number(d.billetera?.saldoUsd ?? d.saldo_billetera_usd ?? d.saldoUsd ?? 0);
-      return saldoUsd > 0 && hasGps;
+      return Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
     });
 
     driversToRender.forEach(drv => {
       let drvLat = Number(drv.lat);
       let drvLng = Number(drv.lng);
-      const hasRealGps = Boolean(drv.hasRealGps) && drvLat !== 0 && drvLng !== 0 && !isNaN(drvLat) && !isNaN(drvLng);
+      const hasRealGps = drvLat !== 0 && drvLng !== 0 && !isNaN(drvLat) && !isNaN(drvLng);
       
       const isSelected = activeDriverId === drv.id;
       const saldoUsd = Number(drv.billetera?.saldoUsd ?? drv.saldo_billetera_usd ?? drv.saldoUsd ?? 0);
-      const isBlocked = Boolean(drv.billetera?.bloqueadoPorSaldo) || saldoUsd <= 0;
-      const isAvailable = drv.disponible && !isBlocked;
+      const limiteNegativo = Number(drv.billetera?.limiteSaldoNegativo ?? drv.limite_saldo_negativo ?? -0.50);
+      const isBlocked = Boolean(drv.billetera?.bloqueadoPorSaldo || drv.bloqueado_por_saldo) || saldoUsd <= limiteNegativo;
+      const isAvailable = Boolean(drv.disponible) && !isBlocked;
 
       // Colores de borde y pines:
       // Rojo: Bloqueado por saldo
@@ -442,6 +479,28 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
       driversLayerRef.current?.addLayer(marker);
     });
   }, [allDrivers, driverFilter, externalSelectedDriverId, selectedDriverOnMap, showAllDrivers, realGpsCoords, onSelectDriver]);
+
+  // Centrar y volar el mapa hacia el conductor seleccionado (ej: botón "Ubicar" del panel lateral)
+  useEffect(() => {
+    if (!externalSelectedDriverId || !mapInstanceRef.current) return;
+    const targetDrv = allDrivers.find(d => 
+      d.id === externalSelectedDriverId || 
+      d.codigo_conductor === externalSelectedDriverId || 
+      d.codigoConductor === externalSelectedDriverId ||
+      (d.legal?.cedula && d.legal.cedula === externalSelectedDriverId) ||
+      (d.cedula && d.cedula === externalSelectedDriverId)
+    );
+    if (targetDrv) {
+      const lat = Number(targetDrv.lat);
+      const lng = Number(targetDrv.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+        mapInstanceRef.current.flyTo([lat, lng], 16, { duration: 1.2 });
+        setSelectedDriverOnMap(targetDrv);
+        setSelectedComercio(null);
+        setSelectedZona(null);
+      }
+    }
+  }, [externalSelectedDriverId, allDrivers]);
 
   // 6. Real GPS Beacon Layer
   useEffect(() => {

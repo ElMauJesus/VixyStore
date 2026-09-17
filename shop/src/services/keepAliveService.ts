@@ -17,6 +17,44 @@ export interface KeepAlivePayload {
 
 let keepAliveIntervalId: any = null;
 
+export async function sendDriverGpsHeartbeat(payload: {
+  usuario_id: string;
+  nombre: string;
+  cedula?: string;
+  latitud: number;
+  longitud: number;
+}) {
+  const body = JSON.stringify({
+    ...payload,
+    tipo_usuario: 'conductor',
+    online: 1,
+    app_version: '2.0.0-gps'
+  });
+
+  if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    try {
+      navigator.sendBeacon('/api/keep_alive.php', new Blob([body], { type: 'application/json' }));
+    } catch {
+      // Continue with fetch below.
+    }
+  }
+
+  for (const endpoint of ['/api/keep_alive.php', '/shop/backend/php/keep_alive.php']) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      if (response.ok) return response;
+    } catch {
+      // Continue with the synchronized fallback endpoint.
+    }
+  }
+
+  throw new Error('No se pudo publicar el GPS del conductor');
+}
+
 /**
  * Inicia el latido en segundo plano para el usuario conectado
  */
@@ -32,6 +70,7 @@ export function startKeepAliveHeartbeat(
     try {
       let lat: number | undefined = config.latitud;
       let lng: number | undefined = config.longitud;
+      let gpsFresh = false;
 
       // Obtener coordenadas GPS en tiempo real si el dispositivo/navegador lo permite
       if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
@@ -41,10 +80,13 @@ export function startKeepAliveHeartbeat(
               (pos) => {
                 lat = pos.coords.latitude;
                 lng = pos.coords.longitude;
+                gpsFresh = true;
+                config.latitud = lat;
+                config.longitud = lng;
                 resolve();
               },
               () => resolve(),
-              { enableHighAccuracy: true, timeout: 3000, maximumAge: 10000 }
+              { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
             );
           });
         } catch {
@@ -70,27 +112,30 @@ export function startKeepAliveHeartbeat(
         latitud: lat,
         longitud: lng,
         bateria: batteryLevel,
-        online: config.online !== false ? 1 : 0,
+        // A conductor must have a fresh sensor reading to remain visible online.
+        online: config.online !== false && (config.tipoUsuario !== 'conductor' || gpsFresh) ? 1 : 0,
         app_version: config.appVersion || '2.0.0-shop'
       };
 
-      // Detectar endpoint base apuntando a /shop/backend/php
-      const apiEndpoint = typeof window !== 'undefined' && window.location.pathname.startsWith('/shop')
-        ? '/shop/backend/php/keep_alive.php'
-        : '/backend/php/keep_alive.php';
+      const endpoints = ['/api/keep_alive.php', '/shop/backend/php/keep_alive.php'];
+      let response: Response | null = null;
+      for (const endpoint of endpoints) {
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyData)
+          });
+          if (response.ok) break;
+        } catch {
+          // Continue with the synchronized fallback endpoint.
+        }
+      }
 
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(bodyData)
-      });
-
-      if (response.ok) {
-        const json = await response.json();
-        if (onSuccess) onSuccess(json);
-      } else {
+      if (response && response.ok) {
+        const json = await response.json().catch(() => null);
+        if (onSuccess && json) onSuccess(json);
+      } else if (response) {
         if (onError) onError(new Error(`HTTP ${response.status}`));
       }
     } catch (e) {
@@ -111,4 +156,11 @@ export function stopKeepAliveHeartbeat() {
     clearInterval(keepAliveIntervalId);
     keepAliveIntervalId = null;
   }
+}
+
+/**
+ * Fuerza un latido inmediato (útil cuando la app vuelve de segundo plano/WhatsApp)
+ */
+export function forceKeepAlivePing(config: KeepAlivePayload) {
+  startKeepAliveHeartbeat(config, 20);
 }

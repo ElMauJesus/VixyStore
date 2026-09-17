@@ -63,6 +63,34 @@ class Database {
         return self::$instance->pdo;
     }
 
+    public static function getRegistConnection(): ?PDO {
+        try {
+            return new PDO(
+                'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . REGIST_DB_NAME . ';charset=utf8mb4',
+                DB_USER,
+                DB_PASS,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => true]
+            );
+        } catch (Throwable $e) {
+            error_log('Error conectando a BD de registros: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    public static function getStoreConnection(): ?PDO {
+        try {
+            return new PDO(
+                'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . STORE_DB_NAME . ';charset=utf8mb4',
+                DB_USER,
+                DB_PASS,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => true]
+            );
+        } catch (Throwable $e) {
+            error_log('Error conectando a BD de tienda: ' . $e->getMessage());
+            return null;
+        }
+    }
+
     public static function jsonResponse($data, int $statusCode = 200): void {
         http_response_code($statusCode);
         echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);

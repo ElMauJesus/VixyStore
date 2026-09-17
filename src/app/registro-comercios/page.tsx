@@ -207,17 +207,11 @@ export default function RegistroComercioLandingPage() {
                 });
                 setSubmitted(true);
             } else {
-                setErrorMessage(data?.message || 'Ocurrió un inconveniente al registrar el comercio. Por favor verifica los datos.');
+                setErrorMessage(data?.message || data?.mensaje || 'Ocurrió un inconveniente al registrar el comercio. Por favor verifica los datos.');
             }
         } catch (err: any) {
-            console.warn('Fallback de conexión de registro:', err);
-            setComercioCreado({
-                codigo: 'COM-LOCAL-DEMO',
-                nombre: form.nombreComercial,
-                password: 'Vx' + Math.random().toString(36).substring(2, 8).toUpperCase(),
-                identificador: form.tipoRegistro === 'rif' ? form.rifCedulaJuridica : form.cedulaRepresentante
-            });
-            setSubmitted(true);
+            // Error de red: NO generar código local falso — mostrar el error real
+            setErrorMessage('Error de conexión con el servidor. Por favor verifica tu internet e intenta de nuevo.');
         } finally {
             setLoading(false);
         }

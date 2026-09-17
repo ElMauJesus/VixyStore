@@ -13,7 +13,6 @@ $dirs = @(
     "out/shop/backend",
     "out/admin",
     "out/comercio",
-    "out/delivery",
     "out/pedidos",
     "out/assets",
     "out/registro-comercios",
@@ -122,15 +121,20 @@ if (-not (Test-Path "out/uploads/comercios")) {
     New-Item -ItemType Directory -Path "out/uploads/comercios" -Force | Out-Null
 }
 
-Copy-Item -Path "database/actualizar_verificacion_cuentas.sql" -Destination "out/shop" -Force
-Copy-Item -Path "database/migracion_claves_y_conductores.sql" -Destination "out/shop" -Force
+# NOTA: archivos SQL NO se copian al web root por seguridad.
+
 
 if (Test-Path "out/shop/assets/aistudio") {
     Remove-Item -Path "out/shop/assets/aistudio" -Recurse -Force
 }
 
-# 7b. Eliminar /panel/ del output - los deliverys se manejan en el admin panel de /shop/
-#     NO existe URL separada /panel/ - todo se gestiona desde vixy.uno/shop/
+# 7b. Eliminar /delivery/ del output - los conductores se gestionan SOLO desde la APK
+#     NO existe URL separada /delivery/ en la web - todo se gestiona desde vixy.uno/shop/
+if (Test-Path "out/delivery") {
+    Remove-Item -Path "out/delivery" -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "[OK] out/delivery eliminado - conductores solo usan la APK"
+}
+# 7c. Eliminar /panel-admin/ y /panel/ del output
 if (Test-Path "out/panel-admin") {
     Remove-Item -Path "out/panel-admin" -Recurse -Force -ErrorAction SilentlyContinue
 }
@@ -147,10 +151,6 @@ if (Test-Path "public/admin") {
 if (Test-Path "public/comercio") {
     Copy-Item -Path "public/comercio/*" -Destination "out/comercio" -Recurse -Force
     Write-Host "[OK] Panel Comercio (Vixy Business) sincronizado en out/comercio"
-}
-if (Test-Path "public/delivery") {
-    Copy-Item -Path "public/delivery/*" -Destination "out/delivery" -Recurse -Force
-    Write-Host "[OK] Web Vixy Delivery sincronizada en out/delivery"
 }
 if (Test-Path "public/pedidos") {
     Copy-Item -Path "public/pedidos/*" -Destination "out/pedidos" -Recurse -Force
@@ -171,8 +171,8 @@ if (Test-Path "public/admin/assets") {
     Write-Host "[OK] Assets del panel Admin sincronizados en out/admin/assets y out/assets"
 }
 
-# Limpiar carpetas assets redundantes dentro de las sub-apps (los assets se sirven centralizadamente desde out/assets/ sin duplicar 60MB)
-$subAppAssets = @("out/admin/assets", "out/comercio/assets", "out/delivery/assets", "out/pedidos/assets")
+# Limpiar carpetas assets redundantes dentro de las sub-apps (los assets se sirven centralizadamente desde out/assets/)
+$subAppAssets = @("out/admin/assets", "out/comercio/assets", "out/pedidos/assets")
 foreach ($sa in $subAppAssets) {
     if (Test-Path $sa) {
         Remove-Item -Path $sa -Recurse -Force -ErrorAction SilentlyContinue

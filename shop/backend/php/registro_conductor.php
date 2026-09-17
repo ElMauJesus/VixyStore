@@ -46,6 +46,20 @@ $telefono        = trim($data['telefono'] ?? '');
 $email           = trim($data['email'] ?? '');
 $fechaNacimiento = trim($data['fecha_nacimiento'] ?? '');
 $direccion       = trim($data['direccion'] ?? '');
+$ubicacionGps    = trim($data['ubicacion_gps'] ?? ($data['ubicacion'] ?? ''));
+$latInit = null;
+$lngInit = null;
+if (!empty($ubicacionGps)) {
+    $uParts = explode(',', $ubicacionGps);
+    if (count($uParts) >= 2) {
+        $pLat = (float)trim($uParts[0]);
+        $pLng = (float)trim($uParts[1]);
+        if ($pLat != 0.0 && $pLng != 0.0) {
+            $latInit = $pLat;
+            $lngInit = $pLng;
+        }
+    }
+}
 
 // Datos de Moto
 $motoMarca  = trim($data['moto_marca'] ?? '');
@@ -105,11 +119,74 @@ $dupCheck->execute([
     'placa'  => $motoPlaca,
     'email'  => $dupEmail
 ]);
-if ($dupCheck->fetch()) {
+$existingCond = $dupCheck->fetch();
+if ($existingCond) {
+    $existingId = $existingCond['id'];
+    $stCod = $pdoRegist->prepare("SELECT codigo_conductor FROM conductores WHERE id = :id LIMIT 1");
+    $stCod->execute(['id' => $existingId]);
+    $rowCod = $stCod->fetch();
+    $codigoConductor = !empty($rowCod['codigo_conductor']) ? $rowCod['codigo_conductor'] : ('DRV-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6)));
+    $passwordTemporal = '123456';
+    $passwordHash = password_hash($passwordTemporal, PASSWORD_BCRYPT);
+
+    $updCond = $pdoRegist->prepare("
+        UPDATE conductores 
+        SET password_hash = :h,
+            codigo_conductor = :c,
+            nombre = :n,
+            apellido = :a,
+            telefono = :t,
+            moto_placa = :p,
+            estado_registro = 'pendiente_aprobacion',
+            verificado_por_admin = 0
+        WHERE id = :id
+    ");
+    $updCond->execute([
+        'h' => $passwordHash,
+        'c' => $codigoConductor,
+        'n' => $nombre,
+        'a' => $apellido,
+        't' => $telefono,
+        'p' => $motoPlaca,
+        'id' => $existingId
+    ]);
+
+    // Replicar en vixy_dl
+    try {
+        $pdoDl = Database::getConnection();
+        if ($pdoDl) {
+            $pdoDl->prepare("
+                UPDATE conductores 
+                SET password_hash = :h,
+                    codigo_conductor = :c,
+                    nombre = :n,
+                    apellido = :a,
+                    telefono = :t,
+                    status = 'pendiente',
+                    estado_registro = 'pendiente_aprobacion',
+                    verificado_por_admin = 0,
+                    disponible = 0
+                WHERE cedula = :ced OR id = :id OR codigo_conductor = :c
+            ")->execute([
+                'h' => $passwordHash,
+                'c' => $codigoConductor,
+                'n' => $nombre,
+                'a' => $apellido,
+                't' => $telefono,
+                'ced' => $cedula,
+                'id' => $existingId
+            ]);
+        }
+    } catch (Throwable $eSync) {}
+
     Database::jsonResponse([
-        'error'   => true,
-        'mensaje' => 'Ya existe un conductor registrado con esa cedula, telefono, placa o correo electronico.'
-    ], 409);
+        'success'           => true,
+        'id'                => $existingId,
+        'codigo_conductor'  => $codigoConductor,
+        'password_temporal' => $passwordTemporal,
+        'cedula'            => $cedula,
+        'mensaje'           => '¡Registro de conductor verificado y actualizado con éxito! Tu contraseña temporal es 123456.'
+    ], 200);
 }
 
 // ─── Generar codigo unico de conductor ───────────────────────────────────────
@@ -293,6 +370,65 @@ try {
         'mensaje' => 'Error al registrar el conductor. Por favor intente de nuevo.',
         'detalle' => $e->getMessage()
     ], 500);
+}
+
+// ─── Replicar en c2861522_vixy_dl (Base Operativa Delivery) ────────────────────
+try {
+    $pdoDl = Database::getConnection();
+    if ($pdoDl) {
+        $colsDl = array_column($pdoDl->query('SHOW COLUMNS FROM conductores')->fetchAll(), 'Field');
+        $stCheckDl = $pdoDl->prepare("SELECT id FROM conductores WHERE cedula = :c OR telefono = :t OR id = :id2 LIMIT 1");
+        $stCheckDl->execute(['c' => $cedula, 't' => $telefono, 'id2' => $codigoConductor]);
+        if (!$stCheckDl->fetch()) {
+            $insDl = [
+                'id'                             => $codigoConductor,
+                'codigo_conductor'               => $codigoConductor,
+                'nombre'                         => $nombre,
+                'apellido'                       => $apellido,
+                'cedula'                         => $cedula,
+                'telefono'                       => $telefono,
+                'email'                          => $email,
+                'password_hash'                  => $passwordHash,
+                'foto_url'                       => $fotoUrls['foto_perfil_url'] ?: ($fotoUrls['foto_cedula_url'] ?: null),
+                'placa_moto'                     => strtoupper($motoPlaca),
+                'marca_moto'                     => $motoMarca,
+                'modelo_moto'                    => $motoModelo,
+                'ano_moto'                       => $motoAno,
+                'color_moto'                     => $motoColor,
+                'latitud_actual'                 => $latInit,
+                'longitud_actual'                => $lngInit,
+                'ubicacion_actual'               => $ubicacionGps ?: null,
+                'moto_serial_motor'              => $motoSerialMotor ?: null,
+                'moto_serial_chasis'             => $motoSerialChasis ?: null,
+                'licencia_grado'                 => $licenciaGrado ?: null,
+                'licencia_conducir'              => $licencia,
+                'disponible'                     => 0,
+                'en_carrera'                     => 0,
+                'saldo_billetera_usd'            => 0.00,
+                'limite_saldo_negativo'          => -0.50,
+                'bloqueado_por_saldo'            => 0,
+                'status'                         => 'pendiente',
+                'estado_registro'                => 'pendiente_aprobacion',
+                'verificado_por_admin'           => 0,
+                'carpeta_imagenes'               => $carpetaImagenes,
+                'foto_perfil_url'                => $fotoUrls['foto_perfil_url'],
+                'foto_cedula_url'                => $fotoUrls['foto_cedula_url'],
+                'foto_cedula_reverso_url'        => $fotoUrls['foto_cedula_reverso_url'],
+                'foto_licencia_url'              => $fotoUrls['foto_licencia_url'],
+                'foto_carnet_url'                => $fotoUrls['foto_carnet_url'],
+                'foto_carnet_circulacion_url'    => $fotoUrls['foto_carnet_url'],
+                'foto_certificado_medico_url'    => $fotoUrls['foto_certificado_medico_url'],
+                'foto_rcv_url'                   => $fotoUrls['foto_rcv_url'],
+                'foto_antecedentes_url'          => $fotoUrls['foto_antecedentes_url'],
+                'ultima_actualizacion'           => date('Y-m-d H:i:s')
+            ];
+            $insDl = array_intersect_key($insDl, array_flip($colsDl));
+            $colNamesDl = array_keys($insDl);
+            $pdoDl->prepare("INSERT INTO conductores (`" . implode('`, `', $colNamesDl) . "`) VALUES (:" . implode(', :', $colNamesDl) . ")")->execute($insDl);
+        }
+    }
+} catch (Throwable $eDl) {
+    error_log('Error replicando conductor en vixy_dl: ' . $eDl->getMessage());
 }
 
 // ─── Respuesta exitosa ────────────────────────────────────────────────────────

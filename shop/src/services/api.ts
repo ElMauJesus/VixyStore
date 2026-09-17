@@ -7,7 +7,7 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
   (typeof window !== 'undefined' && window.location.pathname.startsWith('/shop') 
     ? '/shop/backend/php' 
-    : '/backend/php');
+    : '/api');
 
 const ADMIN_PANEL_KEY = 'vixy_admin_panel_2026';
 
@@ -35,8 +35,8 @@ class ApiService {
     return this.token;
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+  private async request<T>(endpoint: string, options: RequestInit = {}, passthroughErrors = false): Promise<T> {
+    const primaryUrl = `${API_BASE_URL}${endpoint}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -54,22 +54,48 @@ class ApiService {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    try {
-      const response = await fetch(url, { ...options, headers });
-      const data = await response.json();
-      // No tratar como éxito respuestas con error del backend
-      if (data && data.error === true) {
-        throw new Error((data as any).mensaje || (data as any).message || 'Error de la API');
+    // Intentar primero la URL primaria, luego la de fallback
+    const tryFetch = async (url: string): Promise<T | null> => {
+      try {
+        const response = await fetch(url, { ...options, headers });
+        const data = await response.json().catch(() => null);
+        if (!data) return null;
+        // En modo passthrough, devolver el JSON tal cual (incluyendo errores del servidor)
+        // para que el caller pueda leer success/mensaje/error sin que se lance excepción
+        if (passthroughErrors) {
+          return data as T;
+        }
+        if (data.error === true) {
+          throw new Error((data as any).mensaje || (data as any).message || 'Error de la API');
+        }
+        return data as T;
+      } catch (err: any) {
+        // Re-lanzar solo si es nuestro error controlado (no network)
+        if (err.message && !err.message.startsWith('Failed to fetch') && !err.message.startsWith('NetworkError') && !err.message.startsWith('Load failed')) {
+          throw err;
+        }
+        return null; // Error de red, intentar fallback
       }
-      return data as T;
-    } catch (err: any) {
-      console.warn(`[Vixy API] Offline o Endpoint inaccesible (${url}):`, err.message);
-      throw err;
-    }
+    };
+
+    const primaryResult = await tryFetch(primaryUrl);
+    if (primaryResult !== null) return primaryResult;
+
+    // Fallback automático entre /api y /shop/backend/php
+    const fallbackBase = API_BASE_URL.includes('/shop/backend/php') ? '/api' : '/shop/backend/php';
+    const fallbackUrl = `${fallbackBase}${endpoint}`;
+    const fallbackResult = await tryFetch(fallbackUrl);
+    if (fallbackResult !== null) return fallbackResult;
+
+    console.warn(`[Vixy API] Endpoint inaccesible: ${primaryUrl}`);
+    throw new Error('No se pudo conectar con el servidor Vixy. Verifica tu conexión a internet.');
   }
 
   // --- AUTENTICACIÓN (SUPERUSUARIO: vixydely / 123456) ---
-  public async login(identifier: string, password: string, codigo?: string) {
+  public async login(identifier: string, password: string, codigo?: string, appRole?: string) {
+    // passthroughErrors=true: el servidor puede devolver {error:true, mensaje:"..."} y
+    // lo retornamos directamente en vez de lanzar una excepción, para que el context
+    // pueda leer el mensaje de error y mostrárselo al usuario.
     return this.request<{
       success: boolean;
       token?: string;
@@ -87,24 +113,27 @@ class ApiService {
         rif: identifier,
         cedula: identifier,
         password,
+        app_role: appRole || '',
         codigo: codigo || '',
         codigo_comercio: codigo || '',
         codigo_conductor: codigo || '',
         codigo_vixy: codigo || ''
       })
-    });
+    }, true /* passthroughErrors */);
   }
 
   public async registerClient(clientData: any) {
+    // passthroughErrors=true para capturar mensajes de error del servidor (duplicados, validaciones)
     return this.request<{
       success: boolean;
       token?: string;
       usuario?: any;
       mensaje?: string;
+      error?: boolean;
     }>('/auth.php?action=register_client', {
       method: 'POST',
       body: JSON.stringify(clientData)
-    });
+    }, true /* passthroughErrors */);
   }
 
   public async registerComercio(comercioData: any) {
@@ -311,6 +340,12 @@ class ApiService {
     });
   }
 
+  public async clearDriverGps(conductorId: string) {
+    return this.request<{ success: boolean }>('/conductores.php?action=gps_clear', {
+      method: 'POST',
+      body: JSON.stringify({ conductor_id: conductorId })
+    });
+  }
   // --- RECARGAS ---
   public async submitRecarga(recargaData: {
     usuario_id: string;

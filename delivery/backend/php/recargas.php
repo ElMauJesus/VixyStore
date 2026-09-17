@@ -19,7 +19,7 @@ if ($method === 'GET') {
     $usuarioId = $_GET['usuario_id'] ?? null;
 
     if (!$usuarioId) {
-        $authUser = AuthMiddleware::requireAuth(['super_admin', 'operador', 'finanzas', 'auditor']);
+        $authUser = AuthMiddleware::requireAuth(['super_admin', 'operador', 'finanzas', 'auditor', 'admin', 'administrador']);
     }
 
     $sql = "SELECT r.*, 
@@ -133,11 +133,13 @@ if ($method === 'POST') {
 }
 
 // -----------------------------------------------------------------------------
-// PUT: APROBAR O RECHAZAR RECARGA (ADMINISTRACIÓN)
+// PUT / POST: APROBAR O RECHAZAR RECARGA (ADMINISTRACIÓN)
 // -----------------------------------------------------------------------------
-if ($method === 'PUT' && $id) {
-    $authUser = AuthMiddleware::requireAuth(['super_admin', 'finanzas', 'operador']);
-    $data = Database::getJsonInput();
+$data = Database::getJsonInput();
+$effectiveId = $id ?? ($data['id'] ?? ($data['recarga_id'] ?? ($data['solicitud_id'] ?? null)));
+
+if (($method === 'PUT' || ($method === 'POST' && isset($data['accion']))) && $effectiveId) {
+    $authUser = AuthMiddleware::requireAuth(['super_admin', 'finanzas', 'operador', 'admin', 'administrador']);
     $accion = strtolower(trim((string)($data['accion'] ?? 'aprobar'))); // 'aprobar' o 'rechazar'
     $motivoRechazo = $data['motivo_rechazo'] ?? null;
     $notaVerificacion = trim($data['nota_verificacion'] ?? $motivoRechazo ?? 'Aprobado por administración');
@@ -149,14 +151,14 @@ if ($method === 'PUT' && $id) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'La acción de recarga no es válida'], 400);
     }
 
-    $stmtCheck = $pdo->prepare("SELECT * FROM recargas_billetera WHERE LOWER(TRIM(id)) = LOWER(TRIM(:id)) AND LOWER(TRIM(estado)) = 'pendiente' LIMIT 1");
-    $stmtCheck->execute(['id' => $id]);
+    $stmtCheck = $pdo->prepare("SELECT * FROM recargas_billetera WHERE (LOWER(TRIM(id)) = LOWER(TRIM(:id)) OR LOWER(TRIM(referencia)) = LOWER(TRIM(:id2))) AND LOWER(TRIM(estado)) = 'pendiente' LIMIT 1");
+    $stmtCheck->execute(['id' => $effectiveId, 'id2' => $effectiveId]);
     $recarga = $stmtCheck->fetch();
 
     if (!$recarga) {
         // Buscar si existe pero ya no está pendiente
-        $stmtAny = $pdo->prepare("SELECT estado FROM recargas_billetera WHERE LOWER(TRIM(id)) = LOWER(TRIM(:id)) LIMIT 1");
-        $stmtAny->execute(['id' => $id]);
+        $stmtAny = $pdo->prepare("SELECT estado FROM recargas_billetera WHERE (LOWER(TRIM(id)) = LOWER(TRIM(:id)) OR LOWER(TRIM(referencia)) = LOWER(TRIM(:id2))) LIMIT 1");
+        $stmtAny->execute(['id' => $effectiveId, 'id2' => $effectiveId]);
         $existing = $stmtAny->fetch();
         if ($existing) {
             Database::jsonResponse(['success' => true, 'estado' => $existing['estado'], 'mensaje' => 'La recarga ya fue procesada anteriormente: ' . $existing['estado']]);
@@ -187,37 +189,72 @@ if ($method === 'PUT' && $id) {
                 if (in_array('saldo_billetera_usd', $colInfo)) $cols[] = 'saldo_billetera_usd = saldo_billetera_usd + :monto';
                 if (in_array('bloqueado_por_saldo', $colInfo)) $cols[] = 'bloqueado_por_saldo = 0';
                 if (in_array('disponible', $colInfo)) $cols[] = 'disponible = 1';
-                if ($cols) {
-                    $params = ['uid' => $usuarioId];
-                    if (in_array('saldo_billetera_usd', $colInfo)) $params['monto'] = $montoUsd;
-                    $pdo->prepare('UPDATE conductores SET ' . implode(', ', $cols) . ' WHERE id = :uid')->execute($params);
+                if (in_array('ultima_actualizacion', $colInfo)) $cols[] = 'ultima_actualizacion = NOW()';
+
+                $idDigits = preg_replace('/[^0-9]/', '', $usuarioId);
+                $whereCond = 'WHERE id = :uid OR codigo_conductor = :uid2 OR cedula = :uid3';
+                if (!empty($idDigits)) {
+                    $whereCond .= " OR REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), ' ', '') = :digits";
                 }
+
+                if ($cols) {
+                    $params = ['uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId];
+                    if (!empty($idDigits)) $params['digits'] = $idDigits;
+                    if (in_array('saldo_billetera_usd', $colInfo)) $params['monto'] = $montoUsd;
+                    $pdo->prepare('UPDATE conductores SET ' . implode(', ', $cols) . " {$whereCond}")->execute($params);
+                }
+
+                // También acreditar en c2861522_regist si existe
+                $pdoReg = Database::getRegistConnection();
+                if ($pdoReg) {
+                    try {
+                        $paramsR = ['uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId, 'monto' => $montoUsd];
+                        $whereCondR = 'WHERE id = :uid OR codigo_conductor = :uid2 OR cedula = :uid3';
+                        if (!empty($idDigits)) {
+                            $whereCondR .= " OR REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), ' ', '') = :digits";
+                            $paramsR['digits'] = $idDigits;
+                        }
+                        $pdoReg->prepare("UPDATE conductores SET saldo_billetera_usd = saldo_billetera_usd + :monto {$whereCondR}")->execute($paramsR);
+                    } catch (Throwable $_tR) {}
+                }
+
                 if (in_array('saldo_billetera_usd', $colInfo)) {
-                    $r = $pdo->prepare('SELECT saldo_billetera_usd FROM conductores WHERE id = :id');
-                    $r->execute(['id' => $usuarioId]);
-                    $saldoNuevo = (float)$r->fetchColumn();
-                    $saldoAnterior = $saldoNuevo - $montoUsd;
+                    $paramsQ = ['uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId];
+                    if (!empty($idDigits)) $paramsQ['digits'] = $idDigits;
+                    $r = $pdo->prepare("SELECT saldo_billetera_usd FROM conductores {$whereCond} LIMIT 1");
+                    $r->execute($paramsQ);
+                    $val = $r->fetchColumn();
+                    if ($val !== false) {
+                        $saldoNuevo = (float)$val;
+                        $saldoAnterior = $saldoNuevo - $montoUsd;
+                    }
                 }
             } elseif ($tipoUsuario === 'comercio') {
-                $pdo->prepare('UPDATE comercios SET saldo_billetera_usd = saldo_billetera_usd + :monto WHERE id = :uid')
-                    ->execute(['monto' => $montoUsd, 'uid' => $usuarioId]);
-                $r = $pdo->prepare('SELECT saldo_billetera_usd FROM comercios WHERE id = :id');
-                $r->execute(['id' => $usuarioId]);
-                $saldoNuevo = (float)$r->fetchColumn();
-                $saldoAnterior = $saldoNuevo - $montoUsd;
+                $pdo->prepare('UPDATE comercios SET saldo_billetera_usd = saldo_billetera_usd + :monto WHERE id = :uid OR rif = :uid2 OR email = :uid3')
+                    ->execute(['monto' => $montoUsd, 'uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId]);
+                $r = $pdo->prepare('SELECT saldo_billetera_usd FROM comercios WHERE id = :id OR rif = :id2 LIMIT 1');
+                $r->execute(['id' => $usuarioId, 'id2' => $usuarioId]);
+                $val = $r->fetchColumn();
+                if ($val !== false) {
+                    $saldoNuevo = (float)$val;
+                    $saldoAnterior = $saldoNuevo - $montoUsd;
+                }
             } else {
                 // Para clientes: la columna oficial es saldo_cartera_usd (con fallback a saldo_billetera_usd)
                 $colClientes = $pdo->query("SHOW COLUMNS FROM clientes")->fetchAll(\PDO::FETCH_COLUMN);
                 $clienteSaldoCol = in_array('saldo_cartera_usd', $colClientes) ? 'saldo_cartera_usd' : 'saldo_billetera_usd';
-                $pdo->prepare("UPDATE clientes SET {$clienteSaldoCol} = {$clienteSaldoCol} + :monto WHERE id = :uid")
-                    ->execute(['monto' => $montoUsd, 'uid' => $usuarioId]);
-                $r = $pdo->prepare("SELECT {$clienteSaldoCol} FROM clientes WHERE id = :id");
-                $r->execute(['id' => $usuarioId]);
-                $saldoNuevo = (float)$r->fetchColumn();
-                $saldoAnterior = $saldoNuevo - $montoUsd;
+                $pdo->prepare("UPDATE clientes SET {$clienteSaldoCol} = {$clienteSaldoCol} + :monto WHERE id = :uid OR cedula = :uid2 OR telefono = :uid3")
+                    ->execute(['monto' => $montoUsd, 'uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId]);
+                $r = $pdo->prepare("SELECT {$clienteSaldoCol} FROM clientes WHERE id = :id OR cedula = :id2 LIMIT 1");
+                $r->execute(['id' => $usuarioId, 'id2' => $usuarioId]);
+                $val = $r->fetchColumn();
+                if ($val !== false) {
+                    $saldoNuevo = (float)$val;
+                    $saldoAnterior = $saldoNuevo - $montoUsd;
+                }
             }
         } catch (Throwable $_eSaldo) {
-            error_log('Vixy recharge: balance update non-critical warning: ' . $_eSaldo->getMessage());
+            error_log('Vixy recharge: balance update warning: ' . $_eSaldo->getMessage());
         }
 
         // 3. Tablas de auditoría auxiliares (en bloques try-catch independientes)

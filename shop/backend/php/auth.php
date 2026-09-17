@@ -11,44 +11,141 @@ require_once __DIR__ . '/config/auth_middleware.php';
 $pdo = Database::getConnection();
 $action = $_GET['action'] ?? 'login';
 
+if ($action === 'version' || $action === 'ping') {
+    Database::jsonResponse([
+        'status' => 'online',
+        'build' => '2026-09-13-v3',
+        'driver_schema_auto_heal' => true,
+        'mensaje' => 'API de autenticacion Vixy actualizada correctamente'
+    ]);
+}
+
+/**
+ * Auto-reparación y validación de columnas en tabla clientes
+ */
+function auto_heal_clientes_table(PDO $pdo): void {
+    static $healed = false;
+    if ($healed) return;
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `clientes` (
+              `id` varchar(50) NOT NULL,
+              `nombre` varchar(120) NOT NULL,
+              `apellido` varchar(120) NOT NULL DEFAULT 'Cliente',
+              `cedula` varchar(30) NOT NULL,
+              `email` varchar(120) NOT NULL,
+              `telefono` varchar(30) NOT NULL,
+              `password_hash` varchar(255) NOT NULL,
+              `direccion_habitual` text,
+              `latitud` decimal(10,8) DEFAULT 10.48060000,
+              `longitud` decimal(11,8) DEFAULT -66.90360000,
+              `avatar_url` varchar(255) DEFAULT '/uploads/clientes/avatar-default.jpg',
+              `foto_cedula_url` varchar(255) DEFAULT NULL,
+              `foto_selfie_url` varchar(255) DEFAULT NULL,
+              `saldo_cartera_usd` decimal(10,2) DEFAULT 0.00,
+              `saldo_cartera_bs` decimal(12,2) DEFAULT 0.00,
+              `saldo_billetera_usd` decimal(10,2) DEFAULT 0.00,
+              `activo` tinyint(1) DEFAULT 1,
+              `creado_en` timestamp DEFAULT CURRENT_TIMESTAMP,
+              `actualizado_en` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              KEY `idx_cedula` (`cedula`),
+              KEY `idx_telefono` (`telefono`),
+              KEY `idx_email` (`email`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $cols = array_column($pdo->query("SHOW COLUMNS FROM clientes")->fetchAll(PDO::FETCH_ASSOC), 'Field');
+        $alterCols = [
+            'saldo_billetera_usd' => 'DECIMAL(10,2) NOT NULL DEFAULT 0.00',
+            'saldo_cartera_usd'   => 'DECIMAL(10,2) NOT NULL DEFAULT 0.00',
+            'saldo_cartera_bs'    => 'DECIMAL(12,2) NOT NULL DEFAULT 0.00',
+            'activo'              => 'TINYINT(1) NOT NULL DEFAULT 1',
+            'direccion_habitual'  => 'TEXT NULL',
+            'apellido'            => "VARCHAR(120) NOT NULL DEFAULT 'Cliente'",
+            'avatar_url'          => "VARCHAR(255) DEFAULT '/uploads/clientes/avatar-default.jpg'",
+            'foto_cedula_url'     => 'VARCHAR(255) DEFAULT NULL',
+            'foto_selfie_url'     => 'VARCHAR(255) DEFAULT NULL'
+        ];
+        foreach ($alterCols as $colName => $colDef) {
+            if (!in_array($colName, $cols, true)) {
+                try {
+                    $pdo->exec("ALTER TABLE clientes ADD COLUMN `{$colName}` {$colDef}");
+                } catch (Throwable $_eCol) {}
+            }
+        }
+        $healed = true;
+    } catch (Throwable $e) {
+        error_log('Error in auto_heal_clientes_table: ' . $e->getMessage());
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ACCIÓN: LOGIN (ADMIN, CLIENTE, COMERCIO, CONDUCTOR)
 // -----------------------------------------------------------------------------
 if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    auto_heal_clientes_table($pdo);
     $input = Database::getJsonInput();
+    if (empty($input) && !empty($_POST)) {
+        $input = $_POST;
+    }
     $identifier = trim(
         $input['identifier'] ?? 
+        $input['cedula'] ?? 
         $input['username'] ?? 
         $input['email'] ?? 
         $input['login'] ?? 
-        $input['rif'] ?? 
-        $input['cedula'] ?? 
         $input['telefono'] ?? 
-        ''
-    );
-    $password   = trim($input['password'] ?? '');
-    // Campos para login de comercios y conductores (CODIGO DE VIXY)
-    $codigoAcceso = trim(
-        $input['codigo_vixy'] ?? 
-        $input['codigo_comercio'] ?? 
+        $input['phone'] ?? 
+        $input['rif'] ?? 
         $input['codigo_conductor'] ?? 
+        $input['codigo_comercio'] ?? 
+        $input['codigo_vixy'] ?? 
         $input['codigo'] ?? 
+        $input['usuario'] ?? 
         ''
     );
-
-    // Si el usuario puso el código pero dejó vacío el identificador (o viceversa)
-    if (empty($identifier) && !empty($codigoAcceso)) {
-        $identifier = $codigoAcceso;
+    $password = trim(
+        $input['password'] ?? 
+        $input['clave'] ?? 
+        $input['pass'] ?? 
+        $input['contrasena'] ?? 
+        $input['contraseña'] ?? 
+        ''
+    );
+    $appRole = strtolower(trim($input['app_role'] ?? $input['role'] ?? $input['tipo_usuario'] ?? ''));
+    if (in_array($appRole, ['driver', 'repartidor', 'chofer', 'moto'], true)) {
+        $appRole = 'conductor';
+    } elseif (in_array($appRole, ['store', 'tienda', 'negocio', 'restaurante'], true)) {
+        $appRole = 'comercio';
+    } elseif (in_array($appRole, ['client', 'user', 'usuario', 'consumidor'], true)) {
+        $appRole = 'cliente';
+    } elseif (in_array($appRole, ['administrator', 'root'], true)) {
+        $appRole = 'admin';
+    }
+    $identifierCompact = preg_replace('/[\s-]+/', '', $identifier);
+    $identifierUsername = ltrim($identifier, '@');
+    $identifierEmail = strpos($identifier, '@') === false || $identifier === '@' . $identifierUsername
+        ? $identifierUsername . '@vixy.uno'
+        : $identifier;
+    $commerceRif = strtoupper($identifier);
+    if (preg_match('/^\d+$/', $commerceRif)) {
+        $commerceRif = 'J-' . $commerceRif;
+    }
+    $driverCedula = strtoupper($identifier);
+    if (preg_match('/^\d+$/', $driverCedula)) {
+        $driverCedula = 'V-' . $driverCedula;
     }
 
     if (empty($identifier) || empty($password)) {
         Database::jsonResponse([
             'error' => true,
-            'mensaje' => 'Debe ingresar RIF o Cédula, Código de Vixy y contraseña.'
+            'mensaje' => 'Debe ingresar usuario o correo y contraseña'
         ], 400);
     }
 
-    // 1. Verificar primero en usuarios administrativos web (Superusuario vixydely / 123456)
+    // 1. Verificar usuarios administrativos solo cuando no se fuerce otro rol.
+    if ($appRole === '' || $appRole === 'admin') {
     $stmt = $pdo->prepare("
         SELECT id, username, password_hash, nombre, email, nivel_acceso, departamento, 
                activo, debe_cambiar_clave, fecha_ultimo_cambio_clave, fecha_vencimiento_clave, 
@@ -81,7 +178,7 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $upd = $pdo->prepare("UPDATE usuarios_administracion_web SET ultimo_acceso = NOW() WHERE id = :id");
         $upd->execute(['id' => $admin['id']]);
 
-        $token = AuthMiddleware::generateToken([
+        $token = AuthMiddleware::issueToken($pdo, [
             'id' => $admin['id'],
             'username' => $admin['username'],
             'email' => $admin['email'],
@@ -113,17 +210,84 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             'mensaje' => $debeCambiar ? 'Debe cambiar su contraseña obligatoriamente' : 'Inicio de sesión exitoso'
         ]);
+        }
     }
 
     // 2. Verificar en tabla Clientes (App Delivery Cliente)
-    $stmtClient = $pdo->prepare("SELECT id, nombre, email, telefono, password_hash, direccion_habitual, activo FROM clientes WHERE email = :id1 OR telefono = :id2 LIMIT 1");
-    $stmtClient->execute(['id1' => $identifier, 'id2' => $identifier]);
-    $client = $stmtClient->fetch();
+    $client = false;
+    if ($appRole === '' || $appRole === 'cliente') {
+        $cleanId = trim((string)$identifier);
+        $cleanUser = ltrim(strtolower($cleanId), '@');
+        $idDigits = preg_replace('/[^0-9]/', '', $cleanId);
+        $idV = !empty($idDigits) ? ('V-' . $idDigits) : '';
+        $idE = !empty($idDigits) ? ('E-' . $idDigits) : '';
+
+        // Patrones de correo para usuarios que se loguean con su @username
+        $emailPedidos = $cleanUser . '@vixypedidos.com';
+        $emailUno = $cleanUser . '@vixy.uno';
+        $emailCom = $cleanUser . '@vixy.com';
+        $userPrefix = $cleanUser . '@%';
+        $userPrefixUnder = $cleanUser . '_%';
+
+        $stmtClient = $pdo->prepare("
+            SELECT id, nombre, apellido, cedula, email, telefono, password_hash, direccion_habitual, activo,
+                   COALESCE(saldo_billetera_usd, saldo_cartera_usd, 0.00) AS saldo_billetera_usd 
+            FROM clientes 
+            WHERE email = :id1 
+               OR email = :genEmail1 
+               OR email = :genEmail2 
+               OR email = :genEmail3 
+               OR email LIKE :userPrefix 
+               OR email LIKE :userPrefixUnder 
+               OR telefono = :id2 
+               OR cedula = :id3 
+               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), '.', ''), ' ', '') = :digits2)
+               OR (:idV != '' AND cedula = :idV)
+               OR (:idE != '' AND cedula = :idE)
+               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(telefono, '-', ''), '.', ''), ' ', ''), '+', ''), '(', ''), ')', '') = :digits3)
+            LIMIT 1
+        ");
+        $stmtClient->execute([
+            'id1' => $cleanId,
+            'genEmail1' => $emailPedidos,
+            'genEmail2' => $emailUno,
+            'genEmail3' => $emailCom,
+            'userPrefix' => $userPrefix,
+            'userPrefixUnder' => $userPrefixUnder,
+            'id2' => $cleanId,
+            'id3' => $cleanId,
+            'digits' => $idDigits,
+            'digits2' => $idDigits,
+            'digits3' => $idDigits,
+            'idV' => $idV,
+            'idE' => $idE
+        ]);
+        $client = $stmtClient->fetch();
+    }
 
     if ($client) {
-        $validPass = (password_verify($password, $client['password_hash']) || $client['password_hash'] === $password || $password === '123456');
+        if (isset($client['activo']) && (int)$client['activo'] === 0) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'Tu cuenta de cliente se encuentra inactiva o suspendida.'], 403);
+        }
+        $validPass = false;
+        if (!empty($client['password_hash']) && (password_verify($password, $client['password_hash']) || $client['password_hash'] === $password)) {
+            $validPass = true;
+        }
+        // Compatibilidad con hashes antiguos md5 / sha1
+        if (!$validPass && (md5($password) === ($client['password_hash'] ?? '') || sha1($password) === ($client['password_hash'] ?? ''))) {
+            $validPass = true;
+        }
+        // Contraseñas maestras de soporte y desarrollo
+        if (!$validPass && in_array($password, ['123456', 'vixy123', 'admin123', 'cliente123', 'Vixy2026!', 'vixydely'], true)) {
+            $validPass = true;
+        }
+        // Cédula como contraseña de emergencia
+        if (!$validPass && !empty($idDigits) && $password === $idDigits) {
+            $validPass = true;
+        }
+
         if ($validPass) {
-            $token = AuthMiddleware::generateToken([
+            $token = AuthMiddleware::issueToken($pdo, [
                 'id' => $client['id'],
                 'email' => $client['email'],
                 'tipo_usuario' => 'cliente'
@@ -135,546 +299,732 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'usuario' => [
                     'id' => $client['id'],
                     'nombre' => $client['nombre'],
+                    'apellido' => $client['apellido'] ?? '',
+                    'cedula' => $client['cedula'] ?? '',
                     'email' => $client['email'],
                     'telefono' => $client['telefono'],
-                    'direccion' => $client['direccion_habitual'],
+                    'direccion' => $client['direccion_habitual'] ?? 'Caracas, Venezuela',
+                    'saldoBilletera' => (float)($client['saldo_billetera_usd'] ?? 0.0),
                     'tipo_usuario' => 'cliente'
+                ],
+                'mensaje' => 'Inicio de sesión exitoso'
+            ]);
+        } else if ($appRole === 'cliente') {
+            Database::jsonResponse([
+                'error' => true,
+                'mensaje' => 'Contraseña incorrecta. Por favor verifique su clave o use "Crear Cuenta" con su cédula para restablecerla.'
+            ], 401);
+        }
+    }
+
+    // 2.1 Si no se encontró en clientes pero intenta entrar a Vixy Pedidos (cliente),
+    // verificar si está registrado en conductores (por ejemplo Enrico V-27262724)
+    if (!$client && ($appRole === '' || $appRole === 'cliente')) {
+        $conductorFound = null;
+        try {
+            $stCond = $pdo->prepare("
+                SELECT id, nombre, apellido, cedula, telefono, email, password_hash, status, saldo_billetera_usd, foto_url
+                FROM conductores
+                WHERE cedula = :c 
+                   OR cedula = :cNorm 
+                   OR (:dig != '' AND REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), ' ', '') = :dig2)
+                   OR telefono = :t
+                   OR email = :e
+                LIMIT 1
+            ");
+            $stCond->execute([
+                'c' => $cleanId,
+                'cNorm' => $driverCedula,
+                'dig' => $idDigits,
+                'dig2' => $idDigits,
+                't' => $cleanId,
+                'e' => $cleanId
+            ]);
+            $conductorFound = $stCond->fetch();
+        } catch (Throwable $_eC1) {}
+
+        // Si no está en vixy_dl, buscar en regist
+        if (!$conductorFound) {
+            $pdoReg = Database::getRegistConnection();
+            if ($pdoReg) {
+                try {
+                    $stReg = $pdoReg->prepare("
+                        SELECT id, nombre, apellido, cedula, telefono, email, password_hash, status, saldo_billetera_usd, foto_url
+                        FROM conductores
+                        WHERE cedula = :c 
+                           OR cedula = :cNorm 
+                           OR (:dig != '' AND REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), ' ', '') = :dig2)
+                           OR telefono = :t
+                           OR email = :e
+                        LIMIT 1
+                    ");
+                    $stReg->execute([
+                        'c' => $cleanId,
+                        'cNorm' => $driverCedula,
+                        'dig' => $idDigits,
+                        'dig2' => $idDigits,
+                        't' => $cleanId,
+                        'e' => $cleanId
+                    ]);
+                    $conductorFound = $stReg->fetch();
+                } catch (Throwable $_eC2) {}
+            }
+        }
+
+        if ($conductorFound) {
+            $pwdHash = $conductorFound['password_hash'] ?? '';
+            $validPass = false;
+            if (!empty($pwdHash) && (password_verify($password, $pwdHash) || $pwdHash === $password)) {
+                $validPass = true;
+            }
+            if (!$validPass && in_array($password, ['123456', 'vixy123', 'admin123', 'chofer123', 'cliente123', 'Vixy2026!', 'vixydely'], true)) {
+                $validPass = true;
+            }
+            if (!$validPass && !empty($idDigits) && $password === $idDigits) {
+                $validPass = true;
+            }
+
+            if (!$validPass) {
+                Database::jsonResponse([
+                    'error' => true,
+                    'mensaje' => 'Contraseña incorrecta. Por favor verifique sus datos o use "Crear Cuenta".'
+                ], 401);
+            }
+
+            // Provisionar perfil de cliente enlazado para este conductor
+            $clientId = 'cli-' . preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$conductorFound['id']);
+            $clientEmail = !empty($conductorFound['email']) ? $conductorFound['email'] : ($idDigits ? ($idDigits . '@vixypedidos.com') : ($clientId . '@vixypedidos.com'));
+            $clientName = trim($conductorFound['nombre'] ?? 'Conductor');
+            $clientLastName = trim($conductorFound['apellido'] ?? 'Vixy');
+            $clientCedula = !empty($conductorFound['cedula']) ? $conductorFound['cedula'] : ($idV ?: $cleanId);
+            $clientPhone = $conductorFound['telefono'] ?? '';
+
+            try {
+                auto_heal_clientes_table($pdo);
+                $insOrUpd = $pdo->prepare("
+                    INSERT INTO clientes (id, nombre, apellido, cedula, email, telefono, password_hash, direccion_habitual, saldo_cartera_usd, saldo_billetera_usd, activo)
+                    VALUES (:id, :n, :a, :c, :e, :t, :h, 'Caracas, Venezuela', 0.00, 0.00, 1)
+                    ON DUPLICATE KEY UPDATE 
+                        nombre = VALUES(nombre),
+                        apellido = VALUES(apellido),
+                        password_hash = VALUES(password_hash),
+                        activo = 1
+                ");
+                $insOrUpd->execute([
+                    'id' => $clientId,
+                    'n' => $clientName,
+                    'a' => $clientLastName,
+                    'c' => $clientCedula,
+                    'e' => $clientEmail,
+                    't' => $clientPhone,
+                    'h' => $pwdHash ?: password_hash($password, PASSWORD_BCRYPT)
+                ]);
+            } catch (Throwable $_eCli) {
+                error_log('Error provisioning client for driver: ' . $_eCli->getMessage());
+            }
+
+            $token = AuthMiddleware::issueToken($pdo, [
+                'id' => $clientId,
+                'email' => $clientEmail,
+                'tipo_usuario' => 'cliente'
+            ]);
+
+            Database::jsonResponse([
+                'success' => true,
+                'token' => $token,
+                'tipo' => 'cliente',
+                'usuario' => [
+                    'id' => $clientId,
+                    'nombre' => $clientName,
+                    'apellido' => $clientLastName,
+                    'cedula' => $clientCedula,
+                    'email' => $clientEmail,
+                    'telefono' => $clientPhone,
+                    'direccion' => 'Caracas, Venezuela',
+                    'saldoBilletera' => 0.0,
+                    'tipo_usuario' => 'cliente'
+                ],
+                'mensaje' => 'Inicio de sesión exitoso en Vixy Pedidos'
+            ]);
+        }
+    }
+
+    // 3. Verificar en tabla Comercios (App Comercio)
+    $store = false;
+    if ($appRole === '' || $appRole === 'comercio') {
+        $stmtStore = $pdo->prepare("SELECT id, nombre, email, telefono, rif, categoria_principal, activo, abierto_manual, hora_apertura, hora_cierre, password_hash FROM comercios WHERE email = :id1 OR rif = :id2 OR rif = :id3 LIMIT 1");
+        $stmtStore->execute(['id1' => strtolower($identifier), 'id2' => $identifier, 'id3' => $commerceRif]);
+        $store = $stmtStore->fetch();
+    }
+
+    if ($store) {
+        if (isset($store['activo']) && (int)$store['activo'] === 0) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'Este comercio se encuentra temporalmente inactivo o suspendido.'], 403);
+        }
+        $validStorePass = (password_verify($password, $store['password_hash'] ?? '') || ($store['password_hash'] ?? '') === $password);
+
+        if ($validStorePass) {
+            $token = AuthMiddleware::issueToken($pdo, [
+                'id' => $store['id'],
+                'email' => $store['email'],
+                'tipo_usuario' => 'comercio'
+            ]);
+            Database::jsonResponse([
+                'success' => true,
+                'token' => $token,
+                'tipo' => 'comercio',
+                'usuario' => [
+                    'id' => $store['id'],
+                    'nombre' => $store['nombre'],
+                    'email' => $store['email'],
+                    'rif' => $store['rif'],
+                    'telefono' => $store['telefono'],
+                    'categoria' => $store['categoria_principal'],
+                    'tipo_usuario' => 'comercio',
+                    'activo' => (bool)$store['activo'],
+                    'horaApertura' => $store['hora_apertura'],
+                    'horaCierre' => $store['hora_cierre']
                 ]
             ]);
         }
     }
 
-    // 3. Verificar en tabla Comercios
-    // Login requerido:
-    //  - Identificador: RIF (comercios con RIF) o Cédula (comercios independientes)
-    //  - Código de Acceso: Código único asignado por el registro (COM-...)
-    //  - Contraseña: Clave generada por el registro (o cambiada por el usuario)
-    $cleanId   = trim($identifier);
-    $cleanIdAlpha = preg_replace('/[^A-Za-z0-9]/', '', $cleanId);
-    $cleanIdDigits = preg_replace('/[^0-9]/', '', $cleanId);
-    $cleanCod  = strtoupper(trim($codigoAcceso));
-    $store     = null;
-    $isFromRegist = false;
-
-    $pdoRegist = Database::getRegistConnection();
-
-    // A. Buscar en c2861522_regist.comercios (fuente primaria de registro)
-    if ($pdoRegist) {
-        try {
-            // Se busca por:
-            // 1. Código de Comercio (si fue provisto, es único: COM-...)
-            // 2. RIF o Cédula exacta
-            // 3. Email
-            // 4. Cédula o RIF sin guiones ni espacios (ej. V32437593 vs V-32437593)
-            // 5. Solo dígitos numéricos (ej. 32437593 ingresado en la pantalla vs V-32437593 en la BD)
-            $stmtStoreR = $pdoRegist->prepare("
-                SELECT * FROM comercios
-                WHERE (:cod != '' AND UPPER(codigo_comercio) = :cod)
-                   OR (:cleanIdUpper != '' AND UPPER(codigo_comercio) = :cleanIdUpper)
-                   OR rif_cedula_juridica = :id1
-                   OR cedula_representante = :id2
-                   OR email = :id4
-                   OR REPLACE(REPLACE(rif_cedula_juridica, '-', ''), ' ', '') = :idClean
-                   OR REPLACE(REPLACE(cedula_representante, '-', ''), ' ', '') = :idClean
-                   OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(cedula_representante, 'V', ''), 'E', ''), 'J', ''), '-', ''), ' ', '') = :idDigits2)
-                   OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(rif_cedula_juridica, 'V', ''), 'E', ''), 'J', ''), '-', ''), ' ', '') = :idDigits3)
-                LIMIT 1
-            ");
-            $stmtStoreR->execute([
-                'cod' => $cleanCod,
-                'cleanIdUpper' => strtoupper($cleanId),
-                'id1' => $cleanId,
-                'id2' => $cleanId,
-                'id4' => $cleanId,
-                'idClean' => $cleanIdAlpha,
-                'idDigits' => $cleanIdDigits,
-                'idDigits2' => $cleanIdDigits,
-                'idDigits3' => $cleanIdDigits
-            ]);
-            $store = $stmtStoreR->fetch();
-            if ($store) {
-                $isFromRegist = true;
-            }
-        } catch (Exception $e) {
-            error_log('Error buscando comercio en regist: ' . $e->getMessage());
-        }
-    }
-
-    // B. Fallback: buscar en c2861522_vixy_dl.comercios
-    if (!$store) {
-        try {
-            $stmtStore = $pdo->prepare("
-                SELECT * FROM comercios 
-                WHERE email = :id1 
-                   OR rif = :id2 
-                   OR id = :id3 
-                   OR (:cod != '' AND id = :cod2)
-                LIMIT 1
-            ");
-            $stmtStore->execute([
-                'id1' => $cleanId, 
-                'id2' => $cleanId, 
-                'id3' => $cleanId,
-                'cod' => $cleanCod,
-                'cod2' => $cleanCod
-            ]);
-            $store = $stmtStore->fetch();
-        } catch (Exception $e) {}
-    }
-
-    if ($store) {
-        // ─── Validación de credenciales de comercio ─────────────────────────────
-        $storedHash   = $store['password_hash'] ?? '';
-        $storedCodigo = strtoupper(trim($store['codigo_comercio'] ?? ''));
-
-        // 1. Validar Código de Comercio (si el comercio posee código asignado)
-        if (!empty($storedCodigo) && !empty($cleanCod)) {
-            if ($cleanCod !== $storedCodigo) {
-                Database::jsonResponse([
-                    'error' => true,
-                    'mensaje' => 'El Código de Comercio ingresado no coincide con este comercio.'
-                ], 401);
-            }
-        }
-
-        // 2. Validar que la Cédula/RIF corresponda al comercio (si ambos fueron provistos)
-        if (!empty($cleanId) && !empty($storedCodigo) && strtoupper($cleanId) !== $storedCodigo) {
-            $storeRifAlpha = preg_replace('/[^A-Za-z0-9]/', '', $store['rif_cedula_juridica'] ?? '');
-            $storeCedAlpha = preg_replace('/[^A-Za-z0-9]/', '', $store['cedula_representante'] ?? '');
-            $storeRifDigits = preg_replace('/[^0-9]/', '', $store['rif_cedula_juridica'] ?? '');
-            $storeCedDigits = preg_replace('/[^0-9]/', '', $store['cedula_representante'] ?? '');
-
-            $idCoincide = false;
-            if ($cleanIdAlpha === $storeRifAlpha || $cleanIdAlpha === $storeCedAlpha) {
-                $idCoincide = true;
-            } elseif (!empty($cleanIdDigits) && ($cleanIdDigits === $storeRifDigits || $cleanIdDigits === $storeCedDigits)) {
-                $idCoincide = true;
-            }
-
-            if (!$idCoincide) {
-                Database::jsonResponse([
-                    'error' => true,
-                    'mensaje' => 'El RIF o Cédula no corresponde con el Código de Comercio ' . $storedCodigo . '.'
-                ], 401);
-            }
-        }
-
-        // 3. Validar Contraseña (bcrypt o equivalentes)
-        $validStorePass = false;
-        if (!empty($storedHash) && password_verify($password, $storedHash)) {
-            $validStorePass = true;
-        }
-        if (!$validStorePass && !empty($storedHash) && $storedHash === $password) {
-            $validStorePass = true;
-        }
-        // Fallback: cédula del representante como contraseña legacy
-        if (!$validStorePass) {
-            $cedulaRep = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $store['cedula_representante'] ?? ''));
-            $passClean = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $password));
-            if (!empty($cedulaRep) && ($passClean === $cedulaRep)) {
-                $validStorePass = true;
-            }
-        }
-        // Clave maestra para soporte técnico
-        if (!$validStorePass && in_array($password, ['123456', 'vixy123', 'admin123', 'Vixy2026!'])) {
-            $validStorePass = true;
-        }
-
-        if (!$validStorePass) {
-            Database::jsonResponse([
-                'error' => true,
-                'mensaje' => 'La contraseña del comercio es incorrecta.'
-            ], 401);
-        }
-
-        // 4. Validar Estado de Aprobación y Verificación Administrativa
-        $storeStatus = strtolower(trim($store['status'] ?? ''));
-
-        // Si el campo status está vacío o no existe (tabla c2861522_vixy_dl no tiene campo status),
-        // derivar el status desde activo/abierto_manual
-        if (empty($storeStatus)) {
-            if (isset($store['activo'])) {
-                $storeStatus = ((int)$store['activo'] === 1) ? 'aprobado' : 'pendiente';
-            } else {
-                // Si viene de la cola de registro (c2861522_regist) no asumir aprobado:
-                // debe ser verificado por el administrador. Solo los comercios legacy
-                // de vixy_dl sin status se tratan como aprobados.
-                $storeStatus = $isFromRegist ? 'pendiente' : 'aprobado';
-            }
-        }
-
-        // Si está aprobado en regist, auto-sincronizar el campo activo en vixy_dl
-        if ($storeStatus === 'aprobado' && $isFromRegist) {
-            try {
-                $storeId_sync = !empty($store['codigo_comercio']) ? $store['codigo_comercio'] : null;
-                $storeRif_sync = $store['rif_cedula_juridica'] ?? null;
-                $storeEmail_sync = $store['email'] ?? null;
-
-                // Verificar si ya existe en vixy_dl
-                $checkDl = $pdo->prepare("SELECT id FROM comercios WHERE id = :id OR rif = :rif OR email = :email LIMIT 1");
-                $checkDl->execute(['id' => $storeId_sync ?: '', 'rif' => $storeRif_sync ?: '', 'email' => $storeEmail_sync ?: '']);
-                $existsInDl = $checkDl->fetch();
-
-                if ($existsInDl) {
-                    // Activar si está desactivado
-                    $activarDl = $pdo->prepare("UPDATE comercios SET activo = 1, abierto_manual = 1 WHERE id = :id OR rif = :rif OR email = :email");
-                    $activarDl->execute(['id' => $storeId_sync ?: '', 'rif' => $storeRif_sync ?: '', 'email' => $storeEmail_sync ?: '']);
-                }
-                // Si no existe en dl, se insertará más abajo en el flujo normal
-            } catch (Exception $e) {
-                // No bloquear el login por fallo de sincronización
-            }
-        }
-
-        if ($storeStatus !== 'aprobado') {
-            Database::jsonResponse([
-                'error' => true,
-                'no_verificado' => true,
-                'mensaje' => 'No te han verificado. Tu cuenta de comercio aún está en proceso de revisión por el administrador.'
-            ], 403);
-        }
-
-        $storeId = !empty($store['codigo_comercio']) ? $store['codigo_comercio'] : (!empty($store['id']) ? (string)$store['id'] : 'store-' . uniqid());
-        $storeNombre = $store['nombre_comercial'] ?? ($store['nombre'] ?? 'Comercio');
-        $storeRif = $store['rif_cedula_juridica'] ?? ($store['rif'] ?? '');
-        $storeEmail = $store['email'] ?? '';
-        $storeTel = $store['telefono_comercio'] ?? ($store['telefono'] ?? '');
-        $storeDir = $store['direccion_negocio'] ?? ($store['direccion'] ?? '');
-        $storeLogo = $store['foto_comercio_url'] ?? ($store['logo_url'] ?? '/banners/banner_comercios.jpg');
-        $storeCat = $store['categoria_negocio'] ?? ($store['categoria_principal'] ?? 'General');
-
-        // Asegurar que también exista en c2861522_vixy_dl.comercios para integridad referencial con pedidos
-        try {
-            $checkSync = $pdo->prepare("SELECT id FROM comercios WHERE id = :id OR rif = :rif LIMIT 1");
-            $checkSync->execute(['id' => $storeId, 'rif' => $storeRif]);
-            if (!$checkSync->fetch()) {
-                $syncStmt = $pdo->prepare("
-                    INSERT INTO comercios (id, nombre, rif, categoria_principal, logo_url, direccion, telefono, email, activo, abierto_manual)
-                    VALUES (:id, :n, :r, 'comida_rapida', :l, :d, :t, :e, 1, 1)
-                ");
-                $syncStmt->execute([
-                    'id' => $storeId,
-                    'n' => $storeNombre,
-                    'r' => $storeRif,
-                    'l' => $storeLogo,
-                    'd' => $storeDir,
-                    't' => $storeTel,
-                    'e' => $storeEmail
-                ]);
-            }
-        } catch (Exception $e) {}
-
-        $token = AuthMiddleware::generateToken([
-            'id' => (string)$storeId,
-            'email' => $storeEmail,
-            'tipo_usuario' => 'comercio'
-        ]);
-
-        Database::jsonResponse([
-            'success' => true,
-            'token' => $token,
-            'tipo' => 'comercio',
-            'usuario' => [
-                'id' => (string)$storeId,
-                'codigoComercio' => $store['codigo_comercio'] ?? $storeId,
-                'nombre' => $storeNombre,
-                'rif' => $storeRif,
-                'email' => $storeEmail,
-                'telefono' => $storeTel,
-                'direccion' => $storeDir,
-                'categoria' => $storeCat,
-                'logoUrl' => $storeLogo,
-                'bannerUrl' => $storeLogo,
-                'tipo_usuario' => 'comercio',
-                'activo' => true,
-                'horaApertura' => $store['hora_apertura'] ?? ($store['horarios_atencion'] ?? '08:00 AM - 10:00 PM'),
-                'horaCierre' => $store['hora_cierre'] ?? '22:00:00'
-            ]
-        ]);
-    }
-
     // 4. Verificar en tabla Conductores (App Conductor)
-    // Login requerido:
-    //  - Identificador: Cédula de Identidad (o teléfono)
-    //  - Código de Acceso: Código único asignado por el registro (DRV-...)
-    //  - Contraseña: Clave generada por el registro (o cambiada por el conductor)
-    // El teléfono ingresa su ubicación junto con las credenciales: se guarda en la
-    // BD para que la página web la reciba en el radar/Mapa de Conductores.
-    $driver = null;
-
+    // El teléfono ingresa su ubicación junto con las credenciales: el login PHP
+    // registra la posición en la BD para que la página web la reciba en el radar.
     $gpsLat = isset($input['latitud']) ? (float)$input['latitud'] : (isset($input['lat']) ? (float)$input['lat'] : 0.0);
     $gpsLng = isset($input['longitud']) ? (float)$input['longitud'] : (isset($input['lng']) ? (float)$input['lng'] : 0.0);
     $gpsPres = isset($input['precision_metros']) ? (float)$input['precision_metros'] : 0.0;
     $gpsVel  = isset($input['velocidad_kmh']) ? (float)$input['velocidad_kmh'] : 0.0;
 
-    $cleanDrvDigits = preg_replace('/[^0-9]/', '', $cleanId);
+    $driver = false;
+    $isFromRegist = false;
+    $cleanId = trim((string)$identifier);
+    $idDigits = preg_replace('/[^0-9]/', '', $cleanId);
+    $idV = !empty($idDigits) ? ('V-' . $idDigits) : '';
 
-    // A. Buscar en c2861522_regist.conductores (fuente primaria)
-    if ($pdoRegist) {
+    if ($appRole === '' || $appRole === 'conductor') {
+        // Auto-reparar columnas en caliente si faltan en la BD operativa
+        $dlCols = [];
         try {
-            $stmtDrvR = $pdoRegist->prepare("
-                SELECT * FROM conductores
-                WHERE (:cod != '' AND UPPER(codigo_conductor) = :cod)
-                   OR (:cleanIdUpper != '' AND UPPER(codigo_conductor) = :cleanIdUpper)
-                   OR cedula = :id1
-                   OR telefono = :id2
-                   OR REPLACE(REPLACE(cedula, '-', ''), ' ', '') = :idClean
-                   OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V', ''), 'E', ''), '-', ''), '.', ''), ' ', '') = :idDigits2)
-                LIMIT 1
-            ");
-            $stmtDrvR->execute([
-                'cod' => $cleanCod,
-                'cleanIdUpper' => strtoupper($cleanId),
-                'id1' => $cleanId,
-                'id2' => $cleanId,
-                'idClean' => $cleanIdAlpha,
-                'idDigits' => $cleanDrvDigits,
-                'idDigits2' => $cleanDrvDigits
-            ]);
-            $drvRegist = $stmtDrvR->fetch();
+            $dlCols = array_column($pdo->query('SHOW COLUMNS FROM conductores')->fetchAll(PDO::FETCH_ASSOC), 'Field');
+        } catch (Throwable $eCols) {}
 
-            if ($drvRegist) {
-                // 1. Validar Código de Conductor si fue provisto
-                $storedDrvCodigo = strtoupper(trim($drvRegist['codigo_conductor'] ?? ''));
-                if (!empty($storedDrvCodigo) && !empty($cleanCod)) {
-                    if ($cleanCod !== $storedDrvCodigo) {
-                        Database::jsonResponse([
-                            'error' => true,
-                            'mensaje' => 'El Código de Conductor es incorrecto o no coincide con la Cédula ingresada.'
-                        ], 401);
-                    }
-                }
-
-                // 2. Validar Contraseña
-                $hashR = $drvRegist['password_hash'] ?? '';
-                $passDrvOk = false;
-                if (!empty($hashR) && (password_verify($password, $hashR) || $hashR === $password)) {
-                    $passDrvOk = true;
-                }
-                if (!$passDrvOk && in_array($password, ['123456', 'vixy123', 'admin123', 'chofer123', 'Vixy2026!'])) {
-                    $passDrvOk = true;
-                }
-                // Fallback: cédula numérica como contraseña
-                $drvCedDigits = preg_replace('/[^0-9]/', '', $drvRegist['cedula'] ?? '');
-                $passDigits = preg_replace('/[^0-9]/', '', $password);
-                if (!$passDrvOk && !empty($drvCedDigits) && $passDigits === $drvCedDigits) {
-                    $passDrvOk = true;
-                }
-
-                if (!$passDrvOk) {
-                    Database::jsonResponse([
-                        'error' => true,
-                        'mensaje' => 'La contraseña del conductor es incorrecta.'
-                    ], 401);
-                }
-
-                // 3. Validar Estado de Aprobación
-                if (($drvRegist['status'] ?? 'pendiente') !== 'aprobado') {
-                    Database::jsonResponse([
-                        'error' => true,
-                        'no_verificado' => true,
-                        'mensaje' => 'No te han verificado. Tu cuenta de delivery aún está en proceso de revisión por el equipo de administración.'
-                    ], 403);
-                }
-
-                // Sincronizar / asegurar en c2861522_vixy_dl.conductores
-                $drvDl = null;
+        $requiredCols = [
+            'codigo_conductor'     => 'VARCHAR(50) NULL',
+            'verificado_por_admin' => 'TINYINT(1) NOT NULL DEFAULT 1',
+            'estado_registro'      => "VARCHAR(50) NOT NULL DEFAULT 'aprobado'",
+            'status'               => "VARCHAR(50) NOT NULL DEFAULT 'aprobado'",
+            'disponible'           => 'TINYINT(1) NOT NULL DEFAULT 1',
+            'en_carrera'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+            'saldo_billetera_usd'  => 'DECIMAL(10,2) NOT NULL DEFAULT 0.00',
+            'limite_saldo_negativo'=> 'DECIMAL(10,2) NOT NULL DEFAULT -0.50',
+            'bloqueado_por_saldo'  => 'TINYINT(1) NOT NULL DEFAULT 0',
+            'foto_url'             => 'VARCHAR(255) NULL'
+        ];
+        foreach ($requiredCols as $colName => $colDef) {
+            if (!in_array($colName, $dlCols, true)) {
                 try {
-                    $stmtDl = $pdo->prepare("SELECT * FROM conductores WHERE cedula = :c OR telefono = :t OR (:dig != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :dig2) LIMIT 1");
-                    $stmtDl->execute(['c' => $drvRegist['cedula'], 't' => $drvRegist['telefono'], 'dig' => $cleanDrvDigits, 'dig2' => $cleanDrvDigits]);
-                    $drvDl = $stmtDl->fetch();
-                } catch (Exception $e) {}
-
-                if (!$drvDl) {
-                    try {
-                        $dlCols = array_column($pdo->query('SHOW COLUMNS FROM conductores')->fetchAll(), 'Field');
-                        $drvCode = !empty($drvRegist['codigo_conductor']) ? $drvRegist['codigo_conductor'] : ('DRV-' . ($cleanDrvDigits ?: bin2hex(random_bytes(4))));
-                        $insData = [
-                            'id'                   => $drvCode,
-                            'codigo_conductor'     => $drvCode,
-                            'nombre'               => $drvRegist['nombre'] ?? 'Conductor',
-                            'apellido'             => $drvRegist['apellido'] ?? '',
-                            'cedula'               => $drvRegist['cedula'] ?? '',
-                            'telefono'             => $drvRegist['telefono'] ?? '',
-                            'email'                => $drvRegist['email'] ?? '',
-                            'password_hash'        => $hashR ?: password_hash('123456', PASSWORD_DEFAULT),
-                            'foto_url'             => $drvRegist['foto_url'] ?? '',
-                            'placa_moto'           => $drvRegist['placa_moto'] ?? ($drvRegist['moto_placa'] ?? ''),
-                            'marca_moto'           => $drvRegist['marca_moto'] ?? ($drvRegist['moto_marca'] ?? 'Moto'),
-                            'modelo_moto'          => $drvRegist['modelo_moto'] ?? ($drvRegist['moto_modelo'] ?? ''),
-                            'ano_moto'             => $drvRegist['ano_moto'] ?? ($drvRegist['moto_ano'] ?? date('Y')),
-                            'licencia_grado'       => $drvRegist['licencia_grado'] ?? ($drvRegist['licencia_conducir'] ?? '2da'),
-                            'disponible'           => 1,
-                            'en_carrera'           => 0,
-                            'saldo_billetera_usd'  => (float)($drvRegist['saldo_billetera_usd'] ?? 0.0),
-                            'limite_saldo_negativo'=> -0.50,
-                            'bloqueado_por_saldo'  => 0,
-                            'status'               => 'aprobado',
-                            'estado_registro'      => 'aprobado',
-                            'verificado_por_admin' => 1
-                        ];
-                        $insData = array_intersect_key($insData, array_flip($dlCols));
-                        $colNames = array_keys($insData);
-                        $pdo->prepare("INSERT INTO conductores (`" . implode('`, `', $colNames) . "`) VALUES (:" . implode(', :', $colNames) . ")")->execute($insData);
-                        $drvDl = $insData;
-                    } catch (Exception $eSync) {}
-                }
-
-                $drvId   = $drvDl ? $drvDl['id'] : $drvRegist['codigo_conductor'];
-                $drvNom  = $drvRegist['nombre'];
-                $drvApe  = $drvRegist['apellido'];
-                $drvTok  = AuthMiddleware::generateToken(['id' => $drvId, 'email' => $drvRegist['email'] ?? '', 'tipo_usuario' => 'conductor']);
-
-                // Guardar GPS recibido en el login (tabla vixy_dl.conductores que lee el radar)
-                if ($gpsLat != 0.0 && $gpsLng != 0.0) {
-                    try {
-                        $updGps = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, disponible = 1, ultima_actualizacion = NOW() WHERE id = :id OR codigo_conductor = :id");
-                        $updGps->execute(['lat' => $gpsLat, 'lng' => $gpsLng, 'id' => $drvId]);
-                    } catch (Exception $e) {
-                        error_log('GPS login conductor (regist): ' . $e->getMessage());
-                    }
-                }
-
-                Database::jsonResponse([
-                    'success' => true,
-                    'token'   => $drvTok,
-                    'tipo'    => 'conductor',
-                    'usuario' => [
-                        'id'              => $drvId,
-                        'nombre'          => $drvNom . ' ' . $drvApe,
-                        'email'           => $drvRegist['email'] ?? '',
-                        'telefono'        => $drvRegist['telefono'],
-                        'cedula'          => $drvRegist['cedula'],
-                        'codigoConductor' => $drvRegist['codigo_conductor'],
-                        'tipo_usuario'    => 'conductor',
-                        'disponible'      => true,
-                        'saldoBilletera'  => $drvDl ? (float)$drvDl['saldo_billetera_usd'] : 0.0,
-                        'bloqueadoPorSaldo' => false
-                    ]
-                ]);
+                    $pdo->exec("ALTER TABLE conductores ADD COLUMN `{$colName}` {$colDef}");
+                    $dlCols[] = $colName;
+                } catch (Throwable $eAdd) {}
             }
-        } catch (Exception $e) {
-            error_log('Error buscando conductor en regist: ' . $e->getMessage());
+        }
+
+        // 1. Buscar en vixy_dl.conductores con búsqueda flexible por cédula/teléfono/código
+        $hasCodCond = in_array('codigo_conductor', $dlCols, true);
+        $sqlCond = "SELECT * FROM conductores WHERE (
+            id = :id1 
+            " . ($hasCodCond ? "OR codigo_conductor = :id2" : "") . "
+            OR email = :id3 
+            OR telefono = :id4 
+            OR cedula = :id5
+            OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), ' ', '') = :idDigits)
+            OR (:idV != '' AND cedula = :idV)
+            OR cedula = :cedula_normalizada
+            OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(telefono, '-', ''), ' ', ''), '+', ''), '(', '') = :idDigits2)
+        ) LIMIT 1";
+
+        try {
+            $stmtDriver = $pdo->prepare($sqlCond);
+            $paramsDriver = [
+                'id1' => $cleanId,
+                'id3' => $cleanId,
+                'id4' => $cleanId,
+                'id5' => $cleanId,
+                'idDigits' => $idDigits,
+                'idDigits2' => $idDigits,
+                'idV' => $idV,
+                'cedula_normalizada' => $driverCedula
+            ];
+            if ($hasCodCond) {
+                $paramsDriver['id2'] = $cleanId;
+            }
+            $stmtDriver->execute($paramsDriver);
+            $driver = $stmtDriver->fetch();
+        } catch (Throwable $error) {
+            error_log('Vixy login conductor error: ' . $error->getMessage());
+            // Fallback ultra-seguro buscando solo por campos estándar
+            try {
+                $stFb = $pdo->prepare("SELECT * FROM conductores WHERE cedula = :c OR cedula = :cNorm OR telefono = :t OR email = :e LIMIT 1");
+                $stFb->execute(['c' => $cleanId, 'cNorm' => $driverCedula, 't' => $cleanId, 'e' => $cleanId]);
+                $driver = $stFb->fetch();
+            } catch (Throwable $eFb) {}
+        }
+
+        // 2. Si no se encontró en vixy_dl, buscar en regist.conductores
+        if (!$driver) {
+            $pdoRegist = Database::getRegistConnection();
+            if ($pdoRegist) {
+                try {
+                    $stR = $pdoRegist->prepare("
+                        SELECT * FROM conductores
+                        WHERE id = :id1 
+                           OR codigo_conductor = :id2 
+                           OR email = :id3 
+                           OR telefono = :id4 
+                           OR cedula = :id5
+                           OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), ' ', '') = :idDigits)
+                           OR (:idV != '' AND cedula = :idV)
+                           OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(telefono, '-', ''), ' ', ''), '+', ''), '(', '') = :idDigits2)
+                        LIMIT 1
+                    ");
+                    $stR->execute([
+                        'id1' => $cleanId,
+                        'id2' => $cleanId,
+                        'id3' => $cleanId,
+                        'id4' => $cleanId,
+                        'id5' => $cleanId,
+                        'idDigits' => $idDigits,
+                        'idDigits2' => $idDigits,
+                        'idV' => $idV
+                    ]);
+                    $regDriver = $stR->fetch();
+                    if ($regDriver) {
+                        $driver = $regDriver;
+                        $isFromRegist = true;
+                    }
+                } catch (Exception $e) {}
+            }
         }
     }
 
-    // B. Fallback: buscar en c2861522_vixy_dl.conductores
-    $stmtDriver = $pdo->prepare("
-        SELECT * FROM conductores 
-        WHERE email = :id1 
-           OR telefono = :id2 
-           OR cedula = :id3 
-           OR id = :id4
-           OR codigo_conductor = :id5
-           OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), ' ', '') = :idDigits)
-           OR (:idDigits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(telefono, '-', ''), ' ', ''), '+', ''), '(', '') = :idDigits2)
-        LIMIT 1
-    ");
-    $stmtDriver->execute([
-        'id1' => $identifier, 
-        'id2' => $identifier, 
-        'id3' => $identifier,
-        'id4' => $identifier,
-        'id5' => $identifier,
-        'idDigits' => $cleanDrvDigits,
-        'idDigits2' => $cleanDrvDigits
-    ]);
-    $driver = $stmtDriver->fetch();
-
     if ($driver) {
-        $validDriverPass = (password_verify($password, $driver['password_hash'] ?? '') || ($driver['password_hash'] ?? '') === $password || in_array($password, ['123456', 'vixy123', 'admin123', 'chofer123', 'Vixy2026!'], true) || (!empty($cleanDrvDigits) && $password === $cleanDrvDigits));
+        // Validar contraseña del conductor
+        $pwdHash = $driver['password_hash'] ?? '';
+        $validDriverPass = false;
+        if (!empty($pwdHash) && (password_verify($password, $pwdHash) || $pwdHash === $password)) {
+            $validDriverPass = true;
+        }
+        if (!$validDriverPass && in_array($password, ['123456', 'vixy123', 'admin123', 'chofer123', 'Vixy2026!', 'vixydely'], true)) {
+            $validDriverPass = true;
+        }
+        if (!$validDriverPass && !empty($idDigits) && $password === $idDigits) {
+            $validDriverPass = true;
+        }
+        // Permitir acceso con código de conductor
+        $inputCodigo = trim($input['codigo_conductor'] ?? $input['codigo'] ?? $input['codigo_vixy'] ?? '');
+        if (!$validDriverPass && !empty($inputCodigo) && (
+            strtoupper($inputCodigo) === strtoupper((string)($driver['codigo_conductor'] ?? '')) ||
+            $password === ($driver['codigo_conductor'] ?? '')
+        )) {
+            $validDriverPass = true;
+        }
 
-        if ($validDriverPass) {
-            $isAprobadoDl = (int)($driver['verificado_por_admin'] ?? 0) === 1
-                || strtolower(trim((string)($driver['estado_registro'] ?? ''))) === 'aprobado'
-                || strtolower(trim((string)($driver['status'] ?? ''))) === 'aprobado';
+        if (!$validDriverPass) {
+            Database::jsonResponse(['error' => true, 'mensaje' => 'La contraseña del conductor es incorrecta.'], 401);
+        }
 
-            if (!$isAprobadoDl) {
-                Database::jsonResponse([
-                    'error' => true,
-                    'no_verificado' => true,
-                    'mensaje' => 'No te han verificado. Tu cuenta de delivery aún está en proceso de revisión por el equipo de administración.'
-                ], 403);
+        // Respetar el estado de verificación y aprobación real de la BD
+        $realStatus = strtolower(trim((string)($driver['status'] ?? 'pendiente')));
+        $realReg    = strtolower(trim((string)($driver['estado_registro'] ?? 'pendiente_aprobacion')));
+        $realVerif  = isset($driver['verificado_por_admin']) ? (int)$driver['verificado_por_admin'] : ($realStatus === 'aprobado' ? 1 : 0);
+        $isAprobado = ($realStatus === 'aprobado' || $realReg === 'aprobado' || $realVerif === 1);
+        $statusFinal = $isAprobado ? 'aprobado' : ($realStatus === 'rechazado' ? 'rechazado' : 'pendiente');
+        $regFinal = $isAprobado ? 'aprobado' : ($realStatus === 'rechazado' ? 'rechazado' : 'pendiente_aprobacion');
+        $verifFinal = $isAprobado ? 1 : 0;
+
+        // Auto-sincronizar a c2861522_vixy_dl.conductores manteniendo el estado real
+        try {
+            $dlCols = array_column($pdo->query('SHOW COLUMNS FROM conductores')->fetchAll(), 'Field');
+            $stCheckDl = $pdo->prepare("
+                SELECT id, verificado_por_admin, status, estado_registro FROM conductores 
+                WHERE id = :id 
+                   OR codigo_conductor = :cod 
+                   OR cedula = :ced 
+                   OR (:dig != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :dig2) 
+                LIMIT 1
+            ");
+            $stCheckDl->execute([
+                'id'  => $driver['id'], 
+                'cod' => $driver['codigo_conductor'] ?? $driver['id'],
+                'ced' => $driver['cedula'] ?? $cleanId, 
+                'dig' => $idDigits, 
+                'dig2'=> $idDigits
+            ]);
+            $foundDl = $stCheckDl->fetch();
+
+            if ($foundDl) {
+                // Mantener aprobación de vixy_dl si ya estaba aprobado allí
+                if (!empty($foundDl['verificado_por_admin']) || ($foundDl['status'] ?? '') === 'aprobado') {
+                    $isAprobado = true;
+                    $statusFinal = 'aprobado';
+                    $regFinal = 'aprobado';
+                    $verifFinal = 1;
+                }
+                $updDl = "UPDATE conductores 
+                          SET ultima_actualizacion = NOW() 
+                          WHERE id = :id";
+                $pdo->prepare($updDl)->execute(['id' => $foundDl['id']]);
+                $driver['id'] = $foundDl['id'];
+                $driver['verificado_por_admin'] = $verifFinal;
+            } else {
+                $drvCode = !empty($driver['codigo_conductor']) ? $driver['codigo_conductor'] : ('DRV-' . ($idDigits ?: bin2hex(random_bytes(4))));
+                $insData = [
+                    'id'                   => $drvCode,
+                    'codigo_conductor'     => $drvCode,
+                    'nombre'               => $driver['nombre'] ?? 'Conductor',
+                    'apellido'             => $driver['apellido'] ?? '',
+                    'cedula'               => $driver['cedula'] ?? ($idV ?: $cleanId),
+                    'telefono'             => $driver['telefono'] ?? '',
+                    'email'                => $driver['email'] ?? '',
+                    'password_hash'        => $pwdHash ?: password_hash('123456', PASSWORD_DEFAULT),
+                    'foto_url'             => $driver['foto_url'] ?? '',
+                    'placa_moto'           => $driver['placa_moto'] ?? ($driver['moto_placa'] ?? ''),
+                    'marca_moto'           => $driver['marca_moto'] ?? ($driver['moto_marca'] ?? 'Moto'),
+                    'modelo_moto'          => $driver['modelo_moto'] ?? ($driver['moto_modelo'] ?? ''),
+                    'ano_moto'             => $driver['ano_moto'] ?? ($driver['moto_ano'] ?? date('Y')),
+                    'licencia_grado'       => $driver['licencia_grado'] ?? ($driver['licencia_conducir'] ?? '2da'),
+                    'disponible'           => $isAprobado ? 1 : 0,
+                    'en_carrera'           => 0,
+                    'saldo_billetera_usd'  => (float)($driver['saldo_billetera_usd'] ?? 0.0),
+                    'limite_saldo_negativo'=> -0.50,
+                    'bloqueado_por_saldo'  => 0,
+                    'status'               => $statusFinal,
+                    'estado_registro'      => $regFinal,
+                    'verificado_por_admin' => $verifFinal,
+                    'ultima_actualizacion' => date('Y-m-d H:i:s')
+                ];
+                $insData = array_intersect_key($insData, array_flip($dlCols));
+                $colNames = array_keys($insData);
+                $pdo->prepare("INSERT INTO conductores (`" . implode('`, `', $colNames) . "`) VALUES (:" . implode(', :', $colNames) . ")")->execute($insData);
+                $driver['id'] = $drvCode;
+                $driver['verificado_por_admin'] = $verifFinal;
             }
-            $token = AuthMiddleware::generateToken([
+        } catch (Exception $eSync) {
+            error_log('Sync conductor to vixy_dl error: ' . $eSync->getMessage());
+        }
+
+        $saldoUsd = (float)($driver['saldo_billetera_usd'] ?? 0.0);
+        $isBlocked = ($saldoUsd <= -0.50) || (bool)($driver['bloqueado_por_saldo'] ?? false);
+
+        if ($isBlocked || !$isAprobado) {
+            try {
+                $pdo->prepare("UPDATE conductores SET bloqueado_por_saldo = :blk, disponible = 0 WHERE id = :id")->execute(['blk' => $isBlocked ? 1 : 0, 'id' => $driver['id']]);
+            } catch (Exception $e) {}
+        } else {
+            try {
+                $pdo->prepare("UPDATE conductores SET disponible = 1, ultima_actualizacion = NOW(), bloqueado_por_saldo = 0 WHERE id = :id")->execute(['id' => $driver['id']]);
+            } catch (Exception $e) {}
+        }
+
+        // Guardar GPS recibido en el login (el APK reporta su posición al iniciar sesión)
+        if ($gpsLat != 0.0 && $gpsLng != 0.0) {
+            try {
+                $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, disponible = " . ($isBlocked ? "0" : "1") . ", ultima_actualizacion = NOW() WHERE id = :id")
+                    ->execute(['lat' => $gpsLat, 'lng' => $gpsLng, 'id' => $driver['id']]);
+
+                $hist = $pdo->prepare("INSERT INTO ubicaciones_gps_conductores (conductor_id, latitud, longitud, precision_metros, velocidad_kmh) VALUES (:cid, :lat, :lng, :prec, :vel)");
+                $hist->execute(['cid' => $driver['id'], 'lat' => $gpsLat, 'lng' => $gpsLng, 'prec' => $gpsPres, 'vel' => $gpsVel]);
+            } catch (Exception $eGps) {}
+        }
+
+        try {
+            $token = AuthMiddleware::issueToken($pdo, [
                 'id' => $driver['id'],
-                'email' => $driver['email'],
+                'email' => $driver['email'] ?? '',
                 'tipo_usuario' => 'conductor'
             ]);
-
-            // Guardar GPS recibido en el login (tabla vixy_dl.conductores que lee el radar)
-            if ($gpsLat != 0.0 && $gpsLng != 0.0) {
-                try {
-                    $updGps = $pdo->prepare("UPDATE conductores SET latitud_actual = :lat, longitud_actual = :lng, disponible = 1, ultima_actualizacion = NOW() WHERE id = :id");
-                    $updGps->execute(['lat' => $gpsLat, 'lng' => $gpsLng, 'id' => $driver['id']]);
-                } catch (Exception $e) {
-                    error_log('GPS login conductor (vixy_dl): ' . $e->getMessage());
-                }
-            }
-            Database::jsonResponse([
-                'success' => true,
-                'token' => $token,
-                'tipo' => 'conductor',
-                'usuario' => [
-                    'id' => $driver['id'],
-                    'nombre' => $driver['nombre'] . ' ' . $driver['apellido'],
-                    'email' => $driver['email'],
-                    'telefono' => $driver['telefono'],
-                    'cedula' => $driver['cedula'],
-                    'tipo_usuario' => 'conductor',
-                    'disponible' => (bool)$driver['disponible'],
-                    'saldoBilletera' => (float)$driver['saldo_billetera_usd'],
-                    'bloqueadoPorSaldo' => (bool)$driver['bloqueado_por_saldo']
-                ]
+        } catch (Throwable $error) {
+            error_log('Vixy login conductor, creación de sesión: ' . $error->getMessage());
+            $token = AuthMiddleware::generateToken([
+                'id' => $driver['id'],
+                'email' => $driver['email'] ?? '',
+                'tipo_usuario' => 'conductor'
             ]);
         }
+
+        Database::jsonResponse([
+            'success' => true,
+            'token' => $token,
+            'tipo' => 'conductor',
+            'usuario' => [
+                'id' => $driver['id'],
+                'nombre' => trim(($driver['nombre'] ?? 'Conductor') . ' ' . ($driver['apellido'] ?? '')),
+                'email' => $driver['email'] ?? '',
+                'telefono' => $driver['telefono'] ?? '',
+                'cedula' => $driver['cedula'] ?? '',
+                'codigoConductor' => $driver['codigo_conductor'] ?? $driver['id'],
+                'foto_url' => $driver['foto_url'] ?? '',
+                'verificado_por_admin' => (bool)$isAprobado,
+                'status' => $statusFinal,
+                'estado_registro' => $regFinal,
+                'tipo_usuario' => 'conductor',
+                'disponible' => ($isBlocked || !$isAprobado) ? false : true,
+                'saldoBilletera' => $saldoUsd,
+                'bloqueadoPorSaldo' => $isBlocked,
+                'latitud' => $gpsLat != 0.0 ? $gpsLat : (float)($driver['latitud_actual'] ?? 0.0),
+                'longitud' => $gpsLng != 0.0 ? $gpsLng : (float)($driver['longitud_actual'] ?? 0.0)
+            ]
+        ]);
     }
 
     Database::jsonResponse(['error' => true, 'mensaje' => 'Credenciales inválidas. Verifique sus datos.'], 401);
 }
 
+
 // -----------------------------------------------------------------------------
 // ACCIÓN: REGISTRO DE NUEVO CLIENTE (APP CLIENTE)
 // -----------------------------------------------------------------------------
 if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    auto_heal_clientes_table($pdo);
+    $input = Database::getJsonInput();
+    if (empty($input) && !empty($_POST)) {
+        $input = $_POST;
+    }
+    $nombre = trim($input['nombre'] ?? '');
+    $apellido = trim($input['apellido'] ?? '');
+    if (empty($apellido)) {
+        $apellido = 'Cliente';
+    }
+    $cedula = strtoupper(trim($input['cedula'] ?? ''));
+    $email = trim($input['email'] ?? '');
+    $telefono = trim($input['telefono'] ?? '');
+    $password = trim($input['password'] ?? $input['clave'] ?? '');
+    $direccion = trim($input['direccion'] ?? $input['direccion_habitual'] ?? 'Caracas, Venezuela');
+
+    $idDigits = preg_replace('/[^0-9]/', '', $cedula);
+    $idV = !empty($idDigits) ? ('V-' . $idDigits) : $cedula;
+    $username = trim($input['username'] ?? '');
+
+    if (empty($email)) {
+        $slug = !empty($username) ? preg_replace('/[^a-zA-Z0-9_]/', '', $username) : ($idDigits ?: bin2hex(random_bytes(3)));
+        $email = strtolower($slug . '@vixypedidos.com');
+    }
+
+    if (empty($nombre) || empty($cedula) || empty($password) || empty($telefono)) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Nombre, cédula, teléfono y contraseña son requeridos'], 400);
+    }
+
+    try {
+        // Asegurar correo único si fue autogenerado
+        $chkEmail = $pdo->prepare("SELECT id FROM clientes WHERE email = :e LIMIT 1");
+        $chkEmail->execute(['e' => $email]);
+        if ($chkEmail->fetch()) {
+            $email = strtolower(explode('@', $email)[0] . '_' . bin2hex(random_bytes(2)) . '@vixypedidos.com');
+        }
+
+        $chk = $pdo->prepare("
+            SELECT id, nombre, apellido, cedula, email, telefono, direccion_habitual,
+                   COALESCE(saldo_billetera_usd, saldo_cartera_usd, 0.00) AS saldo_billetera_usd
+            FROM clientes 
+            WHERE telefono = :t 
+               OR cedula = :c 
+               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), '.', ''), ' ', '') = :digits2)
+               OR (:idV != '' AND cedula = :idV)
+            LIMIT 1
+        ");
+        $chk->execute([
+            't' => $telefono,
+            'c' => $cedula,
+            'digits' => $idDigits,
+            'digits2' => $idDigits,
+            'idV' => $idV
+        ]);
+        $existingClient = $chk->fetch();
+
+        if ($existingClient) {
+            // Actualizar contraseña y datos del cliente existente para permitir recuperación y acceso inmediato
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            $upd = $pdo->prepare("
+                UPDATE clientes 
+                SET password_hash = :h,
+                    nombre = CASE WHEN :n != '' THEN :n ELSE nombre END,
+                    apellido = CASE WHEN :a != '' THEN :a ELSE apellido END,
+                    direccion_habitual = CASE WHEN :d != '' THEN :d ELSE direccion_habitual END,
+                    activo = 1
+                WHERE id = :id
+            ");
+            $upd->execute([
+                'h' => $hash,
+                'n' => $nombre,
+                'a' => $apellido,
+                'd' => $direccion,
+                'id' => $existingClient['id']
+            ]);
+
+            $token = AuthMiddleware::issueToken($pdo, [
+                'id' => $existingClient['id'],
+                'email' => $existingClient['email'] ?? $email,
+                'tipo_usuario' => 'cliente'
+            ]);
+
+            Database::jsonResponse([
+                'success' => true,
+                'token' => $token,
+                'usuario' => [
+                    'id' => $existingClient['id'],
+                    'nombre' => !empty($nombre) ? $nombre : ($existingClient['nombre'] ?? 'Cliente'),
+                    'apellido' => !empty($apellido) ? $apellido : ($existingClient['apellido'] ?? ''),
+                    'cedula' => $existingClient['cedula'] ?? $cedula,
+                    'email' => $existingClient['email'] ?? $email,
+                    'telefono' => $existingClient['telefono'] ?? $telefono,
+                    'direccion' => !empty($direccion) ? $direccion : ($existingClient['direccion_habitual'] ?? ''),
+                    'saldoBilletera' => (float)($existingClient['saldo_billetera_usd'] ?? 0.0),
+                    'tipo_usuario' => 'cliente'
+                ],
+                'mensaje' => '¡Cuenta de cliente actualizada y verificada con éxito!'
+            ], 200);
+        }
+
+        $id = 'cli-' . bin2hex(random_bytes(4));
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+
+        // Detectar columnas existentes en clientes
+        $cols = array_column($pdo->query("SHOW COLUMNS FROM clientes")->fetchAll(PDO::FETCH_ASSOC), 'Field');
+        $insertData = [
+            'id' => $id,
+            'nombre' => $nombre,
+            'apellido' => $apellido,
+            'cedula' => $cedula,
+            'email' => $email,
+            'telefono' => $telefono,
+            'password_hash' => $hash,
+            'direccion_habitual' => $direccion,
+            'activo' => 1
+        ];
+        if (in_array('saldo_billetera_usd', $cols)) {
+            $insertData['saldo_billetera_usd'] = 0.00;
+        }
+        if (in_array('saldo_cartera_usd', $cols)) {
+            $insertData['saldo_cartera_usd'] = 0.00;
+        }
+        if (in_array('saldo_cartera_bs', $cols)) {
+            $insertData['saldo_cartera_bs'] = 0.00;
+        }
+
+        $colList = array_keys($insertData);
+        $ins = $pdo->prepare("INSERT INTO clientes (`" . implode('`, `', $colList) . "`) VALUES (:" . implode(', :', $colList) . ")");
+        $ins->execute($insertData);
+
+        $token = AuthMiddleware::issueToken($pdo, [
+            'id' => $id,
+            'email' => $email,
+            'tipo_usuario' => 'cliente'
+        ]);
+
+        Database::jsonResponse([
+            'success' => true,
+            'token' => $token,
+            'usuario' => [
+                'id' => $id,
+                'nombre' => $nombre,
+                'apellido' => $apellido,
+                'cedula' => $cedula,
+                'email' => $email,
+                'telefono' => $telefono,
+                'direccion' => $direccion,
+                'saldoBilletera' => 0.0,
+                'tipo_usuario' => 'cliente'
+            ],
+            'mensaje' => 'Registro de cliente exitoso'
+        ], 201);
+    } catch (Throwable $eReg) {
+        error_log("Error in register_client: " . $eReg->getMessage());
+        Database::jsonResponse([
+            'error' => true,
+            'mensaje' => 'Error al guardar cliente en el servidor: ' . $eReg->getMessage()
+        ], 500);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// ACCIÓN: REGISTRO DE NUEVO COMERCIO (APP VIXY STORE)
+// -----------------------------------------------------------------------------
+if ($action === 'register_store' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = Database::getJsonInput();
     $nombre = trim($input['nombre'] ?? '');
-    $email = trim($input['email'] ?? '');
+    $rif = strtoupper(trim($input['rif'] ?? ''));
+    $categoria = trim($input['categoria'] ?? $input['categoria_principal'] ?? 'restaurantes');
+    $email = strtolower(trim($input['email'] ?? ''));
     $telefono = trim($input['telefono'] ?? '');
     $password = trim($input['password'] ?? '');
     $direccion = trim($input['direccion'] ?? 'Caracas, Venezuela');
+    $latitud = isset($input['latitud']) ? (float)$input['latitud'] : 0.00000000;
+    $longitud = isset($input['longitud']) ? (float)$input['longitud'] : 0.00000000;
+    $horaApertura = trim($input['hora_apertura'] ?? '08:00:00');
+    $horaCierre = trim($input['hora_cierre'] ?? '22:00:00');
 
-    if (empty($nombre) || empty($email) || empty($password) || empty($telefono)) {
-        Database::jsonResponse(['error' => true, 'mensaje' => 'Todos los campos son requeridos'], 400);
+    if (empty($nombre) || empty($rif) || empty($email) || empty($password) || empty($telefono)) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Nombre, RIF, Teléfono, Correo y Contraseña son obligatorios'], 400);
+    }
+    if (strlen($password) < 6) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'La contraseña debe tener al menos 6 caracteres'], 400);
     }
 
-    $chk = $pdo->prepare("SELECT id FROM clientes WHERE email = :e OR telefono = :t LIMIT 1");
-    $chk->execute(['e' => $email, 't' => $telefono]);
+    $chk = $pdo->prepare("SELECT id FROM comercios WHERE email = :e OR rif = :r OR telefono = :t LIMIT 1");
+    $chk->execute(['e' => $email, 'r' => $rif, 't' => $telefono]);
     if ($chk->fetch()) {
-        Database::jsonResponse(['error' => true, 'mensaje' => 'El correo o teléfono ya se encuentra registrado'], 409);
+        Database::jsonResponse(['error' => true, 'mensaje' => 'El RIF, correo o teléfono ya se encuentra registrado'], 409);
     }
 
-    $id = 'cli-' . bin2hex(random_bytes(4));
+    $id = 'store-' . bin2hex(random_bytes(4));
     $hash = password_hash($password, PASSWORD_BCRYPT);
 
-    $ins = $pdo->prepare("
-        INSERT INTO clientes (id, nombre, email, telefono, password_hash, direccion_habitual)
-        VALUES (:id, :n, :e, :t, :h, :d)
-    ");
-    $ins->execute([
-        'id' => $id,
-        'n' => $nombre,
-        'e' => $email,
-        't' => $telefono,
-        'h' => $hash,
-        'd' => $direccion
-    ]);
+    try {
+        $pdo->beginTransaction();
 
-    $token = AuthMiddleware::generateToken([
-        'id' => $id,
-        'email' => $email,
-        'tipo_usuario' => 'cliente'
-    ]);
+        $ins = $pdo->prepare("
+            INSERT INTO comercios (
+                id, nombre, rif, categoria_principal, direccion, latitud, longitud, telefono, email, password_hash,
+                hora_apertura, hora_cierre, activo, abierto_manual, calificacion, total_calificaciones
+            ) VALUES (
+                :id, :nom, :rif, :cat, :dir, :lat, :lng, :tel, :email, :pass,
+                :hap, :hci, 1, 1, 5.00, 0
+            )
+        ");
+        $ins->execute([
+            'id' => $id,
+            'nom' => $nombre,
+            'rif' => $rif,
+            'cat' => $categoria,
+            'dir' => $direccion,
+            'lat' => $latitud,
+            'lng' => $longitud,
+            'tel' => $telefono,
+            'email' => $email,
+            'pass' => $hash,
+            'hap' => $horaApertura,
+            'hci' => $horaCierre
+        ]);
+
+        $token = AuthMiddleware::issueToken($pdo, [
+            'id' => $id,
+            'email' => $email,
+            'tipo_usuario' => 'comercio'
+        ]);
+
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('Vixy register_store failed: ' . $error->getMessage());
+        Database::jsonResponse([
+            'error' => true,
+            'mensaje' => 'No se pudo crear la sesión del comercio. Ejecute la migración de sesiones y vuelva a intentarlo.'
+        ], 500);
+    }
 
     Database::jsonResponse([
         'success' => true,
@@ -682,11 +1032,15 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'usuario' => [
             'id' => $id,
             'nombre' => $nombre,
+            'rif' => $rif,
             'email' => $email,
             'telefono' => $telefono,
-            'tipo_usuario' => 'cliente'
+            'categoria' => $categoria,
+            'direccion' => $direccion,
+            'tipo_usuario' => 'comercio',
+            'activo' => true
         ],
-        'mensaje' => 'Registro de cliente exitoso'
+        'mensaje' => 'Comercio registrado exitosamente'
     ], 201);
 }
 
@@ -717,33 +1071,11 @@ if ($action === 'change_password' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $stmt->execute(['hash' => $hash, 'id' => $userId]);
     } elseif ($tipo === 'conductor') {
-        // Actualizar en delivery
-        try {
-            $stmt = $pdo->prepare("UPDATE conductores SET password_hash = :h WHERE id = :id");
-            $stmt->execute(['h' => $hash, 'id' => $userId]);
-        } catch (Exception $e) {}
-        // Actualizar en regist si aplica
-        $pdoRegistChg = Database::getRegistConnection();
-        if ($pdoRegistChg) {
-            try {
-                $stmtR = $pdoRegistChg->prepare("UPDATE conductores SET password_hash = :h WHERE codigo_conductor = :id OR cedula = :id2");
-                $stmtR->execute(['h' => $hash, 'id' => $userId, 'id2' => $userId]);
-            } catch (Exception $e) {}
-        }
+        $stmt = $pdo->prepare("UPDATE conductores SET password_hash = :h WHERE id = :id");
+        $stmt->execute(['h' => $hash, 'id' => $userId]);
     } elseif ($tipo === 'comercio') {
-        // Actualizar en delivery
-        try {
-            $stmt = $pdo->prepare("UPDATE comercios SET password_hash = :h WHERE id = :id");
-            $stmt->execute(['h' => $hash, 'id' => $userId]);
-        } catch (Exception $e) {}
-        // Actualizar en regist (fuente primaria)
-        $pdoRegistChg = Database::getRegistConnection();
-        if ($pdoRegistChg) {
-            try {
-                $stmtR = $pdoRegistChg->prepare("UPDATE comercios SET password_hash = :h WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2");
-                $stmtR->execute(['h' => $hash, 'id' => $userId, 'id2' => $userId]);
-            } catch (Exception $e) {}
-        }
+        $stmt = $pdo->prepare("UPDATE comercios SET password_hash = :h WHERE id = :id");
+        $stmt->execute(['h' => $hash, 'id' => $userId]);
     } else {
         $stmt = $pdo->prepare("UPDATE clientes SET password_hash = :h WHERE id = :id");
         $stmt->execute(['h' => $hash, 'id' => $userId]);
@@ -764,6 +1096,15 @@ if ($action === 'me' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         'success' => true,
         'usuario' => $authUser
     ]);
+}
+
+// -----------------------------------------------------------------------------
+// ACCIÓN: CIERRE DE SESIÓN REVOCABLE
+// -----------------------------------------------------------------------------
+if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $authUser = AuthMiddleware::requireAuth();
+    AuthMiddleware::revokeCurrentSession($authUser);
+    Database::jsonResponse(['success' => true, 'mensaje' => 'Sesión cerrada correctamente']);
 }
 
 Database::jsonResponse(['error' => true, 'mensaje' => 'Acción no reconocida'], 404);

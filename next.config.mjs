@@ -5,6 +5,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
+  distDir: '.next-export',
   trailingSlash: true,
   // basePath y assetPrefix deben ser string vacía o el path, nunca undefined.
   basePath: basePath,

@@ -50,7 +50,6 @@ if __name__ == "__main__":
     # Excluyendo carpetas assets redundantes en sub-apps (se sirven centralizadamente desde /assets/)
     print("-> Generando vixy_servidor.zip (COMPLETO: Tienda + Portal + Shop + Delivery API)...")
     sub_app_assets_excludes = [
-        "admin/assets",
         "comercio/assets",
         "delivery/assets",
         "pedidos/assets"
