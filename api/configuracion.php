@@ -4,45 +4,63 @@
  * Vixy Platform Backend API - api/admin/configuracion.php
  */
 
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/auth_middleware.php';
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth_middleware.php';
 
 $pdo = Database::getConnection();
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Validar token JWT y verificar permisos administrativos
-$user = AuthMiddleware::requireAuth(['administrator', 'admin', 'secretary', 'super_admin']);
-
+// Manejo de métodos HTTP
 if ($method === 'GET') {
     try {
         $stmt = $pdo->query("SELECT clave, valor, descripcion FROM configuracion_sistema ORDER BY clave ASC");
         $rows = $stmt->fetchAll();
 
+        $configs = [];
         $configMap = [];
         foreach ($rows as $row) {
+            $configs[$row['clave']] = is_numeric($row['valor']) ? (float)$row['valor'] : $row['valor'];
             $configMap[$row['clave']] = [
                 'valor' => $row['valor'],
                 'descripcion' => $row['descripcion']
             ];
         }
 
+        // Fallbacks si la tabla estuviese vacía
+        if (empty($configs['tasa_bcv'])) $configs['tasa_bcv'] = 48.50;
+        if (empty($configs['tarifa_base_usd'])) $configs['tarifa_base_usd'] = 2.00;
+        if (empty($configs['km_base'])) $configs['km_base'] = 3.0;
+        if (empty($configs['precio_km_adicional_usd'])) $configs['precio_km_adicional_usd'] = 0.50;
+        if (empty($configs['limite_saldo_negativo_conductor_usd'])) $configs['limite_saldo_negativo_conductor_usd'] = -0.50;
+        if (empty($configs['comision_plataforma_porcentaje'])) $configs['comision_plataforma_porcentaje'] = 15.0;
+        // Comisiones escalonadas por antigüedad (delivery y comercio)
+        if (!isset($configs['comision_delivery_antes_3m'])) $configs['comision_delivery_antes_3m'] = 5.0;
+        if (!isset($configs['comision_delivery_despues_3m'])) $configs['comision_delivery_despues_3m'] = 10.0;
+        if (!isset($configs['comision_comercio_antes_anio'])) $configs['comision_comercio_antes_anio'] = 0.0;
+        if (!isset($configs['comision_comercio_despues_anio'])) $configs['comision_comercio_despues_anio'] = 3.0;
+
         Database::jsonResponse([
             'success' => true,
+            'config' => $configs,
             'mensaje' => 'Configuraciones obtenidas correctamente',
             'data' => [
                 'configuraciones' => $rows,
                 'mapa' => $configMap
-            ]
+            ],
+            'timestamp' => date('Y-m-d H:i:s')
         ]);
     } catch (PDOException $e) {
         Database::jsonResponse([
             'error' => true,
-            'mensaje' => 'Error al obtener la configuración'
+            'mensaje' => 'Error al obtener la configuración: ' . $e->getMessage()
         ], 500);
     }
 }
 
 if ($method === 'POST' || $method === 'PUT') {
+    // Validar token JWT y verificar permisos administrativos para guardar cambios
+    $user = AuthMiddleware::requireAuth(['administrator', 'admin', 'secretary', 'super_admin', 'finanzas']);
+
     $data = Database::getJsonInput();
     $configuraciones = $data['configuraciones'] ?? $data;
 
@@ -55,7 +73,11 @@ if ($method === 'POST' || $method === 'PUT') {
 
     try {
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare("UPDATE configuracion_sistema SET valor = :valor WHERE clave = :clave");
+        $stmt = $pdo->prepare("
+            INSERT INTO configuracion_sistema (clave, valor) 
+            VALUES (:clave, :valor) 
+            ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+        ");
         $actualizados = 0;
 
         foreach ($configuraciones as $clave => $val) {
@@ -77,9 +99,7 @@ if ($method === 'POST' || $method === 'PUT') {
                 'clave' => $claveParam
             ]);
 
-            if ($stmt->rowCount() > 0) {
-                $actualizados++;
-            }
+            $actualizados++;
         }
 
         $pdo->commit();

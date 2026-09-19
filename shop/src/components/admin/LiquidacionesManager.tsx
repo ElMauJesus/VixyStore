@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Wallet, CheckCircle, XCircle, Clock, AlertCircle, RefreshCw, CreditCard, User
 } from 'lucide-react';
+import { api } from '../../services/api';
 
 // Interfaces para tipar los datos que vienen del backend
 interface Solicitud {
@@ -38,10 +39,8 @@ export const LiquidacionesManager: React.FC = () => {
     const fetchPendientes = async () => {
         setLoading(true);
         try {
-            // Ajusta la ruta o añade los headers de autenticación según manejen el login en Antigravity
-            const response = await fetch('/api/admin/procesar-liquidacion.php');
-            const data = await response.json();
-            if (data.success) {
+            const data = await api.getLiquidaciones();
+            if (data?.success && Array.isArray(data.data)) {
                 setSolicitudes(data.data);
             }
         } catch (error) {
@@ -71,29 +70,23 @@ export const LiquidacionesManager: React.FC = () => {
 
         setProcesando(true);
         try {
-            const response = await fetch('/api/admin/procesar-liquidacion.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    solicitud_id: solicitudSeleccionada.id,
-                    accion: accionActual,
-                    referencia_bancaria: referencia,
-                    notas: notas
-                })
+            const data = await api.procesarLiquidacion({
+                solicitud_id: solicitudSeleccionada.id,
+                accion: accionActual,
+                referencia_bancaria: referencia,
+                notas: notas
             });
 
-            const data = await response.json();
-
-            if (data.success) {
+            if (data?.success) {
                 alert(data.mensaje); // O usa un Toast de tu sistema
                 setModalOpen(false);
                 fetchPendientes(); // Recargamos la lista
             } else {
-                alert("Error: " + data.mensaje);
+                alert("Error: " + (data?.mensaje || "No se pudo procesar la solicitud"));
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error al procesar:", error);
-            alert("Hubo un error de conexión al procesar la liquidación.");
+            alert("Hubo un error de conexión al procesar la liquidación: " + (error?.message || "Error desconocido"));
         } finally {
             setProcesando(false);
         }

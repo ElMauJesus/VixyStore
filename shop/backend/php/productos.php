@@ -109,8 +109,8 @@ function procesarYGuardarImagenArticulo($imgInput, string $comercioId, string $n
         $filename = "art_{$slug}_" . time() . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
 
         $dirs = [
-            dirname(dirname(__DIR__)) . "/shop/imgs-c-d/comercios/{$comercioId}/articulos/",
-            dirname(dirname(__DIR__)) . "/imgs-c-d/comercios/{$comercioId}/articulos/",
+            dirname(__DIR__) . "/shop/imgs-c-d/comercios/{$comercioId}/articulos/",
+            dirname(__DIR__) . "/imgs-c-d/comercios/{$comercioId}/articulos/",
             __DIR__ . "/uploads/comercios/{$comercioId}/articulos/"
         ];
 
@@ -165,8 +165,8 @@ if ($method === 'POST') {
         $ext = pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'jpg';
         $slug = preg_replace('/[^a-z0-9]/', '_', strtolower(trim($data['nombre'])));
         $fn = "art_{$slug}_" . time() . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
-        $d1 = dirname(dirname(__DIR__)) . "/shop/imgs-c-d/comercios/{$comId}/articulos/";
-        $d2 = dirname(dirname(__DIR__)) . "/imgs-c-d/comercios/{$comId}/articulos/";
+        $d1 = dirname(__DIR__) . "/shop/imgs-c-d/comercios/{$comId}/articulos/";
+        $d2 = dirname(__DIR__) . "/imgs-c-d/comercios/{$comId}/articulos/";
         $d3 = __DIR__ . "/uploads/comercios/{$comId}/articulos/";
         foreach ([$d1, $d2, $d3] as $d) {
             if (!is_dir($d)) @mkdir($d, 0755, true);

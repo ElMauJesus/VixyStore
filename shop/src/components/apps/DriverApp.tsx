@@ -180,7 +180,7 @@ export const DriverApp: React.FC = () => {
   const assignedOrder = activeRide;
 
   const pendingOffers = orders.filter(o => 
-    (!o.conductor && (o.estado === 'esperando_repartidor' || o.estado === 'en_preparacion' || o.estado === 'pago_verificado')) ||
+    (!o.conductor && (!o.conductorOfrecidoId || o.conductorOfrecidoId === driver.id) && (o.estado === 'esperando_repartidor' || o.estado === 'en_preparacion' || o.estado === 'pago_verificado')) ||
     (o.conductor?.id === driver.id && o.estado === 'esperando_repartidor')
   );
 

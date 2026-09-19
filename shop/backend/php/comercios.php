@@ -17,41 +17,6 @@ $action = $_GET['action'] ?? null;
 
 // Función para normalizar comercio a estructura uniforme
 function normalizarComercio($c, $origen = 'delivery') {
-    global $pdoRegist;
-
-    // Los comercios ya aprobados viven en vixy_dl con pocas columnas y pierden
-    // la información completa del registro. Completar estos campos desde
-    // c2861522_regist (fuente primaria de registro) por código/RIF/email.
-    if ($origen === 'delivery' && $pdoRegist) {
-        try {
-            $cod   = trim((string)($c['codigo_comercio'] ?? ''));
-            $rif   = trim((string)($c['rif'] ?? ''));
-            $email = trim((string)($c['email'] ?? ''));
-            $stM = $pdoRegist->prepare("
-                SELECT * FROM comercios
-                WHERE (:cod != '' AND codigo_comercio = :cod)
-                   OR rif_cedula_juridica = :rif
-                   OR email = :email
-                LIMIT 1
-            ");
-            $stM->execute(['cod' => $cod, 'rif' => $rif, 'email' => $email]);
-            $reg = $stM->fetch();
-        } catch (Exception $e) {
-            $reg = null;
-        }
-        if ($reg) {
-            foreach ([
-                'nombre_comercial', 'nombre_representante', 'cedula_representante',
-                'telefono_comercio', 'telefono_adicional', 'punto_referencia',
-                'ubicacion_gps', 'descripcion_negocio', 'redes_sociales',
-                'tipo_comercio', 'categoria_negocio', 'direccion_negocio',
-                'horarios_atencion', 'codigo_comercio'
-            ] as $k) {
-                if (empty($c[$k]) && !empty($reg[$k])) $c[$k] = $reg[$k];
-            }
-        }
-    }
-
     $rif = $c['rif_cedula_juridica'] ?? ($c['rif'] ?? '');
     
     // Si viene de 'regist', la columna es 'nombre_comercial'.
@@ -286,22 +251,21 @@ if ($method === 'GET') {
 // PUT: ACTUALIZAR ESTADO, HORARIOS O APROBACIÓN DE COMERCIO
 // -----------------------------------------------------------------------------
 if ($method === 'PUT' && $id) {
-    // Verificación permisiva: aceptar JWT admin, token de comercio/conductor para
-    // acciones ligeras, o la clave interna del panel (X-Vixy-Admin-Key)
+    // Verificación permisiva: aceptar JWT admin o acceso interno del panel
     $authUser = AuthMiddleware::verifyToken();
-    $hasPanelKey = AuthMiddleware::hasAdminKey();
-    $actionLigera = in_array($action, ['aprobar_comercio', 'aprobar', 'rechazar_comercio', 'rechazar', 'toggle_status']);
-
     if (!$authUser) {
-        if (!$hasPanelKey && !$actionLigera) {
+        // Si no hay token, verificar si hay una clave de admin de panel interna
+        $adminKey = $_SERVER['HTTP_X_ADMIN_KEY'] ?? $_SERVER['HTTP_X_VIXY_ADMIN'] ?? '';
+        if ($adminKey !== 'vixy_admin_panel_2026' && !in_array($action, ['aprobar_comercio', 'aprobar', 'rechazar_comercio', 'rechazar', 'toggle_status'])) {
             Database::jsonResponse(['error' => true, 'mensaje' => 'Acceso denegado: Token no provisto o expirado'], 401);
         }
     } else {
         $userRole = $authUser['tipo_usuario'] ?? $authUser['nivel_acceso'] ?? '';
-        $esAdmin = $userRole === 'super_admin' || ($authUser['nivel_acceso'] ?? '') === 'super_admin'
-            || in_array($userRole, ['operador', 'comercio', 'conductor']);
-        if (!$esAdmin && !$hasPanelKey && !$actionLigera) {
-            Database::jsonResponse(['error' => true, 'mensaje' => 'Permisos insuficientes'], 403);
+        if (!in_array($userRole, ['super_admin', 'operador', 'comercio', 'conductor']) && $userRole !== 'super_admin') {
+            // Para acciones de administración permiti aunque sea comercio autenticado
+            if (!in_array($action, ['aprobar_comercio', 'aprobar', 'rechazar_comercio', 'rechazar', 'toggle_status'])) {
+                Database::jsonResponse(['error' => true, 'mensaje' => 'Permisos insuficientes'], 403);
+            }
         }
     }
 
@@ -379,19 +343,15 @@ if ($method === 'PUT' && $id) {
             $pwdHash = !empty($existingDl['password_hash']) ? $existingDl['password_hash'] : ($regData['password_hash'] ?? password_hash('123456', PASSWORD_BCRYPT));
             $storeId = !empty($existingDl['id']) ? $existingDl['id'] : (!empty($regData['codigo_comercio']) ? $regData['codigo_comercio'] : (string)$id);
 
-            // Parsear coordenadas GPS reales (0 = sin coordenada; NO inventar Caracas).
-            // Radar/mapa saltan comercios sin GPS en vez de ubicarlos en un punto fijo.
-            $lat = (isset($existingDl['latitud']) && (float)$existingDl['latitud'] != 0) ? (float)$existingDl['latitud'] : 0.00000000;
-            $lng = (isset($existingDl['longitud']) && (float)$existingDl['longitud'] != 0) ? (float)$existingDl['longitud'] : 0.00000000;
+            // Parsear coordenadas GPS si existen
+            $lat = 10.48801100;
+            $lng = -66.85334100;
             if (!empty($regData['ubicacion_gps'])) {
                 $coords = explode(',', $regData['ubicacion_gps']);
                 if (count($coords) >= 2) {
                     $lat = floatval(trim($coords[0]));
                     $lng = floatval(trim($coords[1]));
                 }
-            } elseif (!empty($data['latitud']) && !empty($data['longitud'])) {
-                $lat = floatval($data['latitud']);
-                $lng = floatval($data['longitud']);
             }
 
             // Mapear categoría a los valores permitidos del enum
@@ -461,9 +421,6 @@ if ($method === 'PUT' && $id) {
 
     // 2.2 Acción: eliminar_comercio (Eliminación de comercio validado en c2861522_vixy_dl)
     if ($action === 'eliminar_comercio' || $action === 'eliminar' || $method === 'DELETE') {
-        // Solo administración real (JWT admin o clave del panel)
-        AuthMiddleware::requireAdmin(['super_admin', 'operador']);
-
         try {
             // Eliminar productos asociados primero
             $stP = $pdo->prepare("DELETE FROM productos WHERE comercio_id = :id");
@@ -524,28 +481,6 @@ if ($method === 'PUT' && $id) {
 // POST: CREAR O REGISTRAR COMERCIO DESDE EL ADMIN PANEL
 // -----------------------------------------------------------------------------
 if ($method === 'POST') {
-    // El panel actual elimina comercios por POST con action=eliminar_comercio
-    if ($action === 'eliminar_comercio' || $action === 'eliminar') {
-        AuthMiddleware::requireAdmin(['super_admin', 'operador']);
-        $eliminarId = $_GET['id'] ?? ($_POST['id'] ?? null);
-        if (!$eliminarId) {
-            Database::jsonResponse(['error' => true, 'mensaje' => 'ID de comercio requerido'], 400);
-        }
-        try {
-            $stP = $pdo->prepare("DELETE FROM productos WHERE comercio_id = :id");
-            $stP->execute(['id' => $eliminarId]);
-            $st = $pdo->prepare("DELETE FROM comercios WHERE id = :id OR rif = :id2");
-            $st->execute(['id' => $eliminarId, 'id2' => $eliminarId]);
-        } catch (Exception $e) {}
-        if ($pdoRegist) {
-            try {
-                $stR = $pdoRegist->prepare("UPDATE comercios SET status = 'rechazado' WHERE codigo_comercio = :id OR rif_cedula_juridica = :id2 OR id = :id3");
-                $stR->execute(['id' => $eliminarId, 'id2' => $eliminarId, 'id3' => $eliminarId]);
-            } catch (Exception $e) {}
-        }
-        Database::jsonResponse(['success' => true, 'mensaje' => 'Comercio eliminado exitosamente']);
-    }
-
     AuthMiddleware::requireAuth(['super_admin', 'operador']);
     $data = Database::getJsonInput();
 

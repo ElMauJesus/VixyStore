@@ -1,7 +1,7 @@
 <?php
 /**
  * Vixy Delivery Platform - Almacenamiento Centralizado de Imágenes y Consultas SQL
- * Destinos soportados: comercios, productos, entregas, reclamos, comprobantes y conductores
+ * Destinos soportados: comercios, productos, entregas, reclamos, comprobantes
  * Ejecución directa de consultas SQL individuales según entidad y tipo
  */
 
@@ -41,6 +41,7 @@ if ($authUser && !empty($entityIdPeticion)) {
     $isAdmin = in_array($userRole, ['super_admin', 'admin', 'administrador', 'operador', 'finanzas'], true);
     $userId = $authUser['id'] ?? ($authUser['sub'] ?? '');
     if (!$isAdmin && $userId !== '' && $userId !== $entityIdPeticion) {
+        // En productos o entregas, verificar si pertenece al comercio del usuario
         if (in_array($tipoPeticion, ['comercios', 'conductores'], true)) {
             Database::jsonResponse([
                 'error' => true,
@@ -89,7 +90,7 @@ $entityId = $_POST['entity_id'] ?? null; // ID del comercio, producto, pedido, r
 $comercioId = $_POST['comercio_id'] ?? $_POST['comercioId'] ?? null;
 $campoEspecifico = $_POST['campo'] ?? null; // ej: 'logo', 'banner'
 
-$validTypes = ['comercios', 'productos', 'articulos', 'entregas', 'reclamos', 'comprobantes', 'admin', 'conductores'];
+$validTypes = ['comercios', 'productos', 'articulos', 'entregas', 'reclamos', 'comprobantes', 'conductores', 'admin'];
 if (!in_array($tipo, $validTypes)) {
     $tipo = 'general';
 }
@@ -114,8 +115,8 @@ $filename = ($tipo === 'productos' || $tipo === 'articulos')
 
 if (($tipo === 'productos' || $tipo === 'articulos') && !empty($comercioId)) {
     // Almacenar en la carpeta individual del comercio respectivo
-    $dirShop    = dirname(dirname(__DIR__)) . "/shop/imgs-c-d/comercios/{$comercioId}/articulos/";
-    $dirRoot    = dirname(dirname(__DIR__)) . "/imgs-c-d/comercios/{$comercioId}/articulos/";
+    $dirShop    = dirname(__DIR__) . "/shop/imgs-c-d/comercios/{$comercioId}/articulos/";
+    $dirRoot    = dirname(__DIR__) . "/imgs-c-d/comercios/{$comercioId}/articulos/";
     $dirUploads = __DIR__ . "/uploads/comercios/{$comercioId}/articulos/";
 
     foreach ([$dirShop, $dirRoot, $dirUploads] as $d) {
@@ -135,6 +136,30 @@ if (($tipo === 'productos' || $tipo === 'articulos') && !empty($comercioId)) {
     }
 
     $publicUrl = "/shop/imgs-c-d/comercios/{$comercioId}/articulos/" . $filename;
+} elseif ($tipo === 'conductores' && !empty($entityId)) {
+    // Fotos y documentos de conductores: guardar en la carpeta de deliverys del conductor
+    $conductorCode = preg_replace('/[^a-zA-Z0-9_\-]/', '', $entityId);
+    $dirDrv        = dirname(__DIR__) . "/shop/imgs-c-d/deliverys/{$conductorCode}/";
+    $dirRootDrv    = dirname(__DIR__) . "/imgs-c-d/deliverys/{$conductorCode}/";
+    $dirUploadsSub = __DIR__ . "/uploads/conductores/{$conductorCode}/";
+    $dirUploadsGen = __DIR__ . "/uploads/conductores/";
+
+    foreach ([$dirDrv, $dirRootDrv, $dirUploadsSub, $dirUploadsGen] as $d) {
+        if (!is_dir($d)) @mkdir($d, 0755, true);
+    }
+
+    $targetPath = is_dir($dirDrv) ? ($dirDrv . $filename) : ($dirUploadsSub . $filename);
+    if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+        Database::jsonResponse(['error' => true, 'mensaje' => 'Error al guardar la foto del conductor'], 500);
+    }
+    if (file_exists($targetPath)) {
+        @copy($targetPath, $dirDrv . $filename);
+        @copy($targetPath, $dirRootDrv . $filename);
+        @copy($targetPath, $dirUploadsSub . $filename);
+        @copy($targetPath, $dirUploadsGen . $filename);
+    }
+
+    $publicUrl = "/shop/imgs-c-d/deliverys/{$conductorCode}/" . $filename;
 } else {
     $uploadDir = __DIR__ . "/uploads/{$tipo}/";
     if (!is_dir($uploadDir)) {
@@ -145,7 +170,7 @@ if (($tipo === 'productos' || $tipo === 'articulos') && !empty($comercioId)) {
         Database::jsonResponse(['error' => true, 'mensaje' => 'Error al mover el archivo al disco de almacenamiento'], 500);
     }
 
-    $publicUrl = "/api/uploads/{$tipo}/" . $filename;
+    $publicUrl = "/backend/php/uploads/{$tipo}/" . $filename;
 }
 
 // 3. EJECUTAR CONSULTAS SQL INDIVIDUALES SEGÚN ENTIDAD Y TIPO
@@ -163,6 +188,94 @@ if ($entityId) {
             $sqlMessage = "Comercio [{$entityId}]: Campo {$col} actualizado con éxito.";
             break;
 
+        // --- A2. FOTO DE PERFIL O DOCUMENTOS DEL CONDUCTOR ---
+        case 'conductores':
+            $campo = strtolower(trim($campoEspecifico ?? ''));
+            $campoMap = [
+                'perfil'                => 'foto_perfil_url',
+                'foto'                  => 'foto_perfil_url',
+                'avatar'                => 'foto_perfil_url',
+                'foto_perfil'           => 'foto_perfil_url',
+                'cedula'                => 'foto_cedula_url',
+                'cedula_reverso'        => 'foto_cedula_reverso_url',
+                'licencia'              => 'foto_licencia_url',
+                'carnet'                => 'foto_carnet_circulacion_url',
+                'carnet_circulacion'    => 'foto_carnet_circulacion_url',
+                'certificado_medico'    => 'foto_certificado_medico_url',
+                'rcv'                   => 'foto_rcv_url',
+                'antecedentes'          => 'foto_antecedentes_url',
+                'vehiculo'              => 'foto_vehiculo_url',
+                'placa'                 => 'foto_placa_url',
+                'record'                => 'record_policial_url',
+            ];
+
+            $esPerfil = empty($campo) || in_array($campo, ['perfil', 'foto', 'avatar', 'foto_perfil', 'avatar_url'], true);
+            $idDigits = preg_replace('/[^0-9]/', '', (string)$entityId);
+
+            $pdoConductores = Database::getConnection();
+            $pdoConductoresRegist = Database::getRegistConnection();
+
+            if ($esPerfil) {
+                try {
+                    $stmtDl = $pdoConductores->prepare("
+                        UPDATE conductores 
+                        SET foto_url = :url, avatar_url = :url2, foto_perfil_url = :url3
+                        WHERE id = :id 
+                           OR codigo_conductor = :id2 
+                           OR cedula = :id3
+                           OR (:digits != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :digits)
+                    ");
+                    $stmtDl->execute([
+                        'url' => $publicUrl, 'url2' => $publicUrl, 'url3' => $publicUrl,
+                        'id' => $entityId, 'id2' => $entityId, 'id3' => $entityId, 'digits' => $idDigits
+                    ]);
+                    $sqlExecuted = true;
+                    $sqlMessage = "Conductor [{$entityId}]: Foto de perfil actualizada en vixy_dl. Filas: " . $stmtDl->rowCount();
+                } catch (Exception $e) {
+                    error_log('Error actualizando foto conductor vixy_dl: ' . $e->getMessage());
+                }
+
+                if ($pdoConductoresRegist) {
+                    try {
+                        $stmtReg = $pdoConductoresRegist->prepare("
+                            UPDATE conductores 
+                            SET foto_url = :url, foto_perfil_url = :url2
+                            WHERE id = :id 
+                               OR codigo_conductor = :id2 
+                               OR cedula = :id3
+                               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :digits)
+                        ");
+                        $stmtReg->execute([
+                            'url' => $publicUrl, 'url2' => $publicUrl,
+                            'id' => $entityId, 'id2' => $entityId, 'id3' => $entityId, 'digits' => $idDigits
+                        ]);
+                    } catch (Exception $e) {}
+                }
+            } else {
+                $col = $campoMap[$campo] ?? 'foto_cedula_url';
+                try {
+                    $cols = array_column($pdoConductores->query("SHOW COLUMNS FROM conductores")->fetchAll(), 'Field');
+                    if (!in_array($col, $cols, true)) $col = 'foto_url';
+                    $stmtDoc = $pdoConductores->prepare("
+                        UPDATE conductores 
+                        SET `{$col}` = :url 
+                        WHERE id = :id 
+                           OR codigo_conductor = :id2 
+                           OR cedula = :id3
+                           OR (:digits != '' AND REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), '-', ''), ' ', '') = :digits)
+                    ");
+                    $stmtDoc->execute([
+                        'url' => $publicUrl,
+                        'id' => $entityId, 'id2' => $entityId, 'id3' => $entityId, 'digits' => $idDigits
+                    ]);
+                    $sqlExecuted = true;
+                    $sqlMessage = "Conductor [{$entityId}]: Campo {$col} actualizado con éxito.";
+                } catch (Exception $e) {
+                    $sqlMessage = "Conductor [{$entityId}]: Error al vincular ({$e->getMessage()}).";
+                }
+            }
+            break;
+
         // --- B. IMAGEN DE PRODUCTO / ITEM DEL CATÁLOGO ---
         case 'productos':
         case 'articulos':
@@ -170,10 +283,6 @@ if ($entityId) {
                 try {
                     $stmt = $pdo->prepare("UPDATE productos SET imagen_url = :url WHERE id = :id");
                     $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
-                    if ($stmt->rowCount() === 0) {
-                        $stmt = $pdo->prepare("UPDATE productos_catalogo SET imagen_url = :url WHERE id = :id");
-                        $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
-                    }
                 } catch (Exception $e) {
                     $stmt = $pdo->prepare("UPDATE productos_catalogo SET imagen_url = :url WHERE id = :id");
                     $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
@@ -214,38 +323,6 @@ if ($entityId) {
             }
             $sqlExecuted = true;
             $sqlMessage = "Comprobante de Pago [{$entityId}]: Recibo bancario registrado.";
-            break;
-
-        // --- F. DOCUMENTO / FOTO DE CONDUCTOR (MI CEDULA, LICENCIA, CARNET, ETC.) ---
-        case 'conductores':
-            // Mapear campo → columna de BD (vixy_dl usa sufijo _url; regist puede usar otros nombres)
-            $campoMap = [
-                'perfil'                => 'foto_perfil_url',
-                'cedula'                => 'foto_cedula_url',
-                'cedula_reverso'        => 'foto_cedula_reverso_url',
-                'licencia'              => 'foto_licencia_url',
-                'carnet'                => 'foto_carnet_circulacion_url',
-                'carnet_circulacion'    => 'foto_carnet_circulacion_url',
-                'certificado_medico'    => 'foto_certificado_medico_url',
-                'rcv'                   => 'foto_rcv_url',
-                'antecedentes'          => 'foto_antecedentes_url',
-                'vehiculo'              => 'foto_vehiculo_url',
-                'placa'                 => 'foto_placa_url',
-                'record'                => 'record_policial_url',
-            ];
-            $campo  = strtolower(trim($campoEspecifico ?? ''));
-            $col    = $campoMap[$campo] ?? 'foto_cedula_url';
-            // Si la columna no existe en la tabla, usar foto_url como fallback
-            try {
-                $cols = array_column($pdo->query("SHOW COLUMNS FROM conductores")->fetchAll(), 'Field');
-                if (!in_array($col, $cols, true)) $col = 'foto_url';
-                $stmt = $pdo->prepare("UPDATE conductores SET `{$col}` = :url WHERE id = :id");
-                $stmt->execute(['url' => $publicUrl, 'id' => $entityId]);
-                $sqlExecuted = true;
-                $sqlMessage  = "Conductor [{$entityId}]: Campo {$col} actualizado con éxito.";
-            } catch (Exception $e) {
-                $sqlMessage = "Conductor [{$entityId}]: Imagen guardada pero no se pudo vincular automáticamente ({$e->getMessage()}).";
-            }
             break;
     }
 }

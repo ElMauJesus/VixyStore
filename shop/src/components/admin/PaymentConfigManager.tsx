@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
   Save,
@@ -6,9 +6,11 @@ import {
   Calculator,
   AlertCircle,
   Check,
-  Store
+  Store,
+  RefreshCw
 } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
+import { api } from '../../services/api';
 
 export const PaymentConfigManager: React.FC = () => {
   const {
@@ -29,33 +31,92 @@ export const PaymentConfigManager: React.FC = () => {
   const [comisionComercioDespuesAnio, setComisionComercioDespuesAnio] = useState('3');
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
 
   // Simulation State
   const [simulatedKm, setSimulatedKm] = useState(4.2);
 
-  const handleSave = (e: React.FormEvent) => {
+  // Cargar configuración actual desde el backend al montar
+  useEffect(() => {
+    const cargarConfig = async () => {
+      setLoadingConfig(true);
+      try {
+        const res = await api.getConfig();
+        if (res?.success && res.config) {
+          const c = res.config;
+          if (c.tasa_bcv) setLocalTasa(String(c.tasa_bcv));
+          if (c.tarifa_base_usd) setTarifaBaseMinima(String(c.tarifa_base_usd));
+          if (c.precio_km_adicional_usd) setCostoPorFraccion(String(c.precio_km_adicional_usd));
+          if (c.comision_delivery_antes_3m !== undefined) setComisionDeliveryAntes3Meses(String(c.comision_delivery_antes_3m));
+          if (c.comision_delivery_despues_3m !== undefined) setComisionDeliveryDespues3Meses(String(c.comision_delivery_despues_3m));
+          if (c.comision_comercio_antes_anio !== undefined) setComisionComercioAntesAnio(String(c.comision_comercio_antes_anio));
+          if (c.comision_comercio_despues_anio !== undefined) setComisionComercioDespuesAnio(String(c.comision_comercio_despues_anio));
+        }
+      } catch (err) {
+        console.warn('[PaymentConfig] Error cargando config del servidor:', err);
+      } finally {
+        setLoadingConfig(false);
+      }
+    };
+    cargarConfig();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError('');
     const tVal = parseFloat(localTasa);
     const baseVal = parseFloat(tarifaBaseMinima);
     const fracVal = parseFloat(costoPorFraccion);
+    const comDelAntes = parseFloat(comisionDeliveryAntes3Meses);
     const comDelPost = parseFloat(comisionDeliveryDespues3Meses);
+    const comComAntes = parseFloat(comisionComercioAntesAnio);
+    const comComPost = parseFloat(comisionComercioDespuesAnio);
 
-    if (!isNaN(tVal) && !isNaN(baseVal) && !isNaN(fracVal) && !isNaN(comDelPost)) {
-      updateDeliveryRates({
-        tasaBcvBs: tVal,
-        porcentajeComisionDelivery: comDelPost,
-        tarifaBaseMinimaUsd: baseVal,
-        distanciaBaseKm: 3.0,
-        fraccionCalculoKm: 1.0,
-        costoPorFraccionUsd: fracVal,
-        comisionMotorizadoPorcentaje: 100 - comDelPost
+    if (isNaN(tVal) || isNaN(baseVal) || isNaN(fracVal) || isNaN(comDelPost)) return;
+
+    // 1. Actualizar estado local del contexto (para reflejo inmediato en la app)
+    updateDeliveryRates({
+      tasaBcvBs: tVal,
+      porcentajeComisionDelivery: comDelPost,
+      tarifaBaseMinimaUsd: baseVal,
+      distanciaBaseKm: 3.0,
+      fraccionCalculoKm: 1.0,
+      costoPorFraccionUsd: fracVal,
+      comisionMotorizadoPorcentaje: 100 - comDelPost
+    });
+
+    // 2. Persistir en la base de datos via API
+    setSavingConfig(true);
+    try {
+      const res = await api.updateConfig({
+        tasa_bcv: tVal,
+        tarifa_base_usd: baseVal,
+        precio_km_adicional_usd: fracVal,
+        km_base: 3.0,
+        comision_plataforma_porcentaje: comDelPost,
+        comision_delivery_antes_3m: isNaN(comDelAntes) ? 5 : comDelAntes,
+        comision_delivery_despues_3m: comDelPost,
+        comision_comercio_antes_anio: isNaN(comComAntes) ? 0 : comComAntes,
+        comision_comercio_despues_anio: isNaN(comComPost) ? 3 : comComPost
       });
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3500);
+
+      if (res?.success) {
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3500);
+      } else {
+        setSaveError(res?.mensaje || 'Error al guardar en el servidor.');
+      }
+    } catch (err: any) {
+      setSaveError(err?.message || 'Error de conexión con el servidor.');
+    } finally {
+      setSavingConfig(false);
     }
   };
 
   const simulation = calculateDeliveryTripCost(simulatedKm);
+
 
   return (
     <div className="space-y-6">
@@ -77,6 +138,12 @@ export const PaymentConfigManager: React.FC = () => {
           </p>
         </div>
 
+        {loadingConfig && (
+          <span className="px-3.5 py-1.5 bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold flex items-center gap-1.5">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            Cargando configuración del servidor...
+          </span>
+        )}
         {savedSuccess && (
           <span className="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-bounce">
             <Check className="w-4 h-4" />
@@ -84,6 +151,13 @@ export const PaymentConfigManager: React.FC = () => {
           </span>
         )}
       </div>
+
+      {saveError && (
+        <div className="p-3.5 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl flex items-center gap-2 text-xs font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{saveError}</span>
+        </div>
+      )}
 
       {/* Explicit Legal / Operational Scope Banner */}
       <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-start gap-3 text-amber-800 dark:text-amber-300">
@@ -310,13 +384,26 @@ export const PaymentConfigManager: React.FC = () => {
         </div>
 
         {/* Save Button Bar */}
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-neutral-400 font-mono">
+            Tabla: <strong>configuracion_sistema</strong> — Cambios se aplican en tiempo real
+          </span>
           <button
             type="submit"
-            className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold rounded-2xl text-xs flex items-center gap-2 shadow-md transition cursor-pointer"
+            disabled={savingConfig || loadingConfig}
+            className="px-6 py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-neutral-950 font-bold rounded-2xl text-xs flex items-center gap-2 shadow-md transition cursor-pointer"
           >
-            <Save className="w-4 h-4" />
-            <span>Guardar Parámetros de Configuración</span>
+            {savingConfig ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Guardando en servidor...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Guardar Parámetros de Configuración</span>
+              </>
+            )}
           </button>
         </div>
       </form>

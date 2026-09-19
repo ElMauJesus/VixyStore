@@ -182,8 +182,24 @@ class ApiService {
         precio_km_adicional_usd: number;
         limite_saldo_negativo_conductor_usd: number;
         comision_plataforma_porcentaje: number;
+        // Comisiones escalonadas por antigüedad
+        comision_delivery_antes_3m: number;
+        comision_delivery_despues_3m: number;
+        comision_comercio_antes_anio: number;
+        comision_comercio_despues_anio: number;
+        [key: string]: number | string;
       };
     }>('/configuracion.php');
+  }
+
+  public async updateConfig(configuraciones: Record<string, string | number>) {
+    return this.request<{ success: boolean; mensaje: string; registros_modificados?: number }>(
+      '/configuracion.php',
+      {
+        method: 'POST',
+        body: JSON.stringify({ configuraciones })
+      }
+    );
   }
 
   // --- COMERCIOS ---
@@ -312,6 +328,7 @@ class ApiService {
       codigo_seguimiento: string;
       total_usd: number;
       total_bs: number;
+      costo_envio_usd?: number;
     }>('/pedidos.php', {
       method: 'POST',
       body: JSON.stringify(pedidoData)
@@ -323,6 +340,17 @@ class ApiService {
       method: 'PUT',
       body: JSON.stringify({ estado: nuevoEstado, conductor_id: conductorId })
     });
+  }
+
+  public async processPedidoAction(id: string, action: 'aceptar_comercio' | 'aceptar_conductor' | 'rechazar_conductor', conductorId?: string) {
+    return this.request<{ success: boolean; mensaje: string; nuevo_conductor_ofrecido?: any }>(`/pedidos.php?id=${encodeURIComponent(id)}&action=${action}`, {
+      method: 'PUT',
+      body: JSON.stringify({ action, conductor_id: conductorId })
+    });
+  }
+
+  public async getCurrentUser() {
+    return this.request<{ success: boolean; usuario: any }>('/auth.php?action=me');
   }
 
 
@@ -346,6 +374,27 @@ class ApiService {
       body: JSON.stringify({ conductor_id: conductorId })
     });
   }
+
+  // --- CLIENTES ---
+  public async getCliente(id: string) {
+    return this.request<{
+      success: boolean;
+      cliente?: any;
+      error?: boolean;
+      mensaje?: string;
+    }>(`/clientes.php?id=${encodeURIComponent(id)}`);
+  }
+
+  public async getClientes() {
+    return this.request<{
+      success: boolean;
+      total: number;
+      clientes: any[];
+      error?: boolean;
+      mensaje?: string;
+    }>('/clientes.php');
+  }
+
   // --- RECARGAS ---
   public async submitRecarga(recargaData: {
     usuario_id: string;
@@ -374,10 +423,60 @@ class ApiService {
     });
   }
 
+  // --- LIQUIDACIONES ---
+  public async getLiquidaciones() {
+    return this.request<{ success: boolean; data: any[]; error?: boolean; mensaje?: string }>('/procesar-liquidacion.php');
+  }
+
+  public async procesarLiquidacion(payload: {
+    solicitud_id: string;
+    accion: 'aprobar' | 'rechazar';
+    referencia_bancaria?: string;
+    notas?: string;
+  }) {
+    return this.request<{ success: boolean; mensaje: string; error?: boolean }>('/procesar-liquidacion.php', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public async solicitarLiquidacion(payload: {
+    usuario_id: string;
+    tipo_usuario: 'comercio' | 'conductor';
+    monto_solicitado_usd: number;
+    metodo_pago: 'pago_movil' | 'transferencia';
+    banco_destino: string;
+    cuenta_telefono_destino: string;
+    titular_destino: string;
+    cedula_rif_destino: string;
+  }) {
+    return this.request<{
+      success: boolean;
+      mensaje: string;
+      solicitud_id?: string;
+      monto_solicitado_usd?: number;
+      monto_solicitado_bs?: number;
+      tasa_bcv?: number;
+      saldo_disponible_usd?: number;
+      estado?: string;
+      error?: boolean;
+    }>('/solicitar-liquidacion.php', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }, true);
+  }
+
+  public async getMisLiquidaciones(usuarioId: string, tipoUsuario?: 'comercio' | 'conductor') {
+    const q = new URLSearchParams();
+    q.set('usuario_id', usuarioId);
+    if (tipoUsuario) q.set('tipo_usuario', tipoUsuario);
+    return this.request<{ success: boolean; data: any[]; error?: boolean; mensaje?: string }>(`/solicitar-liquidacion.php?${q.toString()}`);
+  }
+
   // --- SUBIDA DE ARCHIVOS ---
   public async uploadImage(
     file: File, 
-    tipo: 'comercios' | 'productos' | 'entregas' | 'reclamos' | 'comprobantes' | 'admin', 
+    tipo: 'comercios' | 'productos' | 'entregas' | 'reclamos' | 'comprobantes' | 'conductores' | 'admin', 
     entityId?: string, 
     campo?: string,
     comercioId?: string

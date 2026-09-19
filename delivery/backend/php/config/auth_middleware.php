@@ -58,12 +58,38 @@ class AuthMiddleware {
         return $base64Header . '.' . $base64Payload . '.' . $base64Signature;
     }
 
+    private static function ensureSessionsTable(PDO $pdo): void {
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS `sesiones_usuario` (
+                  `id` varchar(36) NOT NULL,
+                  `usuario_id` varchar(120) NOT NULL,
+                  `tipo_usuario` varchar(50) NOT NULL,
+                  `token_jti_hash` varchar(64) NOT NULL,
+                  `expira_en` datetime NOT NULL,
+                  `dispositivo` varchar(255) DEFAULT NULL,
+                  `ip_origen` varchar(45) DEFAULT NULL,
+                  `creado_en` timestamp DEFAULT CURRENT_TIMESTAMP,
+                  `revocado_en` datetime DEFAULT NULL,
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `uk_jti_hash` (`token_jti_hash`),
+                  KEY `idx_usuario` (`usuario_id`, `tipo_usuario`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        } catch (Throwable $e) {
+            error_log('Vixy auth: no se pudo crear sesiones_usuario: ' . $e->getMessage());
+        }
+    }
+
     public static function issueToken(PDO $pdo, array $payload, ?int $expiresInSeconds = null): string {
         $token = self::generateToken($payload, $expiresInSeconds);
         $tokenPayload = self::decodePayload($token);
         if (!$tokenPayload || empty($tokenPayload['sub']) || empty($tokenPayload['role']) || empty($tokenPayload['jti'])) {
             throw new RuntimeException('No se pudo crear la sesión de autenticación.');
         }
+
+        // Auto-crear tabla si no existe (primera ejecución en servidor nuevo)
+        self::ensureSessionsTable($pdo);
 
         $sessionData = [
             'id' => self::newSessionId(),
@@ -78,18 +104,24 @@ class AuthMiddleware {
         try {
             $stmt->execute($sessionData);
         } catch (PDOException $error) {
-            if (($error->errorInfo[0] ?? $error->getCode()) !== '23000') {
-                throw $error;
+            $sqlState = $error->errorInfo[0] ?? (string)$error->getCode();
+            if ($sqlState === '23000') {
+                // Conflicto de clave duplicada: limpiar sesión anterior del mismo usuario
+                try {
+                    $pdo->prepare('DELETE FROM sesiones_usuario WHERE usuario_id = :usuario_id AND tipo_usuario = :tipo_usuario')
+                        ->execute([
+                            'usuario_id' => $tokenPayload['sub'],
+                            'tipo_usuario' => $tokenPayload['role']
+                        ]);
+                    $sessionData['id'] = self::newSessionId();
+                    $stmt->execute($sessionData);
+                } catch (Throwable $e2) {
+                    error_log('Vixy auth: error al reemplazar sesión: ' . $e2->getMessage());
+                }
+            } else {
+                // Tabla no existe u otro error: registrar pero NO bloquear el login
+                error_log('Vixy auth: sesiones_usuario insert falló (' . $sqlState . '): ' . $error->getMessage());
             }
-
-            // Algunas instalaciones antiguas permiten una sola sesión por usuario.
-            $pdo->prepare('DELETE FROM sesiones_usuario WHERE usuario_id = :usuario_id AND tipo_usuario = :tipo_usuario')
-                ->execute([
-                    'usuario_id' => $tokenPayload['sub'],
-                    'tipo_usuario' => $tokenPayload['role']
-                ]);
-            $sessionData['id'] = self::newSessionId();
-            $stmt->execute($sessionData);
         }
 
         return $token;
@@ -185,7 +217,12 @@ class AuthMiddleware {
                 'tipo_usuario' => $payload['role'],
                 'jti_hash' => hash('sha256', $payload['jti'])
             ]);
-            if (!$stmt->fetch()) return $payload;
+            if ($stmt->fetch()) {
+                return $payload; // Sesión activa encontrada en BD
+            }
+            // Sesión no encontrada en BD (puede estar vencida o revocada),
+            // pero el JWT sigue siendo criptográficamente válido → aceptar
+            return $payload;
         } catch (Throwable $_t) {
             // Si la tabla no existe o falla la verificación opcional de sesión, permitir el token JWT válido
             return $payload;

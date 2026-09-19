@@ -240,12 +240,33 @@ if (($method === 'PUT' || ($method === 'POST' && isset($data['accion']))) && $ef
                     $saldoAnterior = $saldoNuevo - $montoUsd;
                 }
             } else {
-                // Para clientes: la columna oficial es saldo_cartera_usd (con fallback a saldo_billetera_usd)
+                // Para clientes: actualizar ambas columnas para total consistencia
                 $colClientes = $pdo->query("SHOW COLUMNS FROM clientes")->fetchAll(\PDO::FETCH_COLUMN);
-                $clienteSaldoCol = in_array('saldo_cartera_usd', $colClientes) ? 'saldo_cartera_usd' : 'saldo_billetera_usd';
-                $pdo->prepare("UPDATE clientes SET {$clienteSaldoCol} = {$clienteSaldoCol} + :monto WHERE id = :uid OR cedula = :uid2 OR telefono = :uid3")
-                    ->execute(['monto' => $montoUsd, 'uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId]);
-                $r = $pdo->prepare("SELECT {$clienteSaldoCol} FROM clientes WHERE id = :id OR cedula = :id2 LIMIT 1");
+                $updParts = [];
+                $pParams = ['uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId];
+                if (in_array('saldo_cartera_usd', $colClientes)) {
+                    $updParts[] = 'saldo_cartera_usd = saldo_cartera_usd + :monto1';
+                    $pParams['monto1'] = $montoUsd;
+                }
+                if (in_array('saldo_billetera_usd', $colClientes)) {
+                    $updParts[] = 'saldo_billetera_usd = saldo_billetera_usd + :monto2';
+                    $pParams['monto2'] = $montoUsd;
+                }
+                
+                if (!empty($updParts)) {
+                    $sqlUpdCli = "UPDATE clientes SET " . implode(', ', $updParts) . " WHERE id = :uid OR cedula = :uid2 OR telefono = :uid3";
+                    $pdo->prepare($sqlUpdCli)->execute($pParams);
+                }
+
+                // Sincronizar columnas si una estaba desfasada en 0.00
+                if (in_array('saldo_cartera_usd', $colClientes) && in_array('saldo_billetera_usd', $colClientes)) {
+                    try {
+                        $pdo->prepare("UPDATE clientes SET saldo_billetera_usd = saldo_cartera_usd WHERE (id = :uid OR cedula = :uid2 OR telefono = :uid3) AND (saldo_billetera_usd = 0 OR saldo_billetera_usd IS NULL) AND saldo_cartera_usd > 0")->execute(['uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId]);
+                        $pdo->prepare("UPDATE clientes SET saldo_cartera_usd = saldo_billetera_usd WHERE (id = :uid OR cedula = :uid2 OR telefono = :uid3) AND (saldo_cartera_usd = 0 OR saldo_cartera_usd IS NULL) AND saldo_billetera_usd > 0")->execute(['uid' => $usuarioId, 'uid2' => $usuarioId, 'uid3' => $usuarioId]);
+                    } catch (Throwable $_eSyncCol) {}
+                }
+
+                $r = $pdo->prepare("SELECT GREATEST(COALESCE(saldo_cartera_usd, 0.00), COALESCE(saldo_billetera_usd, 0.00)) FROM clientes WHERE id = :id OR cedula = :id2 LIMIT 1");
                 $r->execute(['id' => $usuarioId, 'id2' => $usuarioId]);
                 $val = $r->fetchColumn();
                 if ($val !== false) {

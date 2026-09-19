@@ -12,8 +12,9 @@ $pdo = Database::getConnection();
 $pdoRegist = Database::getRegistConnection();
 
 $method = $_SERVER['REQUEST_METHOD'];
-$id = $_GET['id'] ?? null;
-$action = $_GET['action'] ?? null;
+$inputData = Database::getJsonInput();
+$id = $_GET['id'] ?? ($inputData['id'] ?? ($inputData['conductor_id'] ?? ($inputData['usuario_id'] ?? null)));
+$action = $_GET['action'] ?? ($inputData['action'] ?? null);
 
 /**
  * Normaliza los campos del conductor para garantizar compatibilidad total
@@ -588,8 +589,8 @@ if ($method === 'POST' && in_array($action, ['pre_registro', 'registro', 'regist
 if (($method === 'POST' || $method === 'PUT') && $action === 'disponibilidad') {
     $authUser = AuthMiddleware::verifyToken();
     $data = Database::getJsonInput();
-    $driverId = trim((string)($data['conductor_id'] ?? $data['id'] ?? ($authUser['id'] ?? ($authUser['sub'] ?? ''))));
-    $disponible = isset($data['disponible']) ? (int)(bool)$data['disponible'] : 1;
+    $driverId = trim((string)($data['conductor_id'] ?? $data['id'] ?? ($data['usuario_id'] ?? ($data['driver_id'] ?? ($data['codigo_conductor'] ?? ($data['cedula'] ?? ($authUser['id'] ?? ($authUser['sub'] ?? ''))))))));
+    $disponible = isset($data['disponible']) ? (int)(bool)$data['disponible'] : (isset($data['online']) ? (int)(bool)$data['online'] : (isset($data['is_online']) ? (int)(bool)$data['is_online'] : (isset($data['activo']) ? (int)(bool)$data['activo'] : 1)));
     $idDigits = preg_replace('/[^0-9]/', '', $driverId);
 
     if (!empty($driverId)) {
@@ -666,7 +667,7 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'disponibilidad') {
 if (($method === 'POST' || $method === 'PUT') && $action === 'gps_clear') {
     $authUser = AuthMiddleware::verifyToken();
     $data = Database::getJsonInput();
-    $driverId = trim((string)($data['conductor_id'] ?? $data['id'] ?? ($authUser['id'] ?? ($authUser['sub'] ?? ''))));
+    $driverId = trim((string)($data['conductor_id'] ?? $data['id'] ?? ($data['usuario_id'] ?? ($data['driver_id'] ?? ($data['codigo_conductor'] ?? ($data['cedula'] ?? ($authUser['id'] ?? ($authUser['sub'] ?? ''))))))));
     $idDigits = preg_replace('/[^0-9]/', '', $driverId);
 
     if (!empty($driverId)) {
@@ -702,11 +703,11 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {
     $authUser = AuthMiddleware::verifyToken();
     $data = Database::getJsonInput();
 
-    $driverId = trim((string)($data['conductor_id'] ?? $data['id'] ?? ($authUser['id'] ?? ($authUser['sub'] ?? ''))));
-    $lat = (float)($data['latitud'] ?? ($data['lat'] ?? 0));
-    $lng = (float)($data['longitud'] ?? ($data['lng'] ?? 0));
-    $precision = (float)($data['precision_metros'] ?? ($data['precision'] ?? 5));
-    $velocidad = (float)($data['velocidad_kmh'] ?? ($data['velocidad'] ?? 0));
+    $driverId = trim((string)($data['conductor_id'] ?? $data['id'] ?? ($data['usuario_id'] ?? ($data['driver_id'] ?? ($data['codigo_conductor'] ?? ($data['cedula'] ?? ($authUser['id'] ?? ($authUser['sub'] ?? ''))))))));
+    $lat = (float)($data['latitud'] ?? ($data['lat'] ?? ($data['latitude'] ?? 0)));
+    $lng = (float)($data['longitud'] ?? ($data['lng'] ?? ($data['longitude'] ?? 0)));
+    $precision = (float)($data['precision_metros'] ?? ($data['precision'] ?? ($data['accuracy'] ?? 5)));
+    $velocidad = (float)($data['velocidad_kmh'] ?? ($data['velocidad'] ?? ($data['speed'] ?? 0)));
     $pedidoId = $data['pedido_id'] ?? null;
 
     if ($lat == 0.0 || $lng == 0.0) {
@@ -717,19 +718,15 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {
     if (!empty($driverId)) {
         $updatedRows = 0;
         try {
-            // Actualizar GPS sin tocar el estado disponible:
-            // Si el conductor está en pausa (disponible=0) no lo forzamos a disponible=1.
-            // Solo actualizamos disponible=1 si ya estaba disponible O si no tenía fecha de actualización.
+            // Si el conductor envía coordenadas GPS está claramente en línea → siempre activar disponible = 1.
+            // Esto resuelve el problema donde el cleanup de la BD borraba al conductor y el GPS
+            // no lo volvía a activar por el CASE condicional anterior.
             $stmtUpdate = $pdo->prepare("
                 UPDATE conductores 
                 SET latitud_actual = :lat, 
                     longitud_actual = :lng, 
                     ultima_actualizacion = NOW(),
-                    disponible = CASE 
-                        WHEN disponible = 1 THEN 1
-                        WHEN disponible = 0 AND (en_carrera = 1) THEN 1
-                        ELSE disponible
-                    END
+                    disponible = 1
                 WHERE id = :id 
                    OR cedula = :id2 
                    OR codigo_conductor = :id3
@@ -829,6 +826,26 @@ if (($method === 'POST' || $method === 'PUT') && $action === 'gps') {
                 'vel' => $velocidad
             ]);
         } catch (Throwable $_t) {}
+        // Si el usuario es un cliente o tiene un pedido activo, actualizar su ubicación en tiempo real
+        try {
+            $cliCols = array_column($pdo->query('SHOW COLUMNS FROM clientes')->fetchAll(), 'Field');
+            if (in_array('latitud', $cliCols) && in_array('longitud', $cliCols)) {
+                $stUpdCli = $pdo->prepare("
+                    UPDATE clientes 
+                    SET latitud = :lat, longitud = :lng 
+                    WHERE id = :uid OR cedula = :c OR telefono = :t
+                ");
+                $stUpdCli->execute(['lat' => $lat, 'lng' => $lng, 'uid' => $driverId, 'c' => $driverId, 't' => $driverId]);
+            }
+
+            $stUpdPed = $pdo->prepare("
+                UPDATE pedidos 
+                SET destino_lat = :lat, destino_lng = :lng 
+                WHERE (cliente_id = :cid OR cliente_id = :c2 OR cliente_id = :c3)
+                  AND estado IN ('solicitud_enviada', 'pago_verificado', 'en_preparacion', 'esperando_repartidor', 'en_camino_al_cliente')
+            ");
+            $stUpdPed->execute(['lat' => $lat, 'lng' => $lng, 'cid' => $driverId, 'c2' => $driverId, 'c3' => $driverId]);
+        } catch (Throwable $_eCliGps) {}
     }
 
     Database::jsonResponse([
@@ -886,20 +903,23 @@ if ($method === 'GET') {
         Database::jsonResponse(['success' => true, 'conductor' => $driver]);
     }
 
-    // Limpieza pasiva para sesiones inactivas por más de 5 minutos (app cerrada o sin señal)
-    // También se borran las coordenadas GPS para que no queden marcadores fantasma en el radar
-    try {
-        $pdo->exec("
-            UPDATE conductores 
-            SET disponible = 0,
-                latitud_actual = NULL,
-                longitud_actual = NULL
-            WHERE disponible = 1 
-              AND (en_carrera = 0 OR en_carrera IS NULL) 
-              AND ultima_actualizacion IS NOT NULL 
-              AND ultima_actualizacion < (NOW() - INTERVAL 5 MINUTE)
-        ");
-    } catch (Throwable $_t) {}
+    // Limpieza pasiva para sesiones inactivas por más de 8 minutos (app cerrada o sin señal).
+    // IMPORTANTE: Solo corre ~5% de las veces para evitar race conditions con el GPS polling
+    // del frontend (cada 5s), que de otra forma borraba conductores activos en cada ciclo.
+    if (rand(1, 20) === 1) {
+        try {
+            $pdo->exec("
+                UPDATE conductores 
+                SET disponible = 0,
+                    latitud_actual = NULL,
+                    longitud_actual = NULL
+                WHERE disponible = 1 
+                  AND (en_carrera = 0 OR en_carrera IS NULL) 
+                  AND ultima_actualizacion IS NOT NULL 
+                  AND ultima_actualizacion < (NOW() - INTERVAL 8 MINUTE)
+            ");
+        } catch (Throwable $_t) {}
+    }
 
     // LISTADO GENERAL DE CONDUCTORES:
     // ?disponibles=1 -> Solo conductores disponibles

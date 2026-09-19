@@ -374,6 +374,7 @@ export interface Pedido {
   cliente: Cliente;
   comercio: Comercio;
   conductor?: Conductor;
+  conductorOfrecidoId?: string;
   items: ItemPedido[];
   montoSubtotalUsd: number;
   costoEnvioUsd: number;

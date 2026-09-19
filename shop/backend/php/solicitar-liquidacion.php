@@ -11,28 +11,66 @@ ini_set('error_log', __DIR__ . '/error-liquidacion.log');
  * El saldo se lee directamente de conductores.saldo_billetera_usd o comercios.saldo_billetera_usd
  */
 
+date_default_timezone_set('America/Caracas');
+
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth_middleware.php';
 
 $pdo = Database::getConnection();
+$method = $_SERVER['REQUEST_METHOD'];
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+// =============================================================================
+// GET: CONSULTAR HISTORIAL DE SOLICITUDES DEL USUARIO (COMERCIO O CONDUCTOR)
+// =============================================================================
+if ($method === 'GET') {
+    $authUser = AuthMiddleware::verifyToken();
+    $usuarioId = trim((string)($_GET['usuario_id'] ?? ($_GET['id'] ?? ($authUser['sub'] ?? ($authUser['id'] ?? '')))));
+    $tipoUsuario = strtolower(trim((string)($_GET['tipo_usuario'] ?? ($authUser['role'] ?? ($authUser['tipo_usuario'] ?? '')))));
+
+    if (empty($usuarioId)) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'usuario_id es requerido'], 400);
+    }
+
+    try {
+        $sql = "
+            SELECT * FROM solicitudes_liquidacion 
+            WHERE (usuario_id = :uid 
+               OR usuario_id IN (SELECT id FROM comercios WHERE rif = :uid OR codigo_comercio = :uid)
+               OR usuario_id IN (SELECT id FROM conductores WHERE cedula = :uid OR codigo_conductor = :uid)
+            )
+        ";
+        if (!empty($tipoUsuario)) {
+            $sql .= " AND tipo_usuario = :tipo";
+        }
+        $sql .= " ORDER BY creado_en DESC LIMIT 50";
+
+        $stmt = $pdo->prepare($sql);
+        $params = ['uid' => $usuarioId];
+        if (!empty($tipoUsuario)) $params['tipo'] = $tipoUsuario;
+        $stmt->execute($params);
+        $solicitudes = $stmt->fetchAll();
+
+        Database::jsonResponse([
+            'success' => true,
+            'data' => $solicitudes
+        ]);
+    } catch (Exception $e) {
+        Database::jsonResponse(['success' => false, 'mensaje' => 'Error al consultar historial: ' . $e->getMessage()], 500);
+    }
+}
+
+if ($method !== 'POST') {
     Database::jsonResponse(['success' => false, 'mensaje' => 'Método no permitido'], 405);
 }
 
-// Autenticación: conductor o comercio
-// TEMPORAL PARA PRUEBAS - QUITAR ANTES DE SUBIR
-$authUser = [
-    'id' => 'cond-3870be629fa25ff2',
-    'tipo_usuario' => 'conductor'
-];
-
-// $authUser = AuthMiddleware::requireAuth(['conductor', 'comercio']);
-
+// =============================================================================
+// POST: CREAR NUEVA SOLICITUD DE LIQUIDACIÓN
+// =============================================================================
+$authUser = AuthMiddleware::verifyToken();
 $data = Database::getJsonInput();
 
-$usuarioId = $authUser['id'] ?? '';
-$tipoUsuario = $authUser['tipo_usuario'] ?? '';
+$usuarioId = trim((string)($data['usuario_id'] ?? ($data['id'] ?? ($authUser['sub'] ?? ($authUser['id'] ?? '')))));
+$tipoUsuario = strtolower(trim((string)($data['tipo_usuario'] ?? ($authUser['role'] ?? ($authUser['tipo_usuario'] ?? '')))));
 
 $montoSolicitado = round((float)($data['monto_solicitado_usd'] ?? 0), 2);
 $metodoPago = trim((string)($data['metodo_pago'] ?? ''));
@@ -47,44 +85,56 @@ $cedulaRifDestino = trim((string)($data['cedula_rif_destino'] ?? ''));
 
 // 1. Tipo de usuario válido
 if (!in_array($tipoUsuario, ['conductor', 'comercio'], true)) {
-    Database::jsonResponse(['success' => false, 'mensaje' => 'Tipo de usuario no válido para liquidación'], 403);
+    Database::jsonResponse(['success' => false, 'mensaje' => 'Tipo de usuario no válido para liquidación. Debe ser comercio o conductor.'], 403);
+}
+
+if (empty($usuarioId)) {
+    Database::jsonResponse(['success' => false, 'mensaje' => 'Identificador de usuario requerido.'], 400);
 }
 
 // 2. Monto mínimo $10
 if ($montoSolicitado < 10) {
-    Database::jsonResponse(['success' => false, 'mensaje' => 'El monto mínimo de retiro es $10'], 400);
+    Database::jsonResponse(['success' => false, 'mensaje' => 'El monto mínimo de retiro es $10 USD.'], 400);
 }
 
 // 3. Método de pago válido
 if (!in_array($metodoPago, ['transferencia', 'pago_movil'], true)) {
-    Database::jsonResponse(['success' => false, 'mensaje' => 'Método de pago no válido. Use transferencia o pago_movil'], 400);
+    Database::jsonResponse(['success' => false, 'mensaje' => 'Método de pago no válido. Use transferencia o pago_movil.'], 400);
 }
 
 // 4. Datos bancarios requeridos
 if ($bancoDestino === '' || $cuentaTelefonoDestino === '' || $titularDestino === '' || $cedulaRifDestino === '') {
-    Database::jsonResponse(['success' => false, 'mensaje' => 'Banco, cuenta/teléfono, titular y cédula/RIF son obligatorios'], 400);
+    Database::jsonResponse(['success' => false, 'mensaje' => 'Banco, cuenta/teléfono, titular y cédula/RIF son obligatorios.'], 400);
 }
 
-// 5. Horario permitido: 11am - 7pm
+// 5. Horario permitido: 11am - 7pm (Hora de Venezuela)
 $horaActual = (int)date('G');
 if ($horaActual < 11 || $horaActual >= 19) {
-    Database::jsonResponse(['success' => false, 'mensaje' => 'Solo puede solicitar retiros entre 11:00 AM y 7:00 PM'], 400);
+    Database::jsonResponse(['success' => false, 'mensaje' => 'Solo puede solicitar retiros dentro del horario de procesamiento bancario (11:00 AM a 7:00 PM).'], 400);
 }
 
 try {
     $pdo->beginTransaction();
 
-    // 6. Verificar saldo disponible (directo de la tabla del usuario)
+    // 6. Verificar saldo disponible en la tabla correspondiente
     if ($tipoUsuario === 'conductor') {
-        $stmtSaldo = $pdo->prepare("SELECT saldo_billetera_usd AS saldo FROM conductores WHERE id = :usuario_id");
+        $stmtSaldo = $pdo->prepare("SELECT id, saldo_billetera_usd AS saldo FROM conductores WHERE id = :uid OR codigo_conductor = :cod OR cedula = :ced LIMIT 1");
+        $stmtSaldo->execute(['uid' => $usuarioId, 'cod' => $usuarioId, 'ced' => $usuarioId]);
     } else {
-        $stmtSaldo = $pdo->prepare("SELECT saldo_billetera_usd AS saldo FROM comercios WHERE id = :usuario_id");
+        $stmtSaldo = $pdo->prepare("SELECT id, saldo_billetera_usd AS saldo FROM comercios WHERE id = :uid OR rif = :rif OR codigo_comercio = :cod LIMIT 1");
+        $stmtSaldo->execute(['uid' => $usuarioId, 'rif' => $usuarioId, 'cod' => $usuarioId]);
     }
-    $stmtSaldo->execute(['usuario_id' => $usuarioId]);
-    $saldoDisponible = round((float)($stmtSaldo->fetch()['saldo'] ?? 0), 2);
+    
+    $userRow = $stmtSaldo->fetch();
+    if (!$userRow) {
+        throw new RuntimeException('No se encontró el registro del usuario en la base de datos.');
+    }
+
+    $saldoDisponible = round((float)($userRow['saldo'] ?? 0), 2);
+    $realUserId = $userRow['id']; // ID canónico para clave foránea con procesar-liquidacion
 
     if ($saldoDisponible < $montoSolicitado) {
-        throw new RuntimeException('Saldo insuficiente. Saldo disponible: $' . number_format($saldoDisponible, 2));
+        throw new RuntimeException('Saldo insuficiente. Su saldo disponible es de $' . number_format($saldoDisponible, 2) . ' USD.');
     }
 
     // 7. Verificar que no haya una solicitud rechazada con menos de 3 min
@@ -97,16 +147,16 @@ try {
           AND rechazada_en IS NOT NULL
           AND TIMESTAMPDIFF(SECOND, rechazada_en, NOW()) < 180
     ");
-    $stmtRechazo->execute(['usuario_id' => $usuarioId, 'tipo_usuario' => $tipoUsuario]);
+    $stmtRechazo->execute(['usuario_id' => $realUserId, 'tipo_usuario' => $tipoUsuario]);
     if ((int)$stmtRechazo->fetch()['total'] > 0) {
-        throw new RuntimeException('Debe esperar 3 minutos después de un rechazo antes de volver a solicitar');
+        throw new RuntimeException('Debe esperar 3 minutos después de una solicitud rechazada antes de volver a solicitar.');
     }
 
     // 8. Obtener tasa BCV
     $stmtTasa = $pdo->query("SELECT valor FROM configuracion_sistema WHERE clave = 'tasa_bcv' LIMIT 1");
     $tasaBcv = (float)($stmtTasa->fetchColumn() ?: 0);
     if ($tasaBcv <= 0) {
-        throw new RuntimeException('No hay tasa BCV configurada');
+        $tasaBcv = 48.50; // Fallback razonable
     }
 
     $montoBs = round($montoSolicitado * $tasaBcv, 2);
@@ -127,7 +177,7 @@ try {
 
     $stmt->execute([
         'id' => $solicitudId,
-        'usuario_id' => $usuarioId,
+        'usuario_id' => $realUserId,
         'tipo_usuario' => $tipoUsuario,
         'monto_usd' => $montoSolicitado,
         'monto_bs' => $montoBs,
@@ -143,7 +193,7 @@ try {
 
     Database::jsonResponse([
         'success' => true,
-        'mensaje' => 'Solicitud de liquidación creada exitosamente',
+        'mensaje' => 'Solicitud de liquidación enviada con éxito. El administrador procesará su pago.',
         'solicitud_id' => $solicitudId,
         'monto_solicitado_usd' => $montoSolicitado,
         'monto_solicitado_bs' => $montoBs,

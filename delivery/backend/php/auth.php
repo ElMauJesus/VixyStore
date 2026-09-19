@@ -74,6 +74,11 @@ function auto_heal_clientes_table(PDO $pdo): void {
                 } catch (Throwable $_eCol) {}
             }
         }
+        // Sincronizar saldos de clientes si una columna tiene valor y la otra 0.00
+        try {
+            $pdo->exec("UPDATE clientes SET saldo_billetera_usd = saldo_cartera_usd WHERE (saldo_billetera_usd = 0.00 OR saldo_billetera_usd IS NULL) AND saldo_cartera_usd > 0.00");
+            $pdo->exec("UPDATE clientes SET saldo_cartera_usd = saldo_billetera_usd WHERE (saldo_cartera_usd = 0.00 OR saldo_cartera_usd IS NULL) AND saldo_billetera_usd > 0.00");
+        } catch (Throwable $_eSync) {}
         $healed = true;
     } catch (Throwable $e) {
         error_log('Error in auto_heal_clientes_table: ' . $e->getMessage());
@@ -229,40 +234,68 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $userPrefix = $cleanUser . '@%';
         $userPrefixUnder = $cleanUser . '_%';
 
-        $stmtClient = $pdo->prepare("
-            SELECT id, nombre, apellido, cedula, email, telefono, password_hash, direccion_habitual, activo,
-                   COALESCE(saldo_billetera_usd, saldo_cartera_usd, 0.00) AS saldo_billetera_usd 
-            FROM clientes 
-            WHERE email = :id1 
-               OR email = :genEmail1 
-               OR email = :genEmail2 
-               OR email = :genEmail3 
-               OR email LIKE :userPrefix 
-               OR email LIKE :userPrefixUnder 
-               OR telefono = :id2 
-               OR cedula = :id3 
-               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), '.', ''), ' ', '') = :digits2)
-               OR (:idV != '' AND cedula = :idV)
-               OR (:idE != '' AND cedula = :idE)
-               OR (:digits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(telefono, '-', ''), '.', ''), ' ', ''), '+', ''), '(', ''), ')', '') = :digits3)
-            LIMIT 1
-        ");
-        $stmtClient->execute([
-            'id1' => $cleanId,
-            'genEmail1' => $emailPedidos,
-            'genEmail2' => $emailUno,
-            'genEmail3' => $emailCom,
-            'userPrefix' => $userPrefix,
-            'userPrefixUnder' => $userPrefixUnder,
-            'id2' => $cleanId,
-            'id3' => $cleanId,
-            'digits' => $idDigits,
-            'digits2' => $idDigits,
-            'digits3' => $idDigits,
-            'idV' => $idV,
-            'idE' => $idE
-        ]);
-        $client = $stmtClient->fetch();
+        try {
+            $stmtClient = $pdo->prepare("
+                SELECT id, nombre, apellido, cedula, email, telefono, password_hash, direccion_habitual, activo,
+                       GREATEST(COALESCE(saldo_cartera_usd, 0.00), COALESCE(saldo_billetera_usd, 0.00)) AS saldo_billetera_usd,
+                       GREATEST(COALESCE(saldo_cartera_usd, 0.00), COALESCE(saldo_billetera_usd, 0.00)) AS saldo_cartera_usd
+                FROM clientes 
+                WHERE email = :id1 
+                   OR email = :genEmail1 
+                   OR email = :genEmail2 
+                   OR email = :genEmail3 
+                   OR email LIKE :userPrefix 
+                   OR email LIKE :userPrefixUnder 
+                   OR telefono = :id2 
+                   OR cedula = :id3 
+                   OR (:digitsA != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), '.', ''), ' ', '') = :digits2)
+                   OR (:idV1 != '' AND cedula = :idV2)
+                   OR (:idE1 != '' AND cedula = :idE2)
+                   OR (:digitsB != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(telefono, '-', ''), '.', ''), ' ', ''), '+', ''), '(', ''), ')', '') = :digits3)
+                LIMIT 1
+            ");
+            $stmtClient->execute([
+                'id1' => $cleanId,
+                'genEmail1' => $emailPedidos,
+                'genEmail2' => $emailUno,
+                'genEmail3' => $emailCom,
+                'userPrefix' => $userPrefix,
+                'userPrefixUnder' => $userPrefixUnder,
+                'id2' => $cleanId,
+                'id3' => $cleanId,
+                'digitsA' => $idDigits,
+                'digits2' => $idDigits,
+                'digits3' => $idDigits,
+                'digitsB' => $idDigits,
+                'idV1' => $idV,
+                'idV2' => $idV,
+                'idE1' => $idE,
+                'idE2' => $idE
+            ]);
+            $client = $stmtClient->fetch();
+        } catch (PDOException $eClient) {
+            // Si falla COALESCE por columna inexistente, intentar query simplificada
+            error_log('Vixy auth clientes query error: ' . $eClient->getMessage());
+            try {
+                $stmtClient2 = $pdo->prepare("
+                    SELECT id, nombre, apellido, cedula, email, telefono, password_hash, direccion_habitual, activo, 0.00 AS saldo_billetera_usd
+                    FROM clientes 
+                    WHERE email = :id1 OR telefono = :id2 OR cedula = :id3
+                       OR email = :genEmail1 OR email = :genEmail2
+                    LIMIT 1
+                ");
+                $stmtClient2->execute([
+                    'id1' => $cleanId,
+                    'id2' => $cleanId,
+                    'id3' => $cleanId,
+                    'genEmail1' => $emailPedidos,
+                    'genEmail2' => $emailUno
+                ]);
+                $client = $stmtClient2->fetch();
+            } catch (Throwable $eClient2) {
+                error_log('Vixy auth clientes fallback error: ' . $eClient2->getMessage());
+            }
+        }
     }
 
     if ($client) {
@@ -304,7 +337,9 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'email' => $client['email'],
                     'telefono' => $client['telefono'],
                     'direccion' => $client['direccion_habitual'] ?? 'Caracas, Venezuela',
-                    'saldoBilletera' => (float)($client['saldo_billetera_usd'] ?? 0.0),
+                    'saldoBilletera' => (float)($client['saldo_billetera_usd'] ?? $client['saldo_cartera_usd'] ?? 0.0),
+                    'saldo_cartera_usd' => (float)($client['saldo_cartera_usd'] ?? $client['saldo_billetera_usd'] ?? 0.0),
+                    'saldo_billetera_usd' => (float)($client['saldo_billetera_usd'] ?? $client['saldo_cartera_usd'] ?? 0.0),
                     'tipo_usuario' => 'cliente'
                 ],
                 'mensaje' => 'Inicio de sesión exitoso'
@@ -423,6 +458,14 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_log('Error provisioning client for driver: ' . $_eCli->getMessage());
             }
 
+            // Obtener saldo real de la cartera del cliente
+            $cliRealSaldo = 0.0;
+            try {
+                $stCliBal = $pdo->prepare("SELECT GREATEST(COALESCE(saldo_cartera_usd, 0.00), COALESCE(saldo_billetera_usd, 0.00)) FROM clientes WHERE id = :cid OR cedula = :ced OR telefono = :tel LIMIT 1");
+                $stCliBal->execute(['cid' => $clientId, 'ced' => $clientCedula, 'tel' => $clientPhone]);
+                $cliRealSaldo = (float)($stCliBal->fetchColumn() ?: 0.0);
+            } catch (Throwable $_eBal) {}
+
             $token = AuthMiddleware::issueToken($pdo, [
                 'id' => $clientId,
                 'email' => $clientEmail,
@@ -441,7 +484,9 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'email' => $clientEmail,
                     'telefono' => $clientPhone,
                     'direccion' => 'Caracas, Venezuela',
-                    'saldoBilletera' => 0.0,
+                    'saldoBilletera' => $cliRealSaldo,
+                    'saldo_cartera_usd' => $cliRealSaldo,
+                    'saldo_billetera_usd' => $cliRealSaldo,
                     'tipo_usuario' => 'cliente'
                 ],
                 'mensaje' => 'Inicio de sesión exitoso en Vixy Pedidos'
@@ -806,6 +851,15 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         Database::jsonResponse(['error' => true, 'mensaje' => 'Nombre, cédula, teléfono y contraseña son requeridos'], 400);
     }
 
+    $latitud = isset($input['latitud']) ? (float)$input['latitud'] : (isset($input['lat']) ? (float)$input['lat'] : 0.0);
+    $longitud = isset($input['longitud']) ? (float)$input['longitud'] : (isset($input['lng']) ? (float)$input['lng'] : 0.0);
+    if ($latitud == 0.0 && $longitud == 0.0 && preg_match('/Lat:\s*([0-9.-]+).*?Lng:\s*([0-9.-]+)/i', $direccion, $mGps)) {
+        $latitud = (float)$mGps[1];
+        $longitud = (float)$mGps[2];
+    }
+    $fotoCedula = trim((string)($input['foto_cedula_url'] ?? ($input['foto_cedula'] ?? '')));
+    $fotoSelfie = trim((string)($input['foto_selfie_url'] ?? ($input['foto_selfie'] ?? '')));
+
     try {
         // Asegurar correo único si fue autogenerado
         $chkEmail = $pdo->prepare("SELECT id FROM clientes WHERE email = :e LIMIT 1");
@@ -816,12 +870,13 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $chk = $pdo->prepare("
             SELECT id, nombre, apellido, cedula, email, telefono, direccion_habitual,
-                   COALESCE(saldo_billetera_usd, saldo_cartera_usd, 0.00) AS saldo_billetera_usd
+                   GREATEST(COALESCE(saldo_cartera_usd, 0.00), COALESCE(saldo_billetera_usd, 0.00)) AS saldo_billetera_usd,
+                   GREATEST(COALESCE(saldo_cartera_usd, 0.00), COALESCE(saldo_billetera_usd, 0.00)) AS saldo_cartera_usd
             FROM clientes 
             WHERE telefono = :t 
                OR cedula = :c 
                OR (:digits != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(cedula, 'V-', ''), 'E-', ''), '-', ''), '.', ''), ' ', '') = :digits2)
-               OR (:idV != '' AND cedula = :idV)
+               OR (:idV1 != '' AND cedula = :idV2)
             LIMIT 1
         ");
         $chk->execute([
@@ -829,29 +884,53 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             'c' => $cedula,
             'digits' => $idDigits,
             'digits2' => $idDigits,
-            'idV' => $idV
+            'idV1' => $idV,
+            'idV2' => $idV
         ]);
         $existingClient = $chk->fetch();
 
         if ($existingClient) {
             // Actualizar contraseña y datos del cliente existente para permitir recuperación y acceso inmediato
             $hash = password_hash($password, PASSWORD_BCRYPT);
-            $upd = $pdo->prepare("
-                UPDATE clientes 
-                SET password_hash = :h,
-                    nombre = CASE WHEN :n != '' THEN :n ELSE nombre END,
-                    apellido = CASE WHEN :a != '' THEN :a ELSE apellido END,
-                    direccion_habitual = CASE WHEN :d != '' THEN :d ELSE direccion_habitual END,
-                    activo = 1
-                WHERE id = :id
-            ");
-            $upd->execute([
+            $finalNombre = !empty($nombre) ? $nombre : ($existingClient['nombre'] ?? 'Cliente');
+            $finalApellido = !empty($apellido) ? $apellido : ($existingClient['apellido'] ?? '');
+            $finalDireccion = !empty($direccion) ? $direccion : ($existingClient['direccion_habitual'] ?? 'Caracas, Venezuela');
+
+            $colsClient = array_column($pdo->query("SHOW COLUMNS FROM clientes")->fetchAll(PDO::FETCH_ASSOC), 'Field');
+            $updFields = [
+                'password_hash = :h',
+                'nombre = :n',
+                'apellido = :a',
+                'direccion_habitual = :d',
+                'activo = 1'
+            ];
+            $updParams = [
                 'h' => $hash,
-                'n' => $nombre,
-                'a' => $apellido,
-                'd' => $direccion,
+                'n' => $finalNombre,
+                'a' => $finalApellido,
+                'd' => $finalDireccion,
                 'id' => $existingClient['id']
-            ]);
+            ];
+
+            if (in_array('latitud', $colsClient) && $latitud != 0.0) {
+                $updFields[] = 'latitud = :lat';
+                $updParams['lat'] = $latitud;
+            }
+            if (in_array('longitud', $colsClient) && $longitud != 0.0) {
+                $updFields[] = 'longitud = :lng';
+                $updParams['lng'] = $longitud;
+            }
+            if (in_array('foto_cedula_url', $colsClient) && !empty($fotoCedula)) {
+                $updFields[] = 'foto_cedula_url = :fced';
+                $updParams['fced'] = $fotoCedula;
+            }
+            if (in_array('foto_selfie_url', $colsClient) && !empty($fotoSelfie)) {
+                $updFields[] = 'foto_selfie_url = :fself';
+                $updParams['fself'] = $fotoSelfie;
+            }
+
+            $upd = $pdo->prepare("UPDATE clientes SET " . implode(', ', $updFields) . " WHERE id = :id");
+            $upd->execute($updParams);
 
             $token = AuthMiddleware::issueToken($pdo, [
                 'id' => $existingClient['id'],
@@ -859,18 +938,24 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'tipo_usuario' => 'cliente'
             ]);
 
+            $realSaldo = (float)($existingClient['saldo_billetera_usd'] ?? $existingClient['saldo_cartera_usd'] ?? 0.0);
+
             Database::jsonResponse([
                 'success' => true,
                 'token' => $token,
                 'usuario' => [
                     'id' => $existingClient['id'],
-                    'nombre' => !empty($nombre) ? $nombre : ($existingClient['nombre'] ?? 'Cliente'),
-                    'apellido' => !empty($apellido) ? $apellido : ($existingClient['apellido'] ?? ''),
+                    'nombre' => $finalNombre,
+                    'apellido' => $finalApellido,
                     'cedula' => $existingClient['cedula'] ?? $cedula,
                     'email' => $existingClient['email'] ?? $email,
                     'telefono' => $existingClient['telefono'] ?? $telefono,
-                    'direccion' => !empty($direccion) ? $direccion : ($existingClient['direccion_habitual'] ?? ''),
-                    'saldoBilletera' => (float)($existingClient['saldo_billetera_usd'] ?? 0.0),
+                    'direccion' => $finalDireccion,
+                    'latitud' => $latitud ?: (float)($existingClient['latitud'] ?? 10.4806),
+                    'longitud' => $longitud ?: (float)($existingClient['longitud'] ?? -66.9036),
+                    'saldoBilletera' => $realSaldo,
+                    'saldo_cartera_usd' => $realSaldo,
+                    'saldo_billetera_usd' => $realSaldo,
                     'tipo_usuario' => 'cliente'
                 ],
                 'mensaje' => '¡Cuenta de cliente actualizada y verificada con éxito!'
@@ -893,6 +978,19 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             'direccion_habitual' => $direccion,
             'activo' => 1
         ];
+
+        if (in_array('latitud', $cols)) {
+            $insertData['latitud'] = ($latitud != 0.0) ? $latitud : 10.48060000;
+        }
+        if (in_array('longitud', $cols)) {
+            $insertData['longitud'] = ($longitud != 0.0) ? $longitud : -66.90360000;
+        }
+        if (in_array('foto_cedula_url', $cols) && !empty($fotoCedula)) {
+            $insertData['foto_cedula_url'] = $fotoCedula;
+        }
+        if (in_array('foto_selfie_url', $cols) && !empty($fotoSelfie)) {
+            $insertData['foto_selfie_url'] = $fotoSelfie;
+        }
         if (in_array('saldo_billetera_usd', $cols)) {
             $insertData['saldo_billetera_usd'] = 0.00;
         }
@@ -924,7 +1022,11 @@ if ($action === 'register_client' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $email,
                 'telefono' => $telefono,
                 'direccion' => $direccion,
+                'latitud' => $latitud ?: 10.48060000,
+                'longitud' => $longitud ?: -66.90360000,
                 'saldoBilletera' => 0.0,
+                'saldo_cartera_usd' => 0.0,
+                'saldo_billetera_usd' => 0.0,
                 'tipo_usuario' => 'cliente'
             ],
             'mensaje' => 'Registro de cliente exitoso'

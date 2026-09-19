@@ -7,16 +7,12 @@
 
 require_once __DIR__ . '/config.php';
 
-// En produccion, public_html/error-php.log debe existir y ser escribible por PHP.
-ini_set('log_errors', '1');
-ini_set('error_log', dirname(__DIR__, 2) . '/error-php.log');
-
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-if (PHP_SAPI !== 'cli' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
@@ -37,20 +33,16 @@ class Database {
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
-            PDO::ATTR_TIMEOUT             => 5
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
         ];
-
-        if (defined('PDO::MYSQL_ATTR_INIT_COMMAND')) {
-            $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci";
-        }
 
         try {
             $this->pdo = new PDO($dsn, $user, $pass, $options);
         } catch (PDOException $e) {
-            error_log('Vixy database connection failed: ' . $e->getMessage());
             self::jsonResponse([
                 'error' => true,
-                'mensaje' => 'No fue posible conectar con el servicio de datos. Intente nuevamente más tarde.'
+                'mensaje' => 'Error de conexión con la base de datos MySQL en cPanel',
+                'detalle' => $e->getMessage()
             ], 500);
             exit();
         }
@@ -64,36 +56,48 @@ class Database {
     }
 
     public static function getRegistConnection(): ?PDO {
+        $host = DB_HOST;
+        $port = DB_PORT;
+        $dbname = defined('REGIST_DB_NAME') ? REGIST_DB_NAME : 'c2861522_regist';
+        $user = DB_USER;
+        $pass = DB_PASS;
         try {
-            return new PDO(
-                'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . REGIST_DB_NAME . ';charset=utf8mb4',
-                DB_USER,
-                DB_PASS,
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => true]
-            );
-        } catch (Throwable $e) {
-            error_log('Error conectando a BD de registros: ' . $e->getMessage());
+            $dsn = "mysql:host={$host};port={$port};dbname={$dbname};charset=utf8mb4";
+            $pdo = new PDO($dsn, $user, $pass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => true
+            ]);
+            return $pdo;
+        } catch (Exception $e) {
+            error_log("Error conectando a BD de registros (c2861522_regist): " . $e->getMessage());
             return null;
         }
     }
 
     public static function getStoreConnection(): ?PDO {
+        $host = DB_HOST;
+        $port = DB_PORT;
+        $dbname = defined('STORE_DB_NAME') ? STORE_DB_NAME : 'c2861522_vixy_st';
+        $user = DB_USER;
+        $pass = DB_PASS;
         try {
-            return new PDO(
-                'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . STORE_DB_NAME . ';charset=utf8mb4',
-                DB_USER,
-                DB_PASS,
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => true]
-            );
-        } catch (Throwable $e) {
-            error_log('Error conectando a BD de tienda: ' . $e->getMessage());
+            $dsn = "mysql:host={$host};port={$port};dbname={$dbname};charset=utf8mb4";
+            $pdo = new PDO($dsn, $user, $pass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => true
+            ]);
+            return $pdo;
+        } catch (Exception $e) {
+            error_log("Error conectando a BD de tienda (c2861522_vixy_st): " . $e->getMessage());
             return null;
         }
     }
 
     public static function jsonResponse($data, int $statusCode = 200): void {
         http_response_code($statusCode);
-        echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit();
     }
 

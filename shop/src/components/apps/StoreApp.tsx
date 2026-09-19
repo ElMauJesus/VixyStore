@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Store, 
   CheckCircle, 
@@ -10,6 +10,8 @@ import {
   Phone, 
   ShieldCheck, 
   AlertTriangle,
+  AlertCircle,
+  ArrowUpRight,
   Receipt,
   Eye,
   Star,
@@ -147,6 +149,20 @@ export const StoreApp: React.FC = () => {
   // Wallet Receipt Inspection Modal
   const [selectedWalletTx, setSelectedWalletTx] = useState<any | null>(null);
 
+  // Retiro / Liquidación de Saldo para Comercios
+  const [showLiquidationModal, setShowLiquidationModal] = useState(false);
+  const [liqMonto, setLiqMonto] = useState<string>('10');
+  const [liqMetodo, setLiqMetodo] = useState<'pago_movil' | 'transferencia'>('pago_movil');
+  const [liqBanco, setLiqBanco] = useState(store.metodosPago?.pagoMovil?.banco || 'Banesco');
+  const [liqCuentaTelefono, setLiqCuentaTelefono] = useState(store.metodosPago?.pagoMovil?.telefono || '');
+  const [liqTitular, setLiqTitular] = useState(store.nombre || '');
+  const [liqCedulaRif, setLiqCedulaRif] = useState(store.metodosPago?.pagoMovil?.cedula || store.rif || '');
+  const [liqLoading, setLiqLoading] = useState(false);
+  const [liqError, setLiqError] = useState('');
+  const [liqSuccess, setLiqSuccess] = useState('');
+  const [misLiquidaciones, setMisLiquidaciones] = useState<any[]>([]);
+  const [loadingMisLiquidaciones, setLoadingMisLiquidaciones] = useState(false);
+
   // Catalog search and sorting state
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [productSortOrder, setProductSortOrder] = useState<'disponibles' | 'nombre' | 'precio_asc' | 'precio_desc'>('disponibles');
@@ -201,7 +217,7 @@ export const StoreApp: React.FC = () => {
     const oCid = o?.comercio?.id || (o as any)?.comercio_id || '';
     return store?.id && oCid && String(oCid) === String(store.id);
   });
-  const pendingApprovalOrders = storeOrders.filter(o => o.estado === 'pendiente_pago' || o.estado === 'pago_verificado');
+  const pendingApprovalOrders = storeOrders.filter(o => o.estado === 'solicitud_enviada' || o.estado === 'pendiente_pago' || o.estado === 'pago_verificado');
   const activeOrders = storeOrders.filter(o => o.estado !== 'entregado' && o.estado !== 'cancelado');
   const finishedOrders = storeOrders.filter(o => o.estado === 'entregado');
 
@@ -348,6 +364,114 @@ export const StoreApp: React.FC = () => {
       setChangePassError(err?.message || 'Error de conexión con el servidor.');
     } finally {
       setChangePassLoading(false);
+    }
+  };
+
+  // --- GESTIÓN DE LIQUIDACIÓN DE SALDO COMERCIAL ---
+  const cargarMisLiquidaciones = async () => {
+    const comercioId = store.id || store.rif;
+    if (!comercioId) return;
+    setLoadingMisLiquidaciones(true);
+    try {
+      const res = await api.getMisLiquidaciones(comercioId, 'comercio');
+      if (res && res.success && Array.isArray(res.data)) {
+        setMisLiquidaciones(res.data);
+      }
+    } catch (err) {
+      console.warn('Error al cargar historial de liquidaciones:', err);
+    } finally {
+      setLoadingMisLiquidaciones(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'cartera') {
+      cargarMisLiquidaciones();
+    }
+  }, [activeTab, store.id, store.rif]);
+
+  const handleOpenLiquidationModal = () => {
+    setLiqError('');
+    setLiqSuccess('');
+    // Auto-completar con datos de pago registrados en la tienda si existen
+    if (store.metodosPago?.pagoMovil) {
+      if (store.metodosPago.pagoMovil.banco) setLiqBanco(store.metodosPago.pagoMovil.banco);
+      if (store.metodosPago.pagoMovil.telefono) setLiqCuentaTelefono(store.metodosPago.pagoMovil.telefono);
+      if (store.metodosPago.pagoMovil.cedula) setLiqCedulaRif(store.metodosPago.pagoMovil.cedula);
+    }
+    if (!liqTitular && store.nombre) {
+      setLiqTitular(store.nombre);
+    }
+    const saldo = storeWallet?.saldoUsd ?? 0;
+    if (saldo >= 10) {
+      setLiqMonto(saldo.toFixed(2));
+    } else {
+      setLiqMonto('10');
+    }
+    setShowLiquidationModal(true);
+  };
+
+  const handleSolicitarLiquidacion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLiqError('');
+    setLiqSuccess('');
+
+    const monto = parseFloat(liqMonto);
+    if (isNaN(monto) || monto < 10) {
+      setLiqError('El monto mínimo para retiro de liquidación es de $10.00 USD.');
+      return;
+    }
+
+    const saldoActual = storeWallet?.saldoUsd ?? 0;
+    if (monto > saldoActual) {
+      setLiqError(`Saldo insuficiente en cartera. Tienes $${saldoActual.toFixed(2)} USD disponibles.`);
+      return;
+    }
+
+    if (!liqBanco.trim()) {
+      setLiqError('Por favor selecciona o ingresa el banco de destino.');
+      return;
+    }
+    if (!liqCuentaTelefono.trim()) {
+      setLiqError('Ingresa el número de teléfono o cuenta destino.');
+      return;
+    }
+    if (!liqTitular.trim()) {
+      setLiqError('Ingresa el nombre del titular de la cuenta.');
+      return;
+    }
+    if (!liqCedulaRif.trim()) {
+      setLiqError('Ingresa la Cédula o RIF del titular.');
+      return;
+    }
+
+    setLiqLoading(true);
+    try {
+      const res = await api.solicitarLiquidacion({
+        usuario_id: store.id || store.rif,
+        tipo_usuario: 'comercio',
+        monto_solicitado_usd: monto,
+        metodo_pago: liqMetodo,
+        banco_destino: liqBanco.trim(),
+        cuenta_telefono_destino: liqCuentaTelefono.trim(),
+        titular_destino: liqTitular.trim(),
+        cedula_rif_destino: liqCedulaRif.trim()
+      });
+
+      if (res && res.success) {
+        setLiqSuccess(res.mensaje || '¡Solicitud enviada con éxito! Será procesada dentro del horario bancario.');
+        setTimeout(() => {
+          setShowLiquidationModal(false);
+          setLiqSuccess('');
+        }, 2200);
+        cargarMisLiquidaciones();
+      } else {
+        setLiqError(res?.mensaje || 'Error al procesar la solicitud de liquidación.');
+      }
+    } catch (err: any) {
+      setLiqError(err.message || 'Error de conexión con el servidor bancario.');
+    } finally {
+      setLiqLoading(false);
     }
   };
 
@@ -2039,6 +2163,57 @@ export const StoreApp: React.FC = () => {
               </div>
             </div>
 
+            {/* Tarjeta de Retiro / Liquidación de Saldo */}
+            <div className="p-4 bg-white dark:bg-neutral-850 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+                    <ArrowUpRight className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-neutral-900 dark:text-white text-xs">
+                      Liquidación de Saldo a Cuenta Bancaria
+                    </h4>
+                    <p className="text-[10px] text-neutral-400">
+                      Transfiere tus ganancias acumuladas a Pago Móvil o Transferencia
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-neutral-50 dark:bg-neutral-900/60 rounded-2xl border border-neutral-100 dark:border-neutral-800/80 space-y-1 text-[10px]">
+                <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-purple-500" />
+                    Horario bancario de retiros:
+                  </span>
+                  <strong className="font-semibold text-neutral-900 dark:text-white">11:00 AM – 7:00 PM</strong>
+                </div>
+                <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
+                  <span>Monto mínimo requerido:</span>
+                  <strong className="font-mono text-purple-600 dark:text-purple-400">$10.00 USD</strong>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOpenLiquidationModal}
+                disabled={(storeWallet?.saldoUsd ?? 0) < 10}
+                className={`w-full py-2.5 px-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition cursor-pointer text-xs ${
+                  (storeWallet?.saldoUsd ?? 0) >= 10
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-600/20 active:scale-98'
+                    : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
+                }`}
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                <span>
+                  {(storeWallet?.saldoUsd ?? 0) >= 10
+                    ? `Solicitar Liquidación (${(storeWallet?.saldoUsd ?? 0).toFixed(2)} USD disp.)`
+                    : `Saldo insuficiente para retirar (Mínimo $10.00 USD)`}
+                </span>
+              </button>
+            </div>
+
             {/* Banner de Cartera */}
             <div className="p-3 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -2125,6 +2300,109 @@ export const StoreApp: React.FC = () => {
                     )}
                   </div>
                 ))
+              )}
+            </div>
+
+            {/* Historial de Solicitudes de Liquidación / Retiros */}
+            <div className="space-y-2 pt-2 border-t border-neutral-200 dark:border-neutral-800">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-purple-500" />
+                  Mis Solicitudes de Retiro Bancario
+                </h4>
+                <button
+                  type="button"
+                  onClick={cargarMisLiquidaciones}
+                  disabled={loadingMisLiquidaciones}
+                  className="text-[10px] text-purple-600 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className={`w-2.5 h-2.5 ${loadingMisLiquidaciones ? 'animate-spin' : ''}`} />
+                  Actualizar
+                </button>
+              </div>
+
+              {loadingMisLiquidaciones ? (
+                <div className="p-4 text-center bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 text-neutral-400">
+                  <RefreshCw className="w-5 h-5 mx-auto animate-spin text-purple-500 mb-1" />
+                  <p className="text-[10px]">Cargando solicitudes de liquidación...</p>
+                </div>
+              ) : misLiquidaciones.length === 0 ? (
+                <div className="p-4 text-center bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 text-neutral-400">
+                  <p className="text-[11px]">No tienes solicitudes de retiro pendientes o registradas.</p>
+                </div>
+              ) : (
+                misLiquidaciones.map((liq) => {
+                  const estado = liq.estado || 'pendiente';
+                  return (
+                    <div
+                      key={liq.id}
+                      className="p-3 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-2xs space-y-2"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="text-[9px] text-neutral-400 block font-mono">
+                            ID #{liq.id} • {liq.creado_en ? new Date(liq.creado_en).toLocaleString('es-VE') : 'Reciente'}
+                          </span>
+                          <span className="text-sm font-black font-mono text-neutral-900 dark:text-white">
+                            ${parseFloat(liq.monto_solicitado_usd || 0).toFixed(2)} USD
+                          </span>
+                          <span className="text-[10px] text-neutral-500 block font-mono">
+                            ≈ Bs. {parseFloat(liq.monto_solicitado_bs || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          {estado === 'aprobada' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              Aprobada
+                            </span>
+                          )}
+                          {estado === 'pendiente' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              En Verificación
+                            </span>
+                          )}
+                          {estado === 'rechazada' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-600 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              Rechazada
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-neutral-50 dark:bg-neutral-900 rounded-xl text-[10px] space-y-0.5 text-neutral-600 dark:text-neutral-400">
+                        <div className="flex justify-between">
+                          <span>Destino:</span>
+                          <span className="font-semibold text-neutral-800 dark:text-neutral-200">
+                            {liq.metodo_pago === 'pago_movil' ? 'Pago Móvil' : 'Transferencia'} • {liq.banco_destino}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Cuenta / Tel:</span>
+                          <span className="font-mono">{liq.cuenta_telefono_destino}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Titular:</span>
+                          <span>{liq.titular_destino} ({liq.cedula_rif_destino})</span>
+                        </div>
+                        {liq.referencia_bancaria && (
+                          <div className="flex justify-between pt-1 border-t border-neutral-200 dark:border-neutral-800 text-emerald-600 font-bold">
+                            <span>Ref. Bancaria:</span>
+                            <span className="font-mono">{liq.referencia_bancaria}</span>
+                          </div>
+                        )}
+                        {liq.motivo_rechazo && (
+                          <div className="pt-1 border-t border-neutral-200 dark:border-neutral-800 text-red-500">
+                            <span className="font-bold">Motivo: </span>
+                            <span>{liq.motivo_rechazo}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -2869,6 +3147,252 @@ export const StoreApp: React.FC = () => {
             >
               Cerrar Comprobante
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Solicitar Liquidación de Saldo para Comercios */}
+      {showLiquidationModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-850 rounded-3xl border border-neutral-200 dark:border-neutral-800 p-5 max-w-sm w-full shadow-2xl space-y-4 text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600">
+                  <ArrowUpRight className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-neutral-900 dark:text-white">
+                    Solicitar Retiro de Saldo
+                  </h4>
+                  <p className="text-[10px] text-neutral-400">
+                    Comercio: <strong>{store.nombre}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLiquidationModal(false)}
+                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-white text-base font-bold cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Saldo y Horario Banner */}
+            <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded-2xl border border-purple-100 dark:border-purple-900/40 space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase">
+                  Saldo Disponible:
+                </span>
+                <span className="text-base font-black font-mono text-purple-900 dark:text-purple-200">
+                  ${(storeWallet?.saldoUsd ?? 0).toFixed(2)} USD
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-purple-600 dark:text-purple-400">
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span>Horario bancario: 11:00 AM a 7:00 PM (Hora Caracas)</span>
+              </div>
+            </div>
+
+            {liqError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 rounded-xl text-[11px] flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{liqError}</span>
+              </div>
+            )}
+
+            {liqSuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-xl text-[11px] flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                <span>{liqSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSolicitarLiquidacion} className="space-y-3">
+              {/* Método de Pago */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">
+                  Método de Retiro
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLiqMetodo('pago_movil')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs border transition cursor-pointer text-center ${
+                      liqMetodo === 'pago_movil'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                        : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700'
+                    }`}
+                  >
+                    Pago Móvil
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLiqMetodo('transferencia')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs border transition cursor-pointer text-center ${
+                      liqMetodo === 'transferencia'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                        : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700'
+                    }`}
+                  >
+                    Transferencia
+                  </button>
+                </div>
+              </div>
+
+              {/* Monto a Retirar */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold uppercase text-neutral-400">
+                    Monto a Retirar (USD)
+                  </label>
+                  <span className="text-[10px] text-neutral-400">Mínimo $10.00</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-neutral-400 font-bold">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="10"
+                    max={storeWallet?.saldoUsd ?? 0}
+                    value={liqMonto}
+                    onChange={(e) => setLiqMonto(e.target.value)}
+                    required
+                    className="w-full pl-7 pr-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl font-mono font-bold text-sm text-neutral-900 dark:text-white focus:outline-hidden focus:border-purple-500"
+                    placeholder="10.00"
+                  />
+                </div>
+                {/* Botones rápidos de monto */}
+                <div className="flex gap-1.5 pt-1">
+                  {['10', '20', '50'].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setLiqMonto(val)}
+                      className="px-2 py-0.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-purple-500/10 hover:text-purple-600 text-[10px] font-mono font-semibold text-neutral-600 dark:text-neutral-300 cursor-pointer"
+                    >
+                      ${val}
+                    </button>
+                  ))}
+                  {(storeWallet?.saldoUsd ?? 0) >= 10 && (
+                    <button
+                      type="button"
+                      onClick={() => setLiqMonto((storeWallet?.saldoUsd ?? 0).toFixed(2))}
+                      className="px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 text-[10px] font-mono font-bold cursor-pointer"
+                    >
+                      Todo (${(storeWallet?.saldoUsd ?? 0).toFixed(2)})
+                    </button>
+                  )}
+                </div>
+                {/* Estimación en Bolívares */}
+                <div className="p-2 bg-neutral-100 dark:bg-neutral-800/80 rounded-xl flex justify-between items-center text-[10px]">
+                  <span className="text-neutral-500">Recibirás aprox:</span>
+                  <span className="font-bold font-mono text-neutral-900 dark:text-white">
+                    Bs. {((parseFloat(liqMonto) || 0) * (tasaBcv || 78.50)).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Banco de Destino */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">
+                  Banco de Destino
+                </label>
+                <select
+                  value={liqBanco}
+                  onChange={(e) => setLiqBanco(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:border-purple-500 cursor-pointer"
+                >
+                  <option value="Banesco">Banesco (0134)</option>
+                  <option value="Banco de Venezuela">Banco de Venezuela (0102)</option>
+                  <option value="Mercantil">Mercantil (0105)</option>
+                  <option value="BBVA Provincial">BBVA Provincial (0108)</option>
+                  <option value="Bancamiga">Bancamiga (0172)</option>
+                  <option value="BNC">Banco Nacional de Crédito (0191)</option>
+                  <option value="Banco Fondo Común">Banco Fondo Común (0151)</option>
+                  <option value="Banplus">Banplus (0174)</option>
+                  <option value="Bancaribe">Bancaribe (0114)</option>
+                  <option value="Banco Exterior">Banco Exterior (0115)</option>
+                  <option value="Banco del Tesoro">Banco del Tesoro (0163)</option>
+                  <option value="100% Banco">100% Banco (0156)</option>
+                  <option value="Banco Activo">Banco Activo (0171)</option>
+                  <option value="Banco Plaza">Banco Plaza (0138)</option>
+                  <option value="BFC">BFC Banco Fondo Común</option>
+                </select>
+              </div>
+
+              {/* Teléfono o Cuenta */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">
+                  {liqMetodo === 'pago_movil' ? 'Teléfono Pago Móvil' : 'Número de Cuenta (20 dígitos)'}
+                </label>
+                <input
+                  type="text"
+                  value={liqCuentaTelefono}
+                  onChange={(e) => setLiqCuentaTelefono(e.target.value)}
+                  required
+                  placeholder={liqMetodo === 'pago_movil' ? '04141234567' : '01340000000000000000'}
+                  className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl font-mono text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:border-purple-500"
+                />
+              </div>
+
+              {/* Cédula / RIF */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">
+                  Cédula o RIF del Titular
+                </label>
+                <input
+                  type="text"
+                  value={liqCedulaRif}
+                  onChange={(e) => setLiqCedulaRif(e.target.value)}
+                  required
+                  placeholder="V-12345678 o J-123456789"
+                  className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl font-mono text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:border-purple-500"
+                />
+              </div>
+
+              {/* Nombre del Titular */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">
+                  Nombre Completo / Razón Social
+                </label>
+                <input
+                  type="text"
+                  value={liqTitular}
+                  onChange={(e) => setLiqTitular(e.target.value)}
+                  required
+                  placeholder="Nombre y Apellido o Empresa"
+                  className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:border-purple-500"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLiquidationModal(false)}
+                  className="w-1/3 py-2 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-bold rounded-xl text-xs hover:bg-neutral-200 dark:hover:bg-neutral-700 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={liqLoading}
+                  className="w-2/3 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/20 active:scale-98 transition cursor-pointer disabled:opacity-50"
+                >
+                  {liqLoading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Enviando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                      <span>Solicitar Retiro</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

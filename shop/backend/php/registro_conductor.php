@@ -46,20 +46,6 @@ $telefono        = trim($data['telefono'] ?? '');
 $email           = trim($data['email'] ?? '');
 $fechaNacimiento = trim($data['fecha_nacimiento'] ?? '');
 $direccion       = trim($data['direccion'] ?? '');
-$ubicacionGps    = trim($data['ubicacion_gps'] ?? ($data['ubicacion'] ?? ''));
-$latInit = null;
-$lngInit = null;
-if (!empty($ubicacionGps)) {
-    $uParts = explode(',', $ubicacionGps);
-    if (count($uParts) >= 2) {
-        $pLat = (float)trim($uParts[0]);
-        $pLng = (float)trim($uParts[1]);
-        if ($pLat != 0.0 && $pLng != 0.0) {
-            $latInit = $pLat;
-            $lngInit = $pLng;
-        }
-    }
-}
 
 // Datos de Moto
 $motoMarca  = trim($data['moto_marca'] ?? '');
@@ -395,9 +381,6 @@ try {
                 'modelo_moto'                    => $motoModelo,
                 'ano_moto'                       => $motoAno,
                 'color_moto'                     => $motoColor,
-                'latitud_actual'                 => $latInit,
-                'longitud_actual'                => $lngInit,
-                'ubicacion_actual'               => $ubicacionGps ?: null,
                 'moto_serial_motor'              => $motoSerialMotor ?: null,
                 'moto_serial_chasis'             => $motoSerialChasis ?: null,
                 'licencia_grado'                 => $licenciaGrado ?: null,

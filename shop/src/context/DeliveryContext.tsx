@@ -208,6 +208,10 @@ const DeliveryContext = createContext<DeliveryContextType | undefined>(undefined
 
 export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [orders, setOrders] = useState<Pedido[]>([]);
+  // Ref que rastrea los IDs de pedidos ya conocidos para detectar pedidos NUEVOS en cada ciclo de polling
+  // sin disparar notificaciones falsas en la carga inicial.
+  const knownOrderIdsRef = React.useRef<Set<string>>(new Set());
+  const isFirstOrderLoadRef = React.useRef<boolean>(true);
   const [clientLoggedIn, setClientLoggedIn] = useState<boolean>(() => {
     try {
       return !!localStorage.getItem('vixy_client_session');
@@ -666,6 +670,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             comercio: storeObj,
             cliente: clientObj,
             conductor: driverObj,
+            conductorOfrecidoId: (p.conductor_ofrecido_id || p.conductor_oferta_id) ? String(p.conductor_ofrecido_id || p.conductor_oferta_id) : undefined,
             items: Array.isArray(p.items) ? p.items : [],
             estado: p.estado || 'pendiente_pago',
             montoTotalUsd: Number(p.monto_total_usd || p.montoTotalUsd || 0),
@@ -684,6 +689,13 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
 
         setOrders(loadedOrders);
+
+        // Actualizar el set de IDs conocidos sin llamar a addNotification aquí
+        // (addNotification se define más adelante). La detección se hace en el useEffect([orders]).
+        if (isFirstOrderLoadRef.current) {
+          loadedOrders.forEach(o => knownOrderIdsRef.current.add(o.id));
+          isFirstOrderLoadRef.current = false;
+        }
       }
 
       // 4. Conductores reales desde MySQL con Normalización Completa
@@ -717,6 +729,46 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (clmRes?.success && Array.isArray(clmRes.reclamos)) {
         setClaims(clmRes.reclamos);
       }
+
+      // 7. Clientes reales desde MySQL (con saldos reales de cartera sincronizados)
+      const cliRes = await api.getClientes().catch(() => null);
+      if (cliRes?.success && Array.isArray(cliRes.clientes)) {
+        const loadedClients: Cliente[] = cliRes.clientes.map((c: any) => {
+          const saldo = Number(c.saldo_cartera_usd ?? c.saldo_billetera_usd ?? 0);
+          return {
+            id: String(c.id),
+            username: c.email ? c.email.split('@')[0] : (c.cedula || 'cliente'),
+            nombre: c.nombre || 'Cliente',
+            apellido: c.apellido || '',
+            cedula: c.cedula || '',
+            telefono: c.telefono || '',
+            email: c.email || '',
+            direccion: c.direccion_habitual || c.direccion || 'Caracas, Venezuela',
+            puntoReferencia: 'En puerta',
+            lat: Number(c.latitud) || 10.4965,
+            lng: Number(c.longitud) || -66.8523,
+            avatarUrl: c.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+            billetera: {
+              clienteId: String(c.id),
+              saldoUsd: saldo,
+              saldoBs: Math.round(saldo * tasaBcv * 100) / 100,
+              totalGastadoUsd: 0,
+              totalRecargadoUsd: saldo,
+              historialTransacciones: []
+            }
+          };
+        });
+        setRegisteredClients(loadedClients);
+
+        // Si el cliente en sesión está cargado, actualizar su cartera en tiempo real
+        if (clientLoggedIn && client?.id) {
+          const currentInDb = loadedClients.find(lc => lc.id === client.id || lc.cedula === client.cedula);
+          if (currentInDb && currentInDb.billetera) {
+            setClientWallet(currentInDb.billetera);
+            try { localStorage.setItem('vixy_client_wallet', JSON.stringify(currentInDb.billetera)); } catch {}
+          }
+        }
+      }
     } catch (err) {
       console.warn('[Vixy Sync Error]', err);
     }
@@ -725,6 +777,70 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     refreshBackendData();
   }, []);
+
+  // Mantener pedidos y estados operativos sincronizados entre cliente, comercio y delivery.
+  useEffect(() => {
+    const ordersInterval = setInterval(() => {
+      refreshBackendData();
+    }, 8000);
+    return () => clearInterval(ordersInterval);
+  }, []);
+
+  // Detectar pedidos NUEVOS para el comercio logueado y emitir notificación + sonido.
+  // Este useEffect corre DESPUÉS de que addNotification ya está definido (más abajo).
+  // Se ejecuta cada vez que cambia el array de pedidos (cada ~8s por el polling).
+  useEffect(() => {
+    if (isFirstOrderLoadRef.current) return; // La carga inicial ya fue gestionada
+    const newOrders = orders.filter(o => {
+      if (knownOrderIdsRef.current.has(o.id)) return false;
+      return ['solicitud_enviada', 'pago_verificado', 'pendiente_pago'].includes(o.estado);
+    });
+    if (newOrders.length > 0) {
+      newOrders.forEach(o => {
+        knownOrderIdsRef.current.add(o.id);
+        const cliName = [o.cliente?.nombre, o.cliente?.apellido].filter(Boolean).join(' ') || 'Cliente';
+        const cliTel = o.cliente?.telefono ? ` (Tel: ${o.cliente.telefono})` : '';
+        const itemsList = o.items && o.items.length > 0
+          ? ` • Artículos: ${o.items.map(i => `${i.cantidad}x ${i.nombre}`).slice(0, 3).join(', ')}${o.items.length > 3 ? ` (+${o.items.length - 3} más)` : ''}`
+          : '';
+        const dir = o.detallesEntregaTienda?.ubicacionEscrita || o.cliente?.direccion || '';
+        const destStr = dir ? ` • Destino: ${dir}` : '';
+        const pagoStr = o.metodoPago ? ` • Pago: ${o.metodoPago.replace(/_/g, ' ')}` : '';
+        addNotification(
+          'comercio',
+          '🛒 Nuevo Pedido Recibido',
+          `Pedido #${o.codigoSeguimiento} ($${o.montoTotalUsd.toFixed(2)} USD) • ${cliName}${cliTel}${itemsList}${destStr}${pagoStr}`
+        );
+      });
+    } else {
+      // Agregar al set los pedidos que todavía no están registrados (sin alertar)
+      orders.forEach(o => knownOrderIdsRef.current.add(o.id));
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    if (!clientLoggedIn) return;
+    const syncClientWallet = async () => {
+      try {
+        const res = await api.getCliente(client.id);
+        const u = res?.cliente;
+        if (!res?.success || !u) return;
+        const saldoUsd = Number(u.saldo_cartera_usd ?? u.saldo_billetera_usd ?? 0);
+        if (!Number.isFinite(saldoUsd)) return;
+        setClient(prev => ({ ...prev, nombre: u.nombre || prev.nombre, apellido: u.apellido || prev.apellido }));
+        setClientWallet(prev => {
+          const next = { ...prev, clienteId: String(u.id || prev.clienteId || client.id), saldoUsd, saldoBs: Math.round(saldoUsd * tasaBcv * 100) / 100 };
+          try { localStorage.setItem('vixy_client_wallet', JSON.stringify(next)); } catch {}
+          return next;
+        });
+      } catch (err) {
+        console.warn('[Vixy Wallet Sync]', err);
+      }
+    };
+    syncClientWallet();
+    const walletInterval = setInterval(syncClientWallet, 12000);
+    return () => clearInterval(walletInterval);
+  }, [clientLoggedIn]);
 
   // Polling GPS en vivo: refresca conductores cada 5s para que el radar/mapa
   // muestre la posición real de los deliverys sin necesidad de recargar la página.
@@ -1001,6 +1117,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }): Promise<{ success: boolean; error?: string }> => {
     let serverId = '';
     let serverEmail = data.email?.trim() || `${data.username.trim().toLowerCase()}@vixypedidos.com`;
+    let serverUser: any = null;
 
     // 1. Enviar registro al backend PHP real (c2861522_vixy_dl.clientes)
     try {
@@ -1019,6 +1136,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (res && res.success && res.usuario) {
         serverId = String(res.usuario.id);
         serverEmail = res.usuario.email || serverEmail;
+        serverUser = res.usuario;
         if (res.token) api.setToken(res.token);
       } else if (res && (res.error === true || !res.success)) {
         return { success: false, error: res.mensaje || 'Error al registrar cliente en el servidor' };
@@ -1033,12 +1151,13 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     const newId = serverId;
+    const initialSaldo = Number(serverUser?.saldo_cartera_usd ?? serverUser?.saldo_billetera_usd ?? serverUser?.saldoBilletera ?? 0);
     const newWallet: ClienteBilletera = {
       clienteId: newId,
-      saldoUsd: 0,
-      saldoBs: 0,
+      saldoUsd: initialSaldo,
+      saldoBs: Math.round(initialSaldo * tasaBcv * 100) / 100,
       totalGastadoUsd: 0,
-      totalRecargadoUsd: 0,
+      totalRecargadoUsd: initialSaldo,
       historialTransacciones: []
     };
 
@@ -1110,6 +1229,18 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     setRechargeRequests(prev => [nuevaSolicitud, ...prev]);
 
+    void api.submitRecarga({
+      usuario_id: client.id,
+      tipo_usuario: 'cliente',
+      monto_usd: montoUsd,
+      metodo: metodoPago,
+      referencia,
+      comprobante_url: finalComprobante
+    }).catch(err => {
+      console.error('[Vixy] No se pudo registrar la recarga del cliente:', err);
+      addNotification('cliente', '⚠️ Recarga no sincronizada', 'La solicitud quedó localmente, pero no llegó al servidor. Revisa la conexión e inténtalo nuevamente.');
+    });
+
     // Registrar en el historial de la wallet del cliente como pendiente de aprobación
     setClientWallet(prev => ({
       ...prev,
@@ -1178,6 +1309,18 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     setRechargeRequests(prev => [nuevaSolicitud, ...prev]);
+
+    void api.submitRecarga({
+      usuario_id: driver.id,
+      tipo_usuario: 'conductor',
+      monto_usd: montoUsd,
+      metodo: metodoPago,
+      referencia,
+      comprobante_url: finalComprobante
+    }).catch(err => {
+      console.error('[Vixy] No se pudo registrar la recarga del conductor:', err);
+      addNotification('conductor', '⚠️ Recarga no sincronizada', 'La solicitud no llegó al servidor. Revisa la conexión e inténtalo nuevamente.');
+    });
 
     setDriverWallet(prev => ({
       ...prev,
@@ -2874,6 +3017,37 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     setOrders(prev => [newOrder, ...prev]);
 
+    void api.createPedido({
+      cliente_id: client.id,
+      comercio_id: store.id,
+      items: items.map(item => ({
+        producto_id: item.productoId,
+        nombre: item.nombre,
+        cantidad: item.cantidad,
+        precio_unitario_usd: item.precioUnitarioUsd
+      })),
+      monto_subtotal_usd: subtotal,
+      distancia_km: 2.5,
+      metodo_pago: metodoPago,
+      referencia_pago: newOrder.referenciaPago,
+      comprobante_url: newOrder.comprobantePagoUrl,
+      destino_direccion: client.direccion,
+      origen_direccion: store.direccion
+    }).then(res => {
+      if (!res?.success) return;
+      setOrders(prev => prev.map(order => order.id === id ? {
+        ...order,
+        id: String(res.pedido_id || order.id),
+        codigoSeguimiento: res.codigo_seguimiento || order.codigoSeguimiento,
+        montoTotalUsd: Number(res.total_usd ?? order.montoTotalUsd),
+        montoTotalBs: Number(res.total_bs ?? order.montoTotalBs),
+        costoEnvioUsd: Number(res.costo_envio_usd ?? order.costoEnvioUsd)
+      } : order));
+    }).catch(err => {
+      console.error('[Vixy] No se pudo persistir el pedido del cliente:', err);
+      addNotification('cliente', '⚠️ Pedido no sincronizado', 'El pedido no llegó al servidor. Revisa la conexión antes de volver a intentarlo.');
+    });
+
     if (esCartera) {
       addNotification('cliente', '✅ Pago con Cartera Exitoso', `Tu orden #${codigo} fue pagada con éxito con tu Saldo Cartera ($${totalUsd.toFixed(2)}).`);
       addNotification('comercio', '💰 ¡Venta Acreditada en tu Cartera!', `Pedido #${codigo} pagado con Cartera Vixy por ${client.nombre}. Se acreditaron $${subtotal.toFixed(2)} a tu saldo comercial.`);
@@ -3003,6 +3177,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const storeAcceptOrder = (orderId: string) => {
     const timeStr = new Date().toTimeString().split(' ')[0];
     let acceptedOrder: Pedido | undefined;
+
+    void api.processPedidoAction(orderId, 'aceptar_comercio').catch(err => {
+      console.error('[Vixy] No se pudo aceptar el pedido en backend:', err);
+      addNotification('comercio', '⚠️ Pedido no sincronizado', 'La aceptación no llegó al servidor. Revisa la conexión.');
+    });
 
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
@@ -3241,6 +3420,10 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const driverAcceptOrder = (orderId: string) => {
     const timeStr = new Date().toTimeString().split(' ')[0];
     let acceptedCod = orderId;
+    void api.processPedidoAction(orderId, 'aceptar_conductor', driver.id).catch(err => {
+      console.error('[Vixy] No se pudo contratar el delivery en backend:', err);
+      addNotification('conductor', '⚠️ Contratación no sincronizada', 'La aceptación no llegó al servidor. Revisa la conexión.');
+    });
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         acceptedCod = o.codigoSeguimiento || orderId;
@@ -3322,6 +3505,10 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const driverRejectOrder = (orderId: string, motivo: string = 'Distancia no conveniente') => {
     const timeStr = new Date().toTimeString().split(' ')[0];
+    void api.processPedidoAction(orderId, 'rechazar_conductor', driver.id).catch(err => {
+      console.error('[Vixy] No se pudo rechazar la oferta en backend:', err);
+      addNotification('conductor', '⚠️ Rechazo no sincronizado', 'El rechazo no llegó al servidor. Revisa la conexión.');
+    });
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         return {

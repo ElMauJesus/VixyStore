@@ -55,7 +55,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
   defaultStyle = 'dark',
   className = ''
 }) => {
-  const { realGpsActive, realGpsCoords, driver, allDrivers, stores, openCall, openChat, cartoApiKey, setCartoApiKey } = useDelivery();
+  const { realGpsActive, realGpsCoords, driver, allDrivers, stores, openCall, openChat, cartoApiKey, setCartoApiKey, orders, store } = useDelivery();
   
   // Basemap & Filter state
   const [mapStyle, setMapStyle] = useState<CartoMapStyle>(defaultStyle);
@@ -77,6 +77,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
   const comerciosLayerRef = useRef<L.LayerGroup | null>(null);
   const gpsLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
+  const clientOrdersLayerRef = useRef<L.LayerGroup | null>(null);
 
   const CARTO_DEFAULT_KEY = 'cb1_2or2_1_cfdc8f91393881d023074657';
 
@@ -138,6 +139,7 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
     driversLayerRef.current = L.layerGroup().addTo(map);
     gpsLayerRef.current = L.layerGroup().addTo(map);
     routeLayerRef.current = L.layerGroup().addTo(map);
+    clientOrdersLayerRef.current = L.layerGroup().addTo(map);
 
     mapInstanceRef.current = map;
 
@@ -541,6 +543,62 @@ export const DeliveryRadarMap: React.FC<DeliveryRadarMapProps> = ({
     gpsLayerRef.current.addLayer(accuracyCircle);
     gpsLayerRef.current.addLayer(beaconMarker);
   }, [realGpsActive, realGpsCoords]);
+
+  // 7. Renderizar Pines de Clientes SOLO cuando tengan un Pedido Activo
+  // Si el usuario es un comercio, muestra solo los clientes con pedidos hacia su comercio
+  useEffect(() => {
+    if (!clientOrdersLayerRef.current || !mapInstanceRef.current) return;
+    clientOrdersLayerRef.current.clearLayers();
+
+    const activeClientOrders = (orders || []).filter(o => {
+      const isStatusActive = ['solicitud_enviada', 'pago_verificado', 'en_preparacion', 'esperando_repartidor', 'en_camino_al_cliente'].includes(o.estado);
+      if (!isStatusActive) return false;
+      if (store?.id) {
+        const oCid = o.comercio?.id || (o as any).comercio_id;
+        return String(oCid) === String(store.id);
+      }
+      return true;
+    });
+
+    activeClientOrders.forEach(o => {
+      const cLat = Number(o.cliente?.lat ?? (o as any).destino_lat ?? (o as any).destinoLat);
+      const cLng = Number(o.cliente?.lng ?? (o as any).destino_lng ?? (o as any).destinoLng);
+      if (!Number.isFinite(cLat) || !Number.isFinite(cLng) || cLat === 0 || cLng === 0) return;
+
+      const clientPinHtml = `
+        <div class="relative cursor-pointer transition-transform hover:scale-115">
+          <div class="absolute -inset-1 rounded-full bg-purple-500/40 animate-ping pointer-events-none"></div>
+          <div class="relative w-8 h-8 rounded-full border-2 border-purple-400 bg-slate-900 shadow-purple-500/50 shadow-lg flex items-center justify-center text-white">
+            <span class="text-sm">📍</span>
+          </div>
+          <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-purple-600 text-white font-black text-[7px] whitespace-nowrap shadow border border-slate-900">
+            ${o.codigoSeguimiento || 'Entrega'}
+          </div>
+        </div>
+      `;
+
+      const clientIcon = L.divIcon({
+        className: 'custom-client-order-pin',
+        html: clientPinHtml,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -18]
+      });
+
+      const clientMarker = L.marker([cLat, cLng], { icon: clientIcon, zIndexOffset: 800 });
+      clientMarker.bindTooltip(`
+        <div style="padding: 2px 4px; min-width: 130px;">
+          <strong style="color: #c084fc; font-size: 11px;">📦 Pedido: ${o.codigoSeguimiento}</strong><br/>
+          <span style="font-size: 10px; color: #f8fafc; font-weight: bold;">👤 ${o.cliente?.nombre || 'Cliente'}</span><br/>
+          <span style="font-size: 9px; color: #94a3b8;">${o.cliente?.direccion || 'Destino cliente'}</span><br/>
+          <span style="font-size: 9px; color: #38bdf8; font-weight: bold;">Estado: ${String(o.estado).replace(/_/g, ' ').toUpperCase()}</span><br/>
+          <span style="font-size: 9px; color: #a855f7;">Total: $${Number(o.montoTotalUsd || 0).toFixed(2)} USD</span>
+        </div>
+      `, { direction: 'top' });
+
+      clientOrdersLayerRef.current?.addLayer(clientMarker);
+    });
+  }, [orders, store]);
 
   // Synchronize externalSelectedDriverId with map selection
   useEffect(() => {
